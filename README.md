@@ -4,7 +4,8 @@ The Shared Memory Sockets Proxy (shmsockproxy) is a communication mechanism betw
 
 This tool forwards socket connections between two guest VMs to enable Waypipe communication.
 
-It listens for incoming connections on one VM, creates a connection to the other VM, and forwards data in both directions.
+It listens for incoming connections on one VM's socket, creates a connection to the other VM's socket, and forwards 
+data in both directions.
 On the server (application) VM side, it creates a socket that Waypipe connects to. All data coming from/to the Waypipe socket 
 is forwarded to/from the client VM side using a shared memory mechanism.
 On the client (display) VM side, the shmsockproxy connects to Waypipe's existing socket and forwards data to/from the 
