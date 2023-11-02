@@ -586,7 +586,7 @@ int run() {
       }
 
       /* Handling connection close */
-      if (events[n].events & (EPOLLHUP | EPOLLERR)) {
+      if (events[n].events & (EPOLLHUP /*| EPOLLERR TODO */)) {
         DEBUG("Closing fd#%d", events[n].data.fd);
 
         // Inform the peer that the closed is being closed
