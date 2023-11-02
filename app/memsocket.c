@@ -573,14 +573,15 @@ int run() {
                     sizeof(my_shm_data->data));
           if (len <= 0) {
             ERROR("read from connected client failed fd=%d", events[n].data.fd);
+          } else {
+            DEBUG("Read & sent %d bytes on fd#%d", len, events[n].data.fd);
+            /* Send the data to the wayland display side */
+            my_shm_data->cmd = CMD_DATA;
+            my_shm_data->fd = events[n].data.fd;
+            my_shm_data->len = len;
+            ioctl(shmem_fd, SHMEM_IOCDORBELL,
+                  peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
           }
-          DEBUG("Read & sent %d bytes on fd#%d", len, events[n].data.fd);
-          /* Send the data to the wayland display side */
-          my_shm_data->cmd = CMD_DATA;
-          my_shm_data->fd = events[n].data.fd;
-          my_shm_data->len = len;
-          ioctl(shmem_fd, SHMEM_IOCDORBELL,
-                peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
         } // End of "Data arrived from connected waypipe server"
       }
 
