@@ -500,8 +500,8 @@ int run() {
 
         /* Both sides: Received data from the peer via shared memory*/
         else if (events[n].data.fd == shmem_fd) {
-          DEBUG("shmem_fd event: 0x%x cmd: %d remote fd: %d", events[n].events,
-                peer_shm_data->cmd, peer_shm_data->fd);
+          DEBUG("shmem_fd event: 0x%x cmd: %d remote fd: %d remote len: %d", events[n].events,
+                peer_shm_data->cmd, peer_shm_data->fd, peer_shm_data->len);
 
           if (peer_shm_data->cmd == CMD_RST) {
             ERROR("Cmd RST received. Restarting.", "");
