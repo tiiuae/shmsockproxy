@@ -340,12 +340,12 @@ void shmem_sync() {
   INFO("done", "");
 
   /* Continue execution in background */
-  pid_t npid = fork();
-  if (npid < 0)
-    FATAL("fork");
+  // pid_t npid = fork();
+  // if (npid < 0)
+  //   FATAL("fork");
 
-  if (npid)
-    exit(0);
+  // if (npid)
+  //   exit(0);
 }
 
 int shmem_init() {
