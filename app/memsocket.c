@@ -489,7 +489,7 @@ int run() {
             ERROR("read from wayland socket failed fd=%d", events[n].data.fd);
             continue;
           }
-          DEBUG("Read & sent %d bytes on fd#%d sent to %d\n", len,
+          DEBUG("Read & sent %d bytes on fd#%d sent to %d", len,
                 events[n].data.fd, conn_fd);
 
           /* Send the data to the peer Wayland app server */
@@ -534,10 +534,12 @@ int run() {
               conn_fd = map_peer_fd(peer_shm_data->fd, 1);
               DEBUG("Closing %d peer fd=%d", conn_fd, peer_shm_data->fd);
             }
-            if (epoll_ctl(epollfd, EPOLL_CTL_DEL, conn_fd, NULL) == -1) {
-              ERROR("epoll_ctl: EPOLL_CTL_DEL", "");
+            if (conn_fd > 0) {
+              if (epoll_ctl(epollfd, EPOLL_CTL_DEL, conn_fd, NULL) == -1) {
+                ERROR("epoll_ctl: EPOLL_CTL_DEL", "");
+              }
+              close(conn_fd);
             }
-            close(conn_fd);
           }
 
           /* Signal the other side that it's buffer has been processed */
