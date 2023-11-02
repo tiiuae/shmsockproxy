@@ -475,9 +475,8 @@ int run() {
           DEBUG("Data from wayland. Waiting for shmem buffer", "");
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if ((rv <= 0) || (my_buffer_fds.revents & ~POLLOUT)) {
-            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d. Restarting",
+            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d",
                   shmem_fd, my_buffer_fds.revents, rv);
-            return 1;
           }
 
           DEBUG("Reading from wayland socket", "");
