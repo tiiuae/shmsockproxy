@@ -484,7 +484,6 @@ int run() {
                      sizeof(my_shm_data->data));
           if (len <= 0) {
             ERROR("read from wayland socket failed fd=%d", events[n].data.fd);
-            continue;
           }
           DEBUG("Read & sent %d bytes on fd#%d sent to %d", len,
                 events[n].data.fd, conn_fd);
@@ -539,7 +538,7 @@ int run() {
             }
           }
 
-          /* Signal the other side that it's buffer has been processed */
+          /* Signal the other side that its buffer has been processed */
           DEBUG("Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC", "");
           peer_shm_data->cmd = -1;
           ioctl(shmem_fd, SHMEM_IOCDORBELL,
