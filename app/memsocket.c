@@ -39,7 +39,7 @@
 #define TEST_SLEEP_TIME (3333333)
 #define SYNC_SLEEP_TIME (333333)
 
-#if 0
+#if 1
 #define DEBUG(fmt, ...)                                                        \
   {}
 #else
@@ -321,12 +321,10 @@ void shmem_sync() {
     if (peer_vm_id) /* If peer hasn't filled its id, wait */
       break;
   } while (1);
+
   DEBUG("Sync: got peer vmid: %x", peer_vm_id);
-  // Send restart to the peer
-  // ioctl(shmem_fd, SHMEM_IOCRESTART, 0);
   my_shm_data->cmd = CMD_RST;
   peer_shm_data->cmd = CMD_RST;
-  // ioctl(shmem_fd, SHMEM_IOCDORBELL, peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
 
   do {
     usleep(random() % SYNC_SLEEP_TIME);
@@ -340,7 +338,7 @@ void shmem_sync() {
   INFO("done", "");
 
   if (run_as_server) {
-    /* Continue execution in background */
+    /* Continue server execution in background */
     pid_t npid = fork();
     if (npid < 0)
       FATAL("fork");
@@ -586,12 +584,12 @@ int run() {
       }
 
       /* Handling connection close */
-      if (events[n].events & (EPOLLHUP /*| EPOLLERR TODO */)) {
+      if (events[n].events & (EPOLLHUP | EPOLLERR)) {
         DEBUG("Closing fd#%d", events[n].data.fd);
 
         // Inform the peer that the closed is being closed
         rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
-        if (rv < 0) {
+        if (rv < 0) { 
           ERROR("shmem poll timeout", "");
         }
 
