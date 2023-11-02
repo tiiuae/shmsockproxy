@@ -599,12 +599,13 @@ int run() {
         else {
           DEBUG("get_remote_socket: %d",
                 get_remote_socket(events[n].data.fd, 0, 1));
-          my_shm_data->fd = get_remote_socket(events[n].data.fd, 1, 0);
+          my_shm_data->fd = get_remote_socket(events[n].data.fd, 1, 1);
         }
-        DEBUG("Sending close request for %d", my_shm_data->fd);
-        ioctl(shmem_fd, SHMEM_IOCDORBELL,
-              peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
-
+        if (my_shm_data->fd > 0) {
+          DEBUG("Sending close request for %d", my_shm_data->fd);
+          ioctl(shmem_fd, SHMEM_IOCDORBELL,
+                peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
+        }
         if (epoll_ctl(epollfd, EPOLL_CTL_DEL, events[n].data.fd, NULL) == -1) {
           ERROR("epoll_ctl: EPOLL_CTL_DEL", "");
         }
