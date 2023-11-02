@@ -324,10 +324,10 @@ void shmem_sync() {
   } while (1);
 
   // Send restart to the peer
-  //ioctl(shmem_fd, SHMEM_IOCRESTART, 0);
+  ioctl(shmem_fd, SHMEM_IOCRESTART, 0);
   my_shm_data->cmd = CMD_RST;
   peer_shm_data->cmd = CMD_RST;
-//  ioctl(shmem_fd, SHMEM_IOCDORBELL, peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
+  ioctl(shmem_fd, SHMEM_IOCDORBELL, peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
 
   do {
     usleep(random() % SYNC_SLEEP_TIME);
