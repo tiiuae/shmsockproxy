@@ -307,10 +307,9 @@ void shmem_sync() {
       .fd = shmem_fd, .events = POLLIN | POLLOUT, .revents = 0};
 
   INFO("Syncing", "");
+  vm_control->iv_server = 0;
+  vm_control->iv_client = 0;
   do {
-    vm_control->iv_server = 0;
-    vm_control->iv_client = 0;
-
     usleep(random() % SYNC_SLEEP_TIME);
     if (run_as_server) {
       vm_control->iv_server = my_vmid;
@@ -322,7 +321,7 @@ void shmem_sync() {
     if (peer_vm_id) /* If peer hasn't filled its id, wait */
       break;
   } while (1);
-
+  DEBUG("Sync: got peer vmid: %d", peer_vm_id);
   // Send restart to the peer
   ioctl(shmem_fd, SHMEM_IOCRESTART, 0);
   my_shm_data->cmd = CMD_RST;
