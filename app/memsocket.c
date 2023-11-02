@@ -556,28 +556,27 @@ int run() {
           DEBUG("Data from client. Waiting for shmem buffer", "");
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if (rv < 0) {
-            ERROR("shmem poll fd=%d", events[n].data.fd);
+            ERROR("shmem poll for client fd=%d", events[n].data.fd);
           } else if (rv == 0) {
-            ERROR("shmem poll timeout fd=%d", events[n].data.fd);  
-          } else {
-            if (my_buffer_fds.revents & ~POLLOUT) {
-              ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d\n", shmem_fd,
-                    my_buffer_fds.revents, rv);
-            }
-            DEBUG("Reading from connected client #%d", events[n].data.fd);
-            len = read(events[n].data.fd, (void *)my_shm_data->data,
-                      sizeof(my_shm_data->data));
-            if (len <= 0) {
-              ERROR("read from connected client failed fd=%d", events[n].data.fd);
-            }
-            DEBUG("Read & sent %d bytes on fd#%d", len, events[n].data.fd);
-            /* Send the data to the wayland display side */
-            my_shm_data->cmd = CMD_DATA;
-            my_shm_data->fd = events[n].data.fd;
-            my_shm_data->len = len;
-            ioctl(shmem_fd, SHMEM_IOCDORBELL,
-                  peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
+            ERROR("shmem poll timeout for client fd=%d", events[n].data.fd);  
           }
+          if (my_buffer_fds.revents & ~POLLOUT) {
+            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d for client fd=%d\n", shmem_fd,
+                  my_buffer_fds.revents, rv, events[n].data.fd);
+          }
+          DEBUG("Reading from connected client #%d", events[n].data.fd);
+          len = read(events[n].data.fd, (void *)my_shm_data->data,
+                    sizeof(my_shm_data->data));
+          if (len <= 0) {
+            ERROR("read from connected client failed fd=%d", events[n].data.fd);
+          }
+          DEBUG("Read & sent %d bytes on fd#%d", len, events[n].data.fd);
+          /* Send the data to the wayland display side */
+          my_shm_data->cmd = CMD_DATA;
+          my_shm_data->fd = events[n].data.fd;
+          my_shm_data->len = len;
+          ioctl(shmem_fd, SHMEM_IOCDORBELL,
+                peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
         } // End of "Data arrived from connected waypipe server"
       }
 
