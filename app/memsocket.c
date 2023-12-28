@@ -38,7 +38,7 @@
 #define SHMEM_BUFFER_SIZE (1024000)
 #define TEST_SLEEP_TIME (3333333)
 #define SYNC_SLEEP_TIME (333333)
-
+#define UNKNOWN_PEER (-1)
 #if 0
 #define DEBUG(fmt, ...)                                                        \
   {}
@@ -307,8 +307,8 @@ void shmem_sync() {
       .fd = shmem_fd, .events = POLLIN | POLLOUT, .revents = 0};
 
   INFO("Syncing", "");
-  vm_control->iv_server = 0;
-  vm_control->iv_client = 0;
+  vm_control->iv_server = UNKNOWN_PEER;
+  vm_control->iv_client = UNKNOWN_PEER;
   do {
     usleep(random() % SYNC_SLEEP_TIME);
     if (run_as_server) {
@@ -318,7 +318,7 @@ void shmem_sync() {
       vm_control->iv_client = my_vmid;
       peer_vm_id = vm_control->iv_server;
     }
-    if (peer_vm_id) /* If peer hasn't filled its id, wait */
+    if (peer_vm_id != UNKNOWN_PEER) /* If peer hasn't filled its id, wait */
       break;
   } while (1);
 
