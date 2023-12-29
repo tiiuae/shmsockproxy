@@ -336,15 +336,6 @@ void shmem_sync() {
   /* Force unlock the local buffer */
   ioctl(shmem_fd, SHMEM_IOCRESTART, 0);
   INFO("done", "");
-
-  if (run_as_server) {
-    /* Continue server execution in background */
-    pid_t npid = fork();
-    if (npid < 0)
-      FATAL("fork");
-    if (npid)
-      exit(0);
-  }
 }
 
 int shmem_init() {
