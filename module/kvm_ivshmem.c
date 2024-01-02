@@ -208,7 +208,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCSETPEERID:
     spin_lock(&rawhide_irq_lock);
-    if (copy_from_user(&filp->private_data, (void __user *)arg, sizeof(void *))) {
+    if (copy_from_user(&filp->private_data, (void __user *)arg, sizeof(unsigned int))) {
       printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: invalid arument");
       return -EINVAL;
     }
