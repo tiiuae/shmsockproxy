@@ -22,11 +22,12 @@
 #define SHM_DEVICE_FN "/dev/ivshmem"
 #define SHMEM_IOC_MAGIC 's'
 
-#define SHMEM_IOCWLOCAL _IOR(SHMEM_IOC_MAGIC, 1, int)
-#define SHMEM_IOCWREMOTE _IOR(SHMEM_IOC_MAGIC, 2, int)
-#define SHMEM_IOCIVPOSN _IOW(SHMEM_IOC_MAGIC, 3, int)
-#define SHMEM_IOCDORBELL _IOR(SHMEM_IOC_MAGIC, 4, int)
-#define SHMEM_IOCRESTART _IOR(SHMEM_IOC_MAGIC, 5, int)
+#define SHMEM_IOCWLOCAL     _IOR(SHMEM_IOC_MAGIC, 1, int)
+#define SHMEM_IOCWREMOTE    _IOR(SHMEM_IOC_MAGIC, 2, int)
+#define SHMEM_IOCIVPOSN     _IOW(SHMEM_IOC_MAGIC, 3, int)
+#define SHMEM_IOCDORBELL    _IOR(SHMEM_IOC_MAGIC, 4, int)
+#define SHMEM_IOCRESTART    _IOR(SHMEM_IOC_MAGIC, 5, int)
+#define SHMEM_IOCSETPEERID  _IOW(SHMEM_IOC_MAGIC, 6, int)
 
 #define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 #define LOCAL_RESOURCE_READY_INT_VEC (1)
@@ -499,6 +500,7 @@ int run() {
             ERROR("Invalid CMD from peer!", "");
           } else if (peer_shm_data->cmd == CMD_LOGIN) {
             DEBUG("Received login request from 0x%x", peer_shm_data->fd);
+            ioctl(shmem_fd, SHMEM_IOCSETPEERID, peer_shm_data->fd);
             peer_shm_data->fd = -1;
           } else if (peer_shm_data->cmd == CMD_DATA) {
             conn_fd = run_as_server ? peer_shm_data->fd
