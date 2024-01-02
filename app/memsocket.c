@@ -616,7 +616,7 @@ void print_usage_and_exit() {
 }
 int main(int argc, char **argv) {
 
-  int i;
+  int i, res;
 
   if (argc != 3)
     print_usage_and_exit();
@@ -653,9 +653,9 @@ int main(int argc, char **argv) {
     */
     my_shm_data->cmd = CMD_LOGIN;
     my_shm_data->fd = my_vmid;
-    ioctl(shmem_fd, SHMEM_IOCDORBELL,
+    res = ioctl(shmem_fd, SHMEM_IOCDORBELL,
           peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
-    DEBUG("Client #%d: sent login vmid: 0x%x", 0, my_vmid);
+    DEBUG("Client #%d: sent login vmid: 0x%x res=%d", 0, my_vmid, res);
   }
 
   run();
