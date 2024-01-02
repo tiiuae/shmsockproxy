@@ -208,10 +208,11 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCSETPEERID:
     spin_lock(&rawhide_irq_lock);
-    // if (copy_from_user(&filp->private_data, (void __user *)arg, sizeof(unsigned int))) {
-    //   printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: invalid arument");
-    //   return -EINVAL;
-    // }
+    unsigned int tmp;
+    if (copy_from_user(&tmp, (void __user *)arg, sizeof(unsigned int))) {
+      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: invalid arument");
+      return -EINVAL;
+    }
     // TODO: remove
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id %p",
             filp->private_data);
@@ -448,7 +449,7 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
     printk(KERN_ERR "KVM_IVSHMEM: cannot request regions");
     goto pci_disable;
   } else
-    printk(KERN_ERR "KVM_IVSHMEM: result is %d", result);
+    printk(KERN_ERR "KVM_IVSHMEM: pci_request_regions(): result is %d", result);
 
   kvm_ivshmem_dev.ioaddr = pci_resource_start(pdev, 2);
   kvm_ivshmem_dev.ioaddr_size = pci_resource_len(pdev, 2);
