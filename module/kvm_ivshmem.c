@@ -215,7 +215,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     // filp->private_data = (void*) (unsigned long) tmp;
     // TODO: remove
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id 0x%x",
-            /*filp->private_data*/tmp);
+            /*filp->private_data*/arg);
     spin_unlock(&rawhide_irq_lock);
 		break;
 
