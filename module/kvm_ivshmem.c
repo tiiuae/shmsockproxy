@@ -47,7 +47,7 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 #define SHMEM_IOCIVPOSN     _IOW(SHMEM_IOC_MAGIC, 3, int)
 #define SHMEM_IOCDORBELL    _IOR(SHMEM_IOC_MAGIC, 4, int)
 #define SHMEM_IOCRESTART    _IOR(SHMEM_IOC_MAGIC, 5, int)
-#define SHMEM_IOCSETPEERID  _IOW(SHMEM_IOC_MAGIC, 6, int)
+#define SHMEM_IOCSETPEERID  _IOR(SHMEM_IOC_MAGIC, 6, int)
 
 enum {
   /* KVM Inter-VM shared memory device register offsets */
@@ -214,8 +214,9 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     // }
     // filp->private_data = (void*) (unsigned long) tmp;
     // TODO: remove
-    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id 0x%lx",
-            /*filp->private_data*/arg);
+    
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id 0x lx");
+            // /*filp->private_data*/arg);
     spin_unlock(&rawhide_irq_lock);
 		break;
 
