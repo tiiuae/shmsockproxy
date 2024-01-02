@@ -116,6 +116,10 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
     .fops = &kvm_ivshmem_ops,
 };
 
+static struct {
+  unsigned int peer_vm_id;
+} file_private_data;
+
 MODULE_DEVICE_TABLE(pci, kvm_ivshmem_id_table);
 
 static void kvm_ivshmem_remove_device(struct pci_dev *pdev);
@@ -548,6 +552,7 @@ static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
   local_resource_count = 1;
   remote_resource_count = 0;
   spin_unlock(&rawhide_irq_lock);
+  filp->private_data = &file_private_data;
 
   KVM_IVSHMEM_DPRINTK("Open OK");
   return 0;

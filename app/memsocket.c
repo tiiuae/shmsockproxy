@@ -83,7 +83,7 @@
     report(tmp1, 1);                                                           \
   }
 
-enum { CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_RST, CMD_START };
+enum { CMD_LOGIN, CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_RST, CMD_START };
 #define FD_MAP_COUNT (sizeof(fd_map) / sizeof(fd_map[0]))
 struct {
   int my_fd;
@@ -454,8 +454,8 @@ int run() {
           DEBUG("Added client on fd %d", conn_fd);
         }
 
-        /* Display side: received data from Wayland server. It needs to be
-          sent to the peer */
+        /* Display/client side: received data from Wayland server. It needs to be
+          sent to the peer (server) */
         else if (!run_as_server &&
                  get_remote_socket(events[n].data.fd, 0, 1) > 0) {
 
@@ -497,6 +497,9 @@ int run() {
             return 1;
           } else if (peer_shm_data->cmd == -1) {
             ERROR("Invalid CMD from peer!", "");
+          } else if (peer_shm_data->cmd == CMD_LOGIN) {
+            DEBUG("Received login request from 0x%x", peer_shm_data->fd);
+            peer_shm_data->fd = -1;
           } else if (peer_shm_data->cmd == CMD_DATA) {
             conn_fd = run_as_server ? peer_shm_data->fd
                                     : map_peer_fd(peer_shm_data->fd, 0);
@@ -637,8 +640,21 @@ int main(int argc, char **argv) {
 
   shmem_init();
 
-  if (run_as_server)
+  if (run_as_server) { 
+    /* Create socket that waypipe can write to
+     * Add the socket fd to the epollfd 
+     */
     server_init();
+
+    /* Send LOGIN cmd to the client. Supply my_vmid
+    *  TODO: Wait for reply?
+    */
+    my_shm_data->cmd = CMD_LOGIN;
+    my_shm_data->fd = my_vmid;
+    ioctl(shmem_fd, SHMEM_IOCDORBELL,
+          peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
+    DEBUG("Client #%d: sent login vmid: 0x%x", 0, my_vmid);
+  }
 
   run();
 
