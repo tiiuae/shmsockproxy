@@ -9,6 +9,8 @@ if test -e "$SOCKET"; then
   rm "$SOCKET"
 fi
 
+sudo rmmod kvm_ivshmem
+
 if test ! -e "$DEVICE"; then
 echo "Loading shared memory module"
 sudo rmmod kvm_ivshmem ; sudo insmod $MODDIR/kvm_ivshmem.ko; sudo chmod a+rwx /dev/ivshmem
