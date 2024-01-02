@@ -134,22 +134,22 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                               unsigned long arg) {
 
   int rv = 0;
-  unsigned int timeout;
+  unsigned int tmp;
   uint32_t msg;
 
   KVM_IVSHMEM_DPRINTK("ioctl: cmd=0x%x args is 0x%lx", cmd, arg);
   switch (cmd) {
   case SHMEM_IOCWLOCAL:
     KVM_IVSHMEM_DPRINTK("sleeping on local resource (cmd = 0x%08x)", cmd);
-    if (copy_from_user(&timeout, (void __user *)arg, sizeof(timeout))) {
+    if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
       printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWLOCAL: invalid arument");
       return -EINVAL;
     }
 
-    timeout = HZ / 1000 * timeout;
-    KVM_IVSHMEM_DPRINTK("timeout: %d ms", timeout);
+    tmp = HZ / 1000 * tmp;
+    KVM_IVSHMEM_DPRINTK("timeout: %d ms", tmp);
     rv = wait_event_interruptible_timeout(local_data_ready_wait_queue,
-                                          (local_resource_count == 1), timeout);
+                                          (local_resource_count == 1), tmp);
     KVM_IVSHMEM_DPRINTK("waking up rv:%d", rv);
     spin_lock(&rawhide_irq_lock);
     local_resource_count = 0;
@@ -158,16 +158,16 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCWREMOTE:
     KVM_IVSHMEM_DPRINTK("sleeping on remote resource (cmd = 0x%08x)", cmd);
-    if (copy_from_user(&timeout, (void __user *)arg, sizeof(timeout))) {
+    if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
       printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWREMOTE: invalid arument rv=%d",
              rv);
       return -EINVAL;
     }
 
-    timeout = HZ / 1000 * timeout;
-    KVM_IVSHMEM_DPRINTK("timeout: %d ms", timeout);
+    tmp = HZ / 1000 * tmp;
+    KVM_IVSHMEM_DPRINTK("timeout: %d ms", tmp);
     rv = wait_event_interruptible_timeout(
-        remote_data_ready_wait_queue, (remote_resource_count == 1), timeout);
+        remote_data_ready_wait_queue, (remote_resource_count == 1), tmp);
     KVM_IVSHMEM_DPRINTK("waking up rv:%d", rv);
     spin_lock(&rawhide_irq_lock);
     remote_resource_count = 0;
@@ -208,11 +208,11 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCSETPEERID:
     spin_lock(&rawhide_irq_lock);
-    unsigned int tmp;
     if (copy_from_user(&tmp, (void __user *)arg, sizeof(unsigned int))) {
       printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: invalid arument");
       return -EINVAL;
     }
+    filp->private_data = (void*) (unsigned long) tmp;
     // TODO: remove
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id %p",
             filp->private_data);
