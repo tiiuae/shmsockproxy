@@ -42,11 +42,12 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 
 #define SHMEM_IOC_MAGIC 's'
 
-#define SHMEM_IOCWLOCAL _IOR(SHMEM_IOC_MAGIC, 1, int)
-#define SHMEM_IOCWREMOTE _IOR(SHMEM_IOC_MAGIC, 2, int)
-#define SHMEM_IOCIVPOSN _IOW(SHMEM_IOC_MAGIC, 3, int)
-#define SHMEM_IOCDORBELL _IOR(SHMEM_IOC_MAGIC, 4, int)
-#define SHMEM_IOCRESTART _IOR(SHMEM_IOC_MAGIC, 5, int)
+#define SHMEM_IOCWLOCAL     _IOR(SHMEM_IOC_MAGIC, 1, int)
+#define SHMEM_IOCWREMOTE    _IOR(SHMEM_IOC_MAGIC, 2, int)
+#define SHMEM_IOCIVPOSN     _IOW(SHMEM_IOC_MAGIC, 3, int)
+#define SHMEM_IOCDORBELL    _IOR(SHMEM_IOC_MAGIC, 4, int)
+#define SHMEM_IOCRESTART    _IOR(SHMEM_IOC_MAGIC, 5, int)
+#define SHMEM_IOCSETPEERID  _IOW(SHMEM_IOC_MAGIC, 6, int)
 
 enum {
   /* KVM Inter-VM shared memory device register offsets */
@@ -115,10 +116,6 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
     .name = "ivshmem",
     .fops = &kvm_ivshmem_ops,
 };
-
-static struct {
-  unsigned int peer_vm_id;
-} file_private_data;
 
 MODULE_DEVICE_TABLE(pci, kvm_ivshmem_id_table);
 
@@ -206,6 +203,18 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   case SHMEM_IOCRESTART:
     spin_lock(&rawhide_irq_lock);
 		local_resource_count = 1;
+    spin_unlock(&rawhide_irq_lock);
+		break;
+
+  case SHMEM_IOCSETPEERID:
+    spin_lock(&rawhide_irq_lock);
+    if (copy_from_user(&filp->private_data, (void __user *)arg, sizeof(int))) {
+      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: invalid arument");
+      return -EINVAL;
+    }
+    // TODO: remove
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id 0x%x",
+            (unsigned int)filp->private_data);
     spin_unlock(&rawhide_irq_lock);
 		break;
 
@@ -552,7 +561,6 @@ static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
   local_resource_count = 1;
   remote_resource_count = 0;
   spin_unlock(&rawhide_irq_lock);
-  filp->private_data = &file_private_data;
 
   KVM_IVSHMEM_DPRINTK("Open OK");
   return 0;
