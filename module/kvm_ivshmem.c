@@ -206,8 +206,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 		break;
   
   case SHMEM_IOCNOP:
-    printk(KERN_INFO "KVM_IVSHMEM: NOP");
-    spin_unlock(&rawhide_irq_lock);
+    printk(KERN_INFO "KVM_IVSHMEM: NOP %d", arg);
 		break;
   
 
