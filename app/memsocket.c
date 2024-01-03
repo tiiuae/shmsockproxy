@@ -103,10 +103,10 @@ int run_as_server = 0;
 long int shmem_size;
 
 struct {
-  volatile int iv_server;
   volatile int iv_client;
-  vm_data server_data;
+  volatile int iv_server;
   vm_data client_data;
+  vm_data server_data;
 } *vm_control;
 
 void shmem_sync();
@@ -297,8 +297,6 @@ void shmem_sync() {
   int timeout, res;
   unsigned int data;
   unsigned int static counter = 0;
-  struct pollfd fds = {
-      .fd = shmem_fd, .events = POLLIN | POLLOUT, .revents = 0};
 
   INFO("Syncing", "");
   vm_control->iv_server = UNKNOWN_PEER;
@@ -653,7 +651,7 @@ int main(int argc, char **argv) {
     my_shm_data->cmd = CMD_LOGIN;
     my_shm_data->fd = my_vmid;
     res = ioctl(shmem_fd, SHMEM_IOCDORBELL,
-          peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
+          /*peer_vm_id*/ vm_control->iv_client | LOCAL_RESOURCE_READY_INT_VEC);
     DEBUG("Client #%d: sent login vmid: 0x%x res=%d peer_vm_id=0x%x", 0, my_vmid, res, peer_vm_id);
   }
 
