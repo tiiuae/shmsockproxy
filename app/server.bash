@@ -7,7 +7,7 @@ MODDIR=~ghaf/shmsockproxy/module
 pid=`ps | grep memsocket | awk '{print $1}'`
 echo $pid
 result=$?
-if [ result == 0 ]
+if [ result == 0 ];
 then
   kill $pid
 fi
