@@ -27,7 +27,7 @@
 #define SHMEM_IOCIVPOSN     _IOW(SHMEM_IOC_MAGIC, 3, int)
 #define SHMEM_IOCDORBELL    _IOR(SHMEM_IOC_MAGIC, 4, int)
 #define SHMEM_IOCRESTART    _IOR(SHMEM_IOC_MAGIC, 5, int)
-#define SHMEM_IOCSETPEERID  _IOR(SHMEM_IOC_MAGIC, 6, (void *))
+#define SHMEM_IOCSETPEERID  _IOR(SHMEM_IOC_MAGIC, 6, void *)
 
 #define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 #define LOCAL_RESOURCE_READY_INT_VEC (1)
@@ -500,7 +500,7 @@ int run() {
             ERROR("Invalid CMD from peer!", "");
           } else if (peer_shm_data->cmd == CMD_LOGIN) {
             DEBUG("\nReceived login request from 0x%x\n", peer_shm_data->fd);
-            res = ioctl(shmem_fd, SHMEM_IOCSETPEERID, (void*)peer_shm_data->fd);
+            res = ioctl(shmem_fd, SHMEM_IOCSETPEERID, (void*)(long)peer_shm_data->fd);
             DEBUG("\nioctl SHMEM_IOCSETPEERID res=%d\n", res);
             peer_shm_data->fd = -1;
           } else if (peer_shm_data->cmd == CMD_DATA) {
