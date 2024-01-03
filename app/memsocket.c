@@ -412,7 +412,7 @@ int run() {
       .fd = shmem_fd, .events = POLLOUT, .revents = 0};
 
   DEBUG("Listening for events", "");
-  int count;
+  int res;
   while (1) {
 
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -500,7 +500,8 @@ int run() {
             ERROR("Invalid CMD from peer!", "");
           } else if (peer_shm_data->cmd == CMD_LOGIN) {
             DEBUG("\nReceived login request from 0x%x\n", peer_shm_data->fd);
-            ioctl(shmem_fd, SHMEM_IOCSETPEERID, (void*)peer_shm_data->fd);
+            res = ioctl(shmem_fd, SHMEM_IOCSETPEERID, (void*)peer_shm_data->fd);
+            DEBUG("\nioctl SHMEM_IOCSETPEERID res=%d\n", res);
             peer_shm_data->fd = -1;
           } else if (peer_shm_data->cmd == CMD_DATA) {
             conn_fd = run_as_server ? peer_shm_data->fd
