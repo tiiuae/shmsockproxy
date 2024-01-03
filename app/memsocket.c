@@ -366,10 +366,13 @@ int shmem_init() {
     FATAL("ioctl SHMEM_IOCIVPOSN failed");
   }
   my_vmid = my_vmid << 16;
-  if (run_as_server)
+  if (run_as_server) {
     vm_control->iv_server = my_vmid;
-  else
+  }
+  else {
     vm_control->iv_client = my_vmid;
+    vm_control->iv_server = UNKNOWN_PEER;
+  }
   INFO("My VM id = 0x%x. Running as a ", my_vmid);
   if (run_as_server) {
     INFO("server", "");
@@ -378,7 +381,7 @@ int shmem_init() {
   }
 
   // shmem_test();
-  shmem_sync();
+  // shmem_sync();
 
   ev.events = EPOLLIN;
   ev.data.fd = shmem_fd;
@@ -495,6 +498,7 @@ int run() {
             ERROR("Invalid CMD from peer!", "");
           } else if (peer_shm_data->cmd == CMD_LOGIN) {
             DEBUG("\nReceived login request from 0x%x\n", peer_shm_data->fd);
+            peer_vm_id = peer_shm_data->fd;
             res = ioctl(shmem_fd, SHMEM_IOCSETPEERID, peer_shm_data->fd);
             // TODO remove
             DEBUG("\nioctl SHMEM_IOCSETPEERID res=%d errno=%d\n", res, errno);
@@ -648,10 +652,11 @@ int main(int argc, char **argv) {
     /* Send LOGIN cmd to the client. Supply my_vmid
     *  TODO: Wait for reply?
     */
+    peer_vm_id = vm_control->iv_client;
     my_shm_data->cmd = CMD_LOGIN;
     my_shm_data->fd = my_vmid;
     res = ioctl(shmem_fd, SHMEM_IOCDORBELL,
-          /*peer_vm_id*/ vm_control->iv_client | LOCAL_RESOURCE_READY_INT_VEC);
+          vm_control->iv_client | LOCAL_RESOURCE_READY_INT_VEC);
     DEBUG("Client #%d: sent login vmid: 0x%x res=%d peer_vm_id=0x%x", 0, my_vmid, res, peer_vm_id);
   }
 
