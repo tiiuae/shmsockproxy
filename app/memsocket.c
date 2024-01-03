@@ -501,7 +501,7 @@ int run() {
           } else if (peer_shm_data->cmd == CMD_LOGIN) {
             DEBUG("\nReceived login request from 0x%x\n", peer_shm_data->fd);
             res = ioctl(shmem_fd, SHMEM_IOCSETPEERID, (void*)(long)peer_shm_data->fd);
-            DEBUG("\nioctl SHMEM_IOCSETPEERID res=%d\n", res);
+            DEBUG("\nioctl SHMEM_IOCSETPEERID res=%d errno=%d\n", res, errno);
             peer_shm_data->fd = -1;
           } else if (peer_shm_data->cmd == CMD_DATA) {
             conn_fd = run_as_server ? peer_shm_data->fd
