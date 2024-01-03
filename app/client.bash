@@ -4,11 +4,12 @@ SOCKET=./client.sock
 DEVICE=/dev/ivshmem
 MODDIR=~ghaf/shmsockproxy/module
 
-pid=`ps | grep memsocket | grep -v grep`
+pid=`ps | grep memsocket | awk '{print $1}'`
+echo $pid
 result=$?
 if [ result == 0 ]
 then
-  kill $(echo $pid | awk '{print $1}')
+  kill $pid
 fi
 
 if test -e $SOCKET; then
