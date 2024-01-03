@@ -208,8 +208,8 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       return -EINVAL-1; // TODO remove
     }
     // TODO: remove
-    printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id 0x lx");
-    printk(KERN_ERR "KVM_IVSHMEM: >SHMEM_IOCSETPEERID: set peer id 0x lx");
+    printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id 0x%lx", arg);
+    printk(KERN_ERR "KVM_IVSHMEM: >SHMEM_IOCSETPEERID: set peer id 0x%lx", arg);
     spin_unlock(&rawhide_irq_lock);
 		break;
 
