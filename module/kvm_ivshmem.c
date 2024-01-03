@@ -134,7 +134,6 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                               unsigned long arg) {
 
   int rv = 0;
-  unsigned int tmp;
   uint32_t msg;
 
   KVM_IVSHMEM_DPRINTK("ioctl: cmd=0x%x args is 0x%lx", cmd, arg);
@@ -208,15 +207,13 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCSETPEERID:
     spin_lock(&rawhide_irq_lock);
-    // if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
-    //   printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: invalid arument");
-    //   return -EINVAL;
-    // }
-    // filp->private_data = (void*) (unsigned long) tmp;
+    if (copy_from_user(&filp->private_data, (void __user *)arg, sizeof(filp->private_data))) {
+      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: invalid arument");
+      return -EINVAL;
+    }
     // TODO: remove
     printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id 0x lx");
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id 0x lx");
-            // /*filp->private_data*/arg);
     spin_unlock(&rawhide_irq_lock);
 		break;
 
