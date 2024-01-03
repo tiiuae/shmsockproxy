@@ -134,6 +134,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                               unsigned long arg) {
 
   int rv = 0;
+  unsigned int tmp;
   uint32_t msg;
 
   KVM_IVSHMEM_DPRINTK("ioctl: cmd=0x%x args is 0x%lx", cmd, arg);
