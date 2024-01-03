@@ -204,6 +204,12 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id 0x%lx", arg);
     spin_unlock(&rawhide_irq_lock);
 		break;
+  
+  case SHMEM_IOCNOP:
+    printk(KERN_INFO "KVM_IVSHMEM: NOP");
+    spin_unlock(&rawhide_irq_lock);
+		break;
+  
 
   default:
     KVM_IVSHMEM_DPRINTK("bad ioctl (0x%08x)", cmd);

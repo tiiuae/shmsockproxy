@@ -262,7 +262,6 @@ void shmem_test() {
   shmem_sync();
 
   counter = my_vmid;
-
   INFO("my_vmid=0x%x my_shm_data=%p\n", my_vmid, my_shm_data);
   do {
     res = poll(&fds, 1, SHMEM_POLL_TIMEOUT);
@@ -407,9 +406,13 @@ int run() {
 
   DEBUG("Listening for events", "");
   int res;
+  ioctl(shmem_fd, SHMEM_IOCNOP, 1);
   while (1) {
 
+    ioctl(shmem_fd, SHMEM_IOCNOP, 2);
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
+    ioctl(shmem_fd, SHMEM_IOCNOP, 3);
+
     if (nfds == -1) {
       FATAL("epoll_wait");
     }
