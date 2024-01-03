@@ -211,7 +211,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     if (copy_from_user(&filp->private_data, (void __user *)arg, sizeof(filp->private_data))) {
       printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETPEERID: invalid arument");
       printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSETPEERID: invalid arument");
-      return -EINVAL;
+      return -EINVAL-1; // TODO remove
     }
     // TODO: remove
     printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETPEERID: set peer id 0x lx");
