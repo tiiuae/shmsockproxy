@@ -47,7 +47,7 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 #define SHMEM_IOCIVPOSN     _IOW(SHMEM_IOC_MAGIC, 3, int)
 #define SHMEM_IOCDORBELL    _IOR(SHMEM_IOC_MAGIC, 4, int)
 #define SHMEM_IOCRESTART    _IOR(SHMEM_IOC_MAGIC, 5, int)
-#define SHMEM_IOCSETPEERID  _IOR(SHMEM_IOC_MAGIC, 6, int)
+#define SHMEM_IOCSETPEERID  _IOR(SHMEM_IOC_MAGIC, 6, void *)
 
 enum {
   /* KVM Inter-VM shared memory device register offsets */
