@@ -206,6 +206,12 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     filp->private_data = (void *)arg;
     printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set peer id 0x%lx",
            arg);
+
+    init_waitqueue_head(&local_data_ready_wait_queue[arg]);
+    init_waitqueue_head(&remote_data_ready_wait_queue[arg]);
+    local_resource_count[arg] = 1;
+    remote_resource_count[arg] = 0;
+
     spin_unlock(&rawhide_irq_lock);
     break;
 
@@ -258,8 +264,8 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
         (unsigned long int)filp->private_data,
         local_resource_count[(unsigned long int)filp->private_data]);
     spin_lock(&rawhide_irq_lock);
-    if (local_resource_count) {
-      local_resource_count = 0;
+    if (local_resource_count[(unsigned long int)filp->private_data]) {
+      local_resource_count[(unsigned long int)filp->private_data] = 0;
       mask |= (POLLOUT | POLLWRNORM);
     }
     spin_unlock(&rawhide_irq_lock);
@@ -368,22 +374,16 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
 
   KVM_IVSHMEM_DPRINTK("irq %d", irq);
   for (i = 0; i < VM_COUNT; i++) {
-    if (irq ==
-        irq_local_resource_ready[(unsigned long int)filp->private_data]) {
-      KVM_IVSHMEM_DPRINTK("%d wake up remote_data_ready_wait_queue",
-                          (unsigned long int)filp->private_data);
-      remote_resource_count[(unsigned long int)filp->private_data] = 1;
-      wake_up_interruptible(
-          &remote_data_ready_wait_queue[(unsigned long int)filp->private_data]);
+    if (irq == irq_local_resource_ready[i]) { 
+      KVM_IVSHMEM_DPRINTK("%d wake up remote_data_ready_wait_queue", i);
+      remote_resource_count[i] = 1;
+      wake_up_interruptible(&remote_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
-    if (irq ==
-        irq_remote_resource_ready[(unsigned long int)filp->private_data]) {
-      KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue",
-                          (unsigned long int)filp->private_data);
-      local_resource_count[(unsigned long int)filp->private_data] = 1;
-      wake_up_interruptible(
-          &local_data_ready_wait_queue[(unsigned long int)filp->private_data]);
+    if (irq == irq_remote_resource_ready[i]) {
+      KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue", i);
+      local_resource_count[i] = 1;
+      wake_up_interruptible(&local_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
   }
@@ -574,15 +574,6 @@ error:
 
 static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
   printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device");
-
-  init_waitqueue_head(&local_data_ready_wait_queue);
-  init_waitqueue_head(&remote_data_ready_wait_queue);
-  spin_lock(&rawhide_irq_lock);
-  local_resource_count[(unsigned long int)filp->private_data] = 1;
-  remote_resource_count[(unsigned long int)filp->private_data] = 0;
-  spin_unlock(&rawhide_irq_lock);
-
-  KVM_IVSHMEM_DPRINTK("Open OK");
   return 0;
 }
 
