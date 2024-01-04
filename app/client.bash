@@ -4,11 +4,8 @@ SOCKET=./client.sock
 DEVICE=/dev/ivshmem
 MODDIR=~ghaf/shmsockproxy/module
 
-pid=`ps | grep memsocket | awk '{print $1}'`
-result=$?
-if [ $result == 0 ]; then
-  kill $pid
-fi
+kill $(ps | grep memsocket | awk '{print $1}')
+sudo rmmod kvm_ivshmem
 
 if test -e $SOCKET; then
   echo "Removing $SOCKET"
