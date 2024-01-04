@@ -27,7 +27,8 @@
 #define LOCAL_RESOURCE_READY_INT_VEC (1)
 
 #define MAX_EVENTS (1024)
-#define MAX_CLIENTS (100)
+#define MAX_CLIENTS (10)
+#define MAX_VMS (3)
 #define BUFFER_SIZE (1024000)
 #define SHMEM_POLL_TIMEOUT (300)
 #define SHMEM_BUFFER_SIZE (1024000)
@@ -79,14 +80,15 @@
   }
 
 enum { CMD_LOGIN, CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_RST, CMD_START };
-#define FD_MAP_COUNT (sizeof(fd_map) / sizeof(fd_map[0]))
+#define FD_MAP_COUNT (sizeof(fd_map) / sizeof(fd_map[0][0]))
 struct {
   int my_fd;
   int remote_fd;
-} fd_map[MAX_CLIENTS];
+} fd_map[MAX_VMS][MAX_CLIENTS];
 
 struct epoll_event ev, events[MAX_EVENTS];
 typedef struct {
+  volatile int server_vmid;
   volatile int cmd;
   volatile int fd;
   volatile int len;
@@ -99,17 +101,19 @@ int server_socket = -1, shmem_fd = -1;
 int my_vmid = -1, peer_vm_id = -1;
 vm_data *my_shm_data = NULL, *peer_shm_data = NULL;
 int run_as_server = 0;
+int instance_no = 0;
+int local_rr_int_no, remote_rc_int_no;
 
 long int shmem_size;
 
 struct {
-  volatile int iv_client;
-  volatile int iv_server;
-  vm_data client_data;
-  vm_data server_data;
+  volatile int client_vmid;
+  vm_data client_data[MAX_VMS];
+  vm_data server_data[MAX_VMS];
 } *vm_control;
 
-static const char usage_string[] = "Usage: memsocket [-c|-s] socket_path\n";
+static const char usage_string[] =
+    "Usage: memsocket [-c|-s] instance_number socket_path\n";
 
 void report(const char *msg, int terminate) {
   char tmp[256];
@@ -203,9 +207,9 @@ void make_wayland_connection(int peer_fd) {
   int i;
 
   for (i = 0; i < FD_MAP_COUNT; i++) {
-    if (fd_map[i].my_fd == -1) {
-      fd_map[i].my_fd = wayland_connect();
-      fd_map[i].remote_fd = peer_fd;
+    if (fd_map[instance_no][i].my_fd == -1) {
+      fd_map[instance_no][i].my_fd = wayland_connect();
+      fd_map[instance_no][i].remote_fd = peer_fd;
       return;
     }
   }
@@ -219,10 +223,10 @@ int map_peer_fd(int peer_fd, int close_fd) {
   int i, rv;
 
   for (i = 0; i < FD_MAP_COUNT; i++) {
-    if (fd_map[i].remote_fd == peer_fd) {
-      rv = fd_map[i].my_fd;
+    if (fd_map[instance_no][i].remote_fd == peer_fd) {
+      rv = fd_map[instance_no][i].my_fd;
       if (close_fd)
-        fd_map[i].my_fd = -1;
+        fd_map[instance_no][i].my_fd = -1;
       return rv;
     }
   }
@@ -236,10 +240,10 @@ int get_remote_socket(int my_fd, int close_fd, int ignore_error) {
   int i;
 
   for (i = 0; i < FD_MAP_COUNT; i++) {
-    if (fd_map[i].my_fd == my_fd) {
+    if (fd_map[instance_no][i].my_fd == my_fd) {
       if (close_fd)
-        fd_map[i].my_fd = -1;
-      return fd_map[i].remote_fd;
+        fd_map[instance_no][i].my_fd = -1;
+      return fd_map[instance_no][i].remote_fd;
     }
   }
   if (ignore_error)
@@ -257,7 +261,9 @@ int shmem_init() {
   if (shmem_fd < 0) {
     FATAL("Open " SHM_DEVICE_FN);
   }
-  INFO("shared memory fd: %d", shmem_fd);
+  INFO("shared memory fd: %d instance id %d", shmem_fd, instance_no);
+  /* Store instance number inside driver */
+  ioctl(shmem_fd, SHMEM_IOCSETINSTANCENO, instance_no);
 
   /* Get shared memory */
   shmem_size = get_shmem_size();
@@ -272,11 +278,11 @@ int shmem_init() {
   DEBUG("Shared memory at address %p 0x%lx bytes", vm_control, shmem_size);
 
   if (run_as_server) {
-    my_shm_data = &vm_control->server_data;
-    peer_shm_data = &vm_control->client_data;
+    my_shm_data = &vm_control->server_data[instance_no];
+    peer_shm_data = &vm_control->client_data[instance_no];
   } else {
-    my_shm_data = &vm_control->client_data;
-    peer_shm_data = &vm_control->server_data;
+    my_shm_data = &vm_control->client_data[instance_no];
+    peer_shm_data = &vm_control->server_data[instance_no];
   }
 
   /* get my VM Id */
@@ -286,12 +292,12 @@ int shmem_init() {
   }
   my_vmid = my_vmid << 16;
   if (run_as_server) {
-    vm_control->iv_server = my_vmid;
+    vm_control->server_data[instance_no].server_vmid = my_vmid;
   } else {
-    vm_control->iv_client = my_vmid;
-    vm_control->iv_server = UNKNOWN_PEER;
+    vm_control->client_vmid = my_vmid;
+    vm_control->server_data[instance_no].server_vmid = UNKNOWN_PEER;
   }
-  INFO("My VM id = 0x%x. Running as a ", my_vmid);
+  INFO("My VM id = 0x%x instance = %d. Running as a ", my_vmid, instance_no);
   if (run_as_server) {
     INFO("server", "");
   } else {
@@ -358,8 +364,7 @@ int run() {
           /* Send the connect request to the wayland peer */
           my_shm_data->cmd = CMD_CONNECT;
           my_shm_data->fd = conn_fd;
-          ioctl(shmem_fd, SHMEM_IOCDORBELL,
-                peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
+          ioctl(shmem_fd, SHMEM_IOCDORBELL, local_rr_int_no);
           DEBUG("Added client on fd %d", conn_fd);
         }
 
@@ -392,8 +397,7 @@ int run() {
             my_shm_data->cmd = CMD_DATA;
             my_shm_data->fd = conn_fd;
             my_shm_data->len = len;
-            ioctl(shmem_fd, SHMEM_IOCDORBELL,
-                  peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
+            ioctl(shmem_fd, SHMEM_IOCDORBELL, local_rr_int_no);
           }
         } /* received data from Wayland server */
 
@@ -411,7 +415,6 @@ int run() {
           case CMD_LOGIN:
             DEBUG("Received login request from 0x%x", peer_shm_data->fd);
             peer_vm_id = peer_shm_data->fd;
-            ioctl(shmem_fd, SHMEM_IOCSETPEERID, peer_shm_data->fd);
             peer_shm_data->fd = -1;
             break;
           case CMD_DATA:
@@ -446,16 +449,14 @@ int run() {
             }
           case -1:
           default:
-            ERROR("Invalid CMD from peer!", "");
+            ERROR("Invalid CMD 0x%x from peer!", peer_shm_data->cmd);
             break;
           } /* case peer_shm_data->cmd */
 
           /* Signal the other side that its buffer has been processed */
           DEBUG("Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC", "");
           peer_shm_data->cmd = -1;
-          ioctl(shmem_fd, SHMEM_IOCDORBELL,
-                peer_vm_id | REMOTE_RESOURCE_CONSUMED_INT_VEC);
-
+          ioctl(shmem_fd, SHMEM_IOCDORBELL, remote_rc_int_no);
         } /* End of "data arrived from the peer via shared memory" */
 
         else if (events[n].data.fd == server_socket) {
@@ -488,8 +489,7 @@ int run() {
             my_shm_data->cmd = CMD_DATA;
             my_shm_data->fd = events[n].data.fd;
             my_shm_data->len = len;
-            ioctl(shmem_fd, SHMEM_IOCDORBELL,
-                  peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
+            ioctl(shmem_fd, SHMEM_IOCDORBELL, local_rr_int_no);
           }
         } // End of "Data arrived from connected waypipe server"
       }
@@ -514,8 +514,7 @@ int run() {
         }
         if (my_shm_data->fd > 0) {
           DEBUG("Sending close request for %d", my_shm_data->fd);
-          ioctl(shmem_fd, SHMEM_IOCDORBELL,
-                peer_vm_id | LOCAL_RESOURCE_READY_INT_VEC);
+          ioctl(shmem_fd, SHMEM_IOCDORBELL, local_rr_int_no);
         }
         if (epoll_ctl(epollfd, EPOLL_CTL_DEL, events[n].data.fd, NULL) == -1) {
           ERROR("epoll_ctl: EPOLL_CTL_DEL", "");
@@ -548,8 +547,8 @@ int main(int argc, char **argv) {
   socket_path = argv[2];
 
   for (i = 0; i < FD_MAP_COUNT; i++) {
-    fd_map[i].my_fd = -1;
-    fd_map[i].remote_fd = -1;
+    fd_map[instance_no][i].my_fd = -1;
+    fd_map[instance_no][i].remote_fd = -1;
   }
 
   epollfd = epoll_create1(0);
@@ -564,15 +563,19 @@ int main(int argc, char **argv) {
      * Add the socket fd to the epollfd
      */
     server_init();
-
+    local_rr_int_no =
+        peer_vm_id | (instance_no << 1) | LOCAL_RESOURCE_READY_INT_VEC;
+    remote_rc_int_no =
+        peer_vm_id | (instance_no << 1) | REMOTE_RESOURCE_CONSUMED_INT_VEC;
     /* Send LOGIN cmd to the client. Supply my_vmid
      *  TODO: Wait for reply?
      */
-    peer_vm_id = vm_control->iv_client;
+    peer_vm_id = vm_control->client_vmid;
     my_shm_data->cmd = CMD_LOGIN;
     my_shm_data->fd = my_vmid;
     res = ioctl(shmem_fd, SHMEM_IOCDORBELL,
-                vm_control->iv_client | LOCAL_RESOURCE_READY_INT_VEC);
+                vm_control->client_vmid |
+                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC));
     DEBUG("Client #%d: sent login vmid: 0x%x res=%d peer_vm_id=0x%x", 0,
           my_vmid, res, peer_vm_id);
   }
