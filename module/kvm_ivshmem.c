@@ -606,8 +606,7 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   off += start;
   vma->vm_pgoff = off >> PAGE_SHIFT;
-
-#warning vma->vm_flags |= VM_SHARED;
+  vma->vm_flags |= VM_SHARED;
 
   if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
                          vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
