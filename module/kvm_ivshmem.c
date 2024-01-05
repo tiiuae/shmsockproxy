@@ -582,6 +582,7 @@ error:
 
 static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
   printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device");
+  filep->private_data = (void*) (unigned long) -1;
   return 0;
 }
 

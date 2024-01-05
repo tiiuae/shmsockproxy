@@ -424,11 +424,11 @@ int run() {
           case CMD_LOGIN:
             DEBUG("Received login request from 0x%x", peer_shm_data->fd);
             // TODO: if peer VM starts again, close all opened files
-            for (i = 0; i < FD_MAP_COUNT; i++) {
-              if (fd_map[instance_no][i].my_fd != -1)
-                close(fd_map[instance_no][i].my_fd);
-            }
-            fd_map_clear();
+            // for (i = 0; i < FD_MAP_COUNT; i++) {
+            //   if (fd_map[instance_no][i].my_fd != -1)
+            //     close(fd_map[instance_no][i].my_fd);
+            // }
+            // fd_map_clear();
 
             peer_vm_id[instance_no] = peer_shm_data->fd;
             local_rr_int_no =
