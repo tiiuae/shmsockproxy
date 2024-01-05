@@ -212,6 +212,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     if (arg >= VM_COUNT) {
       printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", arg);
       rv = -EINVAL;
+      goto unlock;
     }
     filp->private_data = (void *)arg;
     printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
