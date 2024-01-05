@@ -132,6 +132,10 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx", (unsigned long int)filp->private_data,
       cmd, arg);
+  if ((unsigned long int)filp->private_data >= VM_COUNT && cmd != SHMEM_IOCSETINSTANCENO) {
+      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid context no %ld", (unsigned long int)filp->private_data);
+      return -EINVAL;
+  }
   switch (cmd) {
   case SHMEM_IOCWLOCAL:
     KVM_IVSHMEM_DPRINTK("%ld sleeping on local resource (cmd = 0x%08x)", (unsigned long int)filp->private_data, cmd);
