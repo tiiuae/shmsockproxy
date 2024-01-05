@@ -133,7 +133,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx", (unsigned long int)filp->private_data,
       cmd, arg);
   if ((unsigned long int)filp->private_data >= VM_COUNT && cmd != SHMEM_IOCSETINSTANCENO) {
-      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid context no %ld", (unsigned long int)filp->private_data);
+      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", (unsigned long int)filp->private_data);
       return -EINVAL;
   }
   switch (cmd) {
@@ -209,15 +209,19 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCSETINSTANCENO:
     spin_lock(&rawhide_irq_lock);
+    if (arg >= VM_COUNT) {
+      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", arg);
+      rv = -EINVAL;
+    }
     filp->private_data = (void *)arg;
-    printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set peer id 0x%lx",
+    printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
            arg);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);
     init_waitqueue_head(&remote_data_ready_wait_queue[arg]);
     local_resource_count[arg] = 1;
     remote_resource_count[arg] = 0;
-
+unlock:
     spin_unlock(&rawhide_irq_lock);
     break;
 
