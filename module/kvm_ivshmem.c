@@ -1,4 +1,4 @@
-/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
+  /* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 
  * Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
  * SPDX-License-Identifier: Apache-2.0
@@ -180,7 +180,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   case SHMEM_IOCDORBELL:
     unsigned int vec;
     vec = arg & 0xffff;
-    KVM_IVSHMEM_DPRINTK("%d ringing doorbell id=0x%lx on vector 0x%x",
+    KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%lx on vector 0x%x",
                         (unsigned long int)filp->private_data, (arg >> 16),
                         vec);
     if (vec & LOCAL_RESOURCE_READY_INT_VEC) {
@@ -239,7 +239,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
         wait);
 
     KVM_IVSHMEM_DPRINTK(
-        "%d poll: in: remote_resource_count=%d",
+        "%ld poll: in: remote_resource_count=%d",
         (unsigned long int)filp->private_data
             remote_resource_count[(unsigned long int)filp->private_data]);
     spin_lock(&rawhide_irq_lock);
@@ -249,7 +249,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
     }
     spin_unlock(&rawhide_irq_lock);
     KVM_IVSHMEM_DPRINTK(
-        "%d poll: out: remote_resource_count=%d",
+        "%ld poll: out: remote_resource_count=%d",
         (unsigned long int)filp->private_data,
         remote_resource_count[(unsigned long int)filp->private_data]);
   }
@@ -260,7 +260,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
         &local_data_ready_wait_queue[(unsigned long int)filp->private_data],
         wait);
     KVM_IVSHMEM_DPRINTK(
-        "%d poll: in: local_resource_count=%d",
+        "%ld poll: in: local_resource_count=%d",
         (unsigned long int)filp->private_data,
         local_resource_count[(unsigned long int)filp->private_data]);
     spin_lock(&rawhide_irq_lock);
