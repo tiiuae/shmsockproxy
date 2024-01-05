@@ -415,6 +415,11 @@ int run() {
           case CMD_LOGIN:
             DEBUG("Received login request from 0x%x", peer_shm_data->fd);
             peer_vm_id = peer_shm_data->fd;
+            local_rr_int_no =
+                peer_vm_id | (instance_no << 1) | LOCAL_RESOURCE_READY_INT_VEC;
+            remote_rc_int_no = peer_vm_id | (instance_no << 1) |
+                               REMOTE_RESOURCE_CONSUMED_INT_VEC;
+
             peer_shm_data->fd = -1;
             break;
           case CMD_DATA:
