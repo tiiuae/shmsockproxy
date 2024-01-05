@@ -249,8 +249,8 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
     }
     spin_unlock(&rawhide_irq_lock);
     KVM_IVSHMEM_DPRINTK(
-        "%ld poll: out: remote_resource_count=%d",
-        (unsigned long int)filp->private_data,
+        "%p poll: out: remote_resource_count=%d",
+        filp->private_data,
         remote_resource_count[(unsigned long int)filp->private_data]);
   }
 
