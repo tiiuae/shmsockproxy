@@ -570,6 +570,7 @@ int main(int argc, char **argv) {
      * Add the socket fd to the epollfd
      */
     server_init();
+    peer_vm_id[instance_no] = vm_control->client_vmid;
     local_rr_int_no =
         peer_vm_id[instance_no] | (instance_no << 1) | LOCAL_RESOURCE_READY_INT_VEC;
     remote_rc_int_no =
@@ -577,7 +578,6 @@ int main(int argc, char **argv) {
     /* Send LOGIN cmd to the client. Supply my_vmid
      *  TODO: Wait for reply?
      */
-    peer_vm_id[instance_no] = vm_control->client_vmid;
     my_shm_data->cmd = CMD_LOGIN;
     my_shm_data->fd = my_vmid;
     res = ioctl(shmem_fd, SHMEM_IOCDORBELL,
