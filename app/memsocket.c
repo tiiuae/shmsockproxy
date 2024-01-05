@@ -137,6 +137,15 @@ int get_shmem_size() {
   return res;
 }
 
+void fd_map_clear()
+{
+  int i;
+  for (i = 0; i < FD_MAP_COUNT; i++) {
+    fd_map[instance_no][i].my_fd = -1;
+    fd_map[instance_no][i].remote_fd = -1;
+  }
+}
+
 int server_init() {
   struct sockaddr_un socket_name;
 
@@ -319,7 +328,7 @@ int shmem_init() {
 int run() {
   fd_set rfds;
   struct timeval tv;
-  int conn_fd, rv, nfds, n;
+  int conn_fd, rv, nfds, i, n;
   struct sockaddr_un caddr; /* client address */
   int len = sizeof(caddr);  /* address length could change */
   char buffer[BUFFER_SIZE + 1];
@@ -414,6 +423,13 @@ int run() {
             break;
           case CMD_LOGIN:
             DEBUG("Received login request from 0x%x", peer_shm_data->fd);
+            // TODO: if peer VM starts again, close all opened files
+            for (i = 0; i < FD_MAP_COUNT; i++) {
+              if (fd_map[instance_no][i].my_fd != -1)
+                close(fd_map[instance_no][i].my_fd);
+            }
+            fd_map_clear();
+
             peer_vm_id[instance_no] = peer_shm_data->fd;
             local_rr_int_no =
                 peer_vm_id[instance_no] | (instance_no << 1) | LOCAL_RESOURCE_READY_INT_VEC;
@@ -452,6 +468,7 @@ int run() {
               }
               close(conn_fd);
             }
+            break;
           case -1:
           default:
             ERROR("Invalid CMD 0x%x from peer!", peer_shm_data->cmd);
@@ -551,11 +568,7 @@ int main(int argc, char **argv) {
 
   socket_path = argv[2];
 
-  for (i = 0; i < FD_MAP_COUNT; i++) {
-    fd_map[instance_no][i].my_fd = -1;
-    fd_map[instance_no][i].remote_fd = -1;
-  }
-
+  fd_map_clear();
   memset(peer_vm_id, -1, sizeof(peer_vm_id));
 
   epollfd = epoll_create1(0);
