@@ -98,7 +98,7 @@ typedef struct {
 int epollfd;
 char *socket_path;
 int server_socket = -1, shmem_fd = -1;
-int my_vmid = -1, peer_vm_id = -1;
+int my_vmid = -1, peer_vm_id[MAX_VMS];
 vm_data *my_shm_data = NULL, *peer_shm_data = NULL;
 int run_as_server = 0;
 int instance_no = 0;
@@ -414,10 +414,10 @@ int run() {
             break;
           case CMD_LOGIN:
             DEBUG("Received login request from 0x%x", peer_shm_data->fd);
-            peer_vm_id = peer_shm_data->fd;
+            peer_vm_id[instance_no] = peer_shm_data->fd;
             local_rr_int_no =
-                peer_vm_id | (instance_no << 1) | LOCAL_RESOURCE_READY_INT_VEC;
-            remote_rc_int_no = peer_vm_id | (instance_no << 1) |
+                peer_vm_id[instance_no] | (instance_no << 1) | LOCAL_RESOURCE_READY_INT_VEC;
+            remote_rc_int_no = peer_vm_id[instance_no] | (instance_no << 1) |
                                REMOTE_RESOURCE_CONSUMED_INT_VEC;
 
             peer_shm_data->fd = -1;
@@ -556,6 +556,8 @@ int main(int argc, char **argv) {
     fd_map[instance_no][i].remote_fd = -1;
   }
 
+  memset(peer_vm_id, sizeof(peer_vm_id), -1);
+  
   epollfd = epoll_create1(0);
   if (epollfd == -1) {
     FATAL("server_init: epoll_create1");
@@ -569,13 +571,13 @@ int main(int argc, char **argv) {
      */
     server_init();
     local_rr_int_no =
-        peer_vm_id | (instance_no << 1) | LOCAL_RESOURCE_READY_INT_VEC;
+        peer_vm_id[instance_no] | (instance_no << 1) | LOCAL_RESOURCE_READY_INT_VEC;
     remote_rc_int_no =
-        peer_vm_id | (instance_no << 1) | REMOTE_RESOURCE_CONSUMED_INT_VEC;
+        peer_vm_id[instance_no] | (instance_no << 1) | REMOTE_RESOURCE_CONSUMED_INT_VEC;
     /* Send LOGIN cmd to the client. Supply my_vmid
      *  TODO: Wait for reply?
      */
-    peer_vm_id = vm_control->client_vmid;
+    peer_vm_id[instance_no] = vm_control->client_vmid;
     my_shm_data->cmd = CMD_LOGIN;
     my_shm_data->fd = my_vmid;
     res = ioctl(shmem_fd, SHMEM_IOCDORBELL,
