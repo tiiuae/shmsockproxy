@@ -135,7 +135,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   case SHMEM_IOCWLOCAL:
     KVM_IVSHMEM_DPRINTK("sleeping on local resource (cmd = 0x%08x)", cmd);
     if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
-      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWLOCAL: invalid arument");
+      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWLOCAL: invalid argument");
       return -EINVAL;
     }
 
@@ -154,7 +154,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   case SHMEM_IOCWREMOTE:
     KVM_IVSHMEM_DPRINTK("sleeping on remote resource (cmd = 0x%08x)", cmd);
     if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
-      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWREMOTE: invalid arument rv=%d",
+      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWREMOTE: invalid argument rv=%d",
              rv);
       return -EINVAL;
     }
