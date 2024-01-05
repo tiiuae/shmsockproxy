@@ -506,6 +506,7 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
       printk(KERN_ERR "KVM_IVSHMEM: cannot get interrupt %d", pdev->irq);
       printk(KERN_ERR "KVM_IVSHMEM: irq = %u regaddr = %x reg_size = %d",
              pdev->irq, kvm_ivshmem_dev.regaddr, kvm_ivshmem_dev.reg_size);
+      goto reg_release;
     }
   } else {
     printk(KERN_INFO "KVM_IVSHMEM: MSI-X enabled");
