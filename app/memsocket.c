@@ -556,8 +556,8 @@ int main(int argc, char **argv) {
     fd_map[instance_no][i].remote_fd = -1;
   }
 
-  memset(peer_vm_id, sizeof(peer_vm_id), -1);
-  
+  memset(peer_vm_id, -1, sizeof(peer_vm_id));
+
   epollfd = epoll_create1(0);
   if (epollfd == -1) {
     FATAL("server_init: epoll_create1");
