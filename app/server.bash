@@ -19,7 +19,7 @@ echo "Loading shared memory module"
 sudo rmmod kvm_ivshmem ; sudo insmod $MODDIR/kvm_ivshmem.ko; sudo chmod a+rwx /dev/ivshmem
 fi
 
-./memsocket -s "$SOCKET" -i 2 &
+./memsocket -s "$SOCKET" 2 &
 sleep 3
 echo "Executing 'waypipe -d -s $SOCKET server -- firefox'"
 waypipe -s "$SOCKET" server -- firefox
