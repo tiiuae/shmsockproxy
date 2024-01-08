@@ -80,7 +80,7 @@
   }
 
 enum { CMD_LOGIN, CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_START };
-#define FD_MAP_COUNT (sizeof(fd_map) / sizeof(fd_map[0][0]))
+#define FD_MAP_COUNT (sizeof(fd_map) / sizeof(fd_map[0]))
 struct {
   int my_fd;
   int remote_fd;
@@ -98,7 +98,7 @@ int epollfd[MAX_VMS];
 char *socket_path;
 int server_socket = -1, shmem_fd[MAX_VMS];
 int my_vmid = -1, peer_vm_id[MAX_VMS];
-vm_data *my_shm_data[MAX_VMS], *peer_shm_data[MAX_VMS];
+vm_data *(my_shm_data[MAX_VMS]), *(peer_shm_data[MAX_VMS]);
 int run_as_server = 0;
 int local_rr_int_no[MAX_VMS], remote_rc_int_no[MAX_VMS];
 
