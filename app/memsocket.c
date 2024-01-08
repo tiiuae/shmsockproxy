@@ -272,7 +272,7 @@ int shmem_init(int instance_no) {
   if (shmem_fd[instance_no] < 0) {
     FATAL("Open " SHM_DEVICE_FN);
   }
-  INFO("shared memory fd: %d instance id %d", shmem_fd[instance_no], instance_no);
+  INFO("shared memory fd: %d", shmem_fd[instance_no]);
   /* Store instance number inside driver */
   ioctl(shmem_fd[instance_no], SHMEM_IOCSETINSTANCENO, instance_no);
 
@@ -313,7 +313,7 @@ int shmem_init(int instance_no) {
     vm_control->client_vmid = my_vmid;
     vm_control->server_data[instance_no].server_vmid = UNKNOWN_PEER;
   }
-  INFO("My VM id = 0x%x instance = %d. Running as a ", my_vmid, instance_no);
+  INFO("My VM id = 0x%x. Running as a ", my_vmid);
   if (run_as_server) {
     INFO("server", "");
   } else {
@@ -376,7 +376,7 @@ int run(int instance_no) {
           }
 
           if (my_buffer_fds.revents & ~POLLOUT) {
-            ERROR("unexpected event on shmem_fd[instance_no] %d: 0x%x", shmem_fd[instance_no],
+            ERROR("unexpected event on shmem_fd %d: 0x%x", shmem_fd[instance_no],
                   my_buffer_fds.revents);
           }
           /* Send the connect request to the wayland peer */
@@ -392,13 +392,13 @@ int run(int instance_no) {
                  get_remote_socket(instance_no, events[n].data.fd, 0, 1) > 0) {
 
           int conn_fd = get_remote_socket(instance_no, events[n].data.fd, 0, 1);
-          DEBUG("get_remote_socket[%d]: %d", instance_no, conn_fd);
+          DEBUG("get_remote_socket: %d", conn_fd);
 
           /* Wait for the memory buffer to be ready */
           DEBUG("Data from wayland. Waiting for shmem buffer", "");
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if ((rv <= 0) || (my_buffer_fds.revents & ~POLLOUT)) {
-            ERROR("unexpected event on shmem_fd[%d] %d: 0x%x poll=%d", instance_no, shmem_fd[instance_no],
+            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d", shmem_fd[instance_no],
                   my_buffer_fds.revents, rv);
           }
 
@@ -421,7 +421,7 @@ int run(int instance_no) {
 
         /* Both sides: Received data from the peer via shared memory*/
         else if (events[n].data.fd == shmem_fd[instance_no]) {
-          DEBUG("shmem_fd[%d]=%d event: 0x%x cmd: %d remote fd: %d remote len: %d", instance_no, shmem_fd[instance_no],
+          DEBUG("shmem_fd=%d event: 0x%x cmd: %d remote fd: %d remote len: %d", shmem_fd[instance_no],
                 events[n].events, peer_shm_data[instance_no]->cmd, peer_shm_data[instance_no]->fd,
                 peer_shm_data[instance_no]->len);
 
@@ -500,7 +500,7 @@ int run(int instance_no) {
             ERROR("shmem poll timeout for client fd=%d", events[n].data.fd);
           }
           if (my_buffer_fds.revents & ~POLLOUT) {
-            ERROR("unexpected event on shmem_fd[%d] %d: 0x%x poll=%d for client ", instance_no,
+            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d for client ", 
                   "fd=%d",
                   shmem_fd[instance_no], my_buffer_fds.revents, rv, events[n].data.fd);
           }
@@ -534,7 +534,7 @@ int run(int instance_no) {
         if (run_as_server)
           my_shm_data[instance_no]->fd = events[n].data.fd;
         else {
-          DEBUG("get_remote_socket[%d]: %d", instance_no,
+          DEBUG("get_remote_socket: %d",
                 get_remote_socket(instance_no, events[n].data.fd, 0, 1));
           my_shm_data[instance_no]->fd = get_remote_socket(instance_no, events[n].data.fd, 1, 1);
         }
