@@ -577,7 +577,6 @@ int main(int argc, char **argv) {
 
   if (strlen(argv[3])) {
     instance_no = atoi(argv[3]);
-    print_usage_and_exit();
   }
   else
     goto wrong_args;
