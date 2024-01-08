@@ -57,7 +57,7 @@
   {                                                                            \
     char tmp1[256], tmp2[256];                                                 \
     sprintf(tmp2, fmt, __VA_ARGS__);                                           \
-    sprintf(tmp1, "[%s:%d] %s\n", __FUNCTION__, __LINE__, tmp2);               \
+    sprintf(tmp1, "%d [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__, tmp2);               \
     errno = 0;                                                                 \
     report(tmp1, 0);                                                           \
   }
@@ -67,7 +67,7 @@
   {                                                                            \
     char tmp1[256], tmp2[256];                                                 \
     sprintf(tmp2, fmt, __VA_ARGS__);                                           \
-    sprintf(tmp1, "[%s:%d] %s\n", __FUNCTION__, __LINE__, tmp2);               \
+    sprintf(tmp1, "%d [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__, tmp2);               \
     report(tmp1, 0);                                                           \
   }
 
@@ -75,7 +75,7 @@
   {                                                                            \
     char tmp1[256], tmp2[256];                                                 \
     sprintf(tmp2, msg);                                                        \
-    sprintf(tmp1, "[%s:%d]: %s\n", __FUNCTION__, __LINE__, tmp2);              \
+    sprintf(tmp1, "%d [%s:%d]: %s\n", instance_no, __FUNCTION__, __LINE__, tmp2);              \
     report(tmp1, 1);                                                           \
   }
 
