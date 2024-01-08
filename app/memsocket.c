@@ -32,8 +32,6 @@
 #define BUFFER_SIZE (1024000)
 #define SHMEM_POLL_TIMEOUT (300)
 #define SHMEM_BUFFER_SIZE (1024000)
-#define TEST_SLEEP_TIME (3333333)
-#define SYNC_SLEEP_TIME (333333)
 #define UNKNOWN_PEER (-1)
 #if 0
 #define DEBUG(fmt, ...)                                                        \
@@ -43,7 +41,8 @@
   {                                                                            \
     char tmp1[256], tmp2[256];                                                 \
     sprintf(tmp2, fmt, __VA_ARGS__);                                           \
-    sprintf(tmp1, "%d %s:%d: %s\n", instance_no, __FUNCTION__, __LINE__, tmp2);                \
+    sprintf(tmp1, "[%d] %s:%d: %s\n", instance_no, __FUNCTION__, __LINE__,     \
+            tmp2);                                                             \
     errno = 0;                                                                 \
     report(tmp1, 0);                                                           \
   }
@@ -57,7 +56,8 @@
   {                                                                            \
     char tmp1[256], tmp2[256];                                                 \
     sprintf(tmp2, fmt, __VA_ARGS__);                                           \
-    sprintf(tmp1, "%d [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__, tmp2);               \
+    sprintf(tmp1, "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,    \
+            tmp2);                                                             \
     errno = 0;                                                                 \
     report(tmp1, 0);                                                           \
   }
@@ -67,7 +67,8 @@
   {                                                                            \
     char tmp1[256], tmp2[256];                                                 \
     sprintf(tmp2, fmt, __VA_ARGS__);                                           \
-    sprintf(tmp1, "%d [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__, tmp2);               \
+    sprintf(tmp1, "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,    \
+            tmp2);                                                             \
     report(tmp1, 0);                                                           \
   }
 
@@ -75,7 +76,8 @@
   {                                                                            \
     char tmp1[256], tmp2[256];                                                 \
     sprintf(tmp2, msg);                                                        \
-    sprintf(tmp1, "%d [%s:%d]: %s\n", instance_no, __FUNCTION__, __LINE__, tmp2);              \
+    sprintf(tmp1, "[%d] [%s:%d]: %s\n", instance_no, __FUNCTION__, __LINE__,   \
+            tmp2);                                                             \
     report(tmp1, 1);                                                           \
   }
 
@@ -170,7 +172,8 @@ int server_init(int instance_no) {
 
   ev.events = EPOLLIN;
   ev.data.fd = server_socket;
-  if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_ADD, server_socket, &ev) == -1) {
+  if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_ADD, server_socket, &ev) ==
+      -1) {
     FATAL("server_init: epoll_ctl: server_socket");
   }
 
@@ -241,7 +244,8 @@ int map_peer_fd(int instance_no, int peer_fd, int close_fd) {
   return -1;
 }
 
-int get_remote_socket(int instance_no, int my_fd, int close_fd, int ignore_error) {
+int get_remote_socket(int instance_no, int my_fd, int close_fd,
+                      int ignore_error) {
 
   int i;
   struct epoll_event ev;
@@ -322,7 +326,8 @@ int shmem_init(int instance_no) {
 
   ev.events = EPOLLIN;
   ev.data.fd = shmem_fd[instance_no];
-  if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_ADD, shmem_fd[instance_no], &ev) == -1) {
+  if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_ADD, shmem_fd[instance_no],
+                &ev) == -1) {
     FATAL("epoll_ctl: -1");
   }
   ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
@@ -366,7 +371,8 @@ int run(int instance_no) {
           fcntl(conn_fd, F_SETFL, O_NONBLOCK);
           ev.events = EPOLLIN | EPOLLET | EPOLLHUP;
           ev.data.fd = conn_fd;
-          if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_ADD, conn_fd, &ev) == -1) {
+          if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_ADD, conn_fd, &ev) ==
+              -1) {
             FATAL("epoll_ctl: conn_fd");
           }
 
@@ -376,13 +382,14 @@ int run(int instance_no) {
           }
 
           if (my_buffer_fds.revents & ~POLLOUT) {
-            ERROR("unexpected event on shmem_fd %d: 0x%x", shmem_fd[instance_no],
-                  my_buffer_fds.revents);
+            ERROR("unexpected event on shmem_fd %d: 0x%x",
+                  shmem_fd[instance_no], my_buffer_fds.revents);
           }
           /* Send the connect request to the wayland peer */
           my_shm_data[instance_no]->cmd = CMD_CONNECT;
           my_shm_data[instance_no]->fd = conn_fd;
-          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, local_rr_int_no[instance_no]);
+          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
+                local_rr_int_no[instance_no]);
           DEBUG("Added client on fd %d", conn_fd);
         }
 
@@ -398,8 +405,8 @@ int run(int instance_no) {
           DEBUG("Data from wayland. Waiting for shmem buffer", "");
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if ((rv <= 0) || (my_buffer_fds.revents & ~POLLOUT)) {
-            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d", shmem_fd[instance_no],
-                  my_buffer_fds.revents, rv);
+            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d",
+                  shmem_fd[instance_no], my_buffer_fds.revents, rv);
           }
 
           DEBUG("Reading from wayland socket", "");
@@ -415,74 +422,87 @@ int run(int instance_no) {
             my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = conn_fd;
             my_shm_data[instance_no]->len = len;
-            ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, local_rr_int_no[instance_no]);
+            ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
+                  local_rr_int_no[instance_no]);
           }
         } /* received data from Wayland server */
 
         /* Both sides: Received data from the peer via shared memory*/
         else if (events[n].data.fd == shmem_fd[instance_no]) {
-          DEBUG("shmem_fd=%d event: 0x%x cmd: %d remote fd: %d remote len: %d", shmem_fd[instance_no],
-                events[n].events, peer_shm_data[instance_no]->cmd, peer_shm_data[instance_no]->fd,
+          DEBUG("shmem_fd=%d event: 0x%x cmd: %d remote fd: %d remote len: %d",
+                shmem_fd[instance_no], events[n].events,
+                peer_shm_data[instance_no]->cmd, peer_shm_data[instance_no]->fd,
                 peer_shm_data[instance_no]->len);
 
           switch (peer_shm_data[instance_no]->cmd) {
           case CMD_LOGIN:
-            DEBUG("Received login request from 0x%x", peer_shm_data[instance_no]->fd);
+            DEBUG("Received login request from 0x%x",
+                  peer_shm_data[instance_no]->fd);
             // TODO: if peer VM starts again, close all opened files
-            // for (i = 0; i < FD_MAP_COUNT; i++) {
-            //   if (fd_map[instance_no][i].my_fd != -1)
-            //     close(fd_map[instance_no][i].my_fd);
-            // }
-            // fd_map_clear(instance_no);
+            for (i = 0; i < FD_MAP_COUNT; i++) {
+              if (fd_map[instance_no][i].my_fd != -1)
+                close(fd_map[instance_no][i].my_fd);
+            }
+            fd_map_clear(instance_no);
 
             peer_vm_id[instance_no] = peer_shm_data[instance_no]->fd;
-            local_rr_int_no[instance_no] = peer_vm_id[instance_no] | (instance_no << 1) |
-                              LOCAL_RESOURCE_READY_INT_VEC;
-            remote_rc_int_no[instance_no] = peer_vm_id[instance_no] | (instance_no << 1) |
-                               REMOTE_RESOURCE_CONSUMED_INT_VEC;
+            local_rr_int_no[instance_no] = peer_vm_id[instance_no] |
+                                           (instance_no << 1) |
+                                           LOCAL_RESOURCE_READY_INT_VEC;
+            remote_rc_int_no[instance_no] = peer_vm_id[instance_no] |
+                                            (instance_no << 1) |
+                                            REMOTE_RESOURCE_CONSUMED_INT_VEC;
 
             peer_shm_data[instance_no]->fd = -1;
             break;
           case CMD_DATA:
-            conn_fd = run_as_server ? peer_shm_data[instance_no]->fd
-                                    : map_peer_fd(instance_no, peer_shm_data[instance_no]->fd, 0);
-            DEBUG("shmem: received %d bytes for %d", peer_shm_data[instance_no]->len,
-                  conn_fd);
-            rv =
-                write(conn_fd, (void *)peer_shm_data[instance_no]->data, peer_shm_data[instance_no]->len);
+            conn_fd = run_as_server
+                          ? peer_shm_data[instance_no]->fd
+                          : map_peer_fd(instance_no,
+                                        peer_shm_data[instance_no]->fd, 0);
+            DEBUG("shmem: received %d bytes for %d",
+                  peer_shm_data[instance_no]->len, conn_fd);
+            rv = write(conn_fd, (void *)peer_shm_data[instance_no]->data,
+                       peer_shm_data[instance_no]->len);
             if (rv != peer_shm_data[instance_no]->len) {
-              ERROR("Wrote %d out of %d bytes on fd#%d", rv, peer_shm_data[instance_no]->len,
-                    conn_fd);
+              ERROR("Wrote %d out of %d bytes on fd#%d", rv,
+                    peer_shm_data[instance_no]->len, conn_fd);
             }
             DEBUG("Received data has been sent", "");
             break;
           case CMD_CONNECT:
-            make_wayland_connection(instance_no, peer_shm_data[instance_no]->fd);
+            make_wayland_connection(instance_no,
+                                    peer_shm_data[instance_no]->fd);
             break;
           case CMD_CLOSE:
             if (run_as_server) {
               conn_fd = peer_shm_data[instance_no]->fd;
               DEBUG("Closing %d", conn_fd);
             } else {
-              conn_fd = map_peer_fd(instance_no, peer_shm_data[instance_no]->fd, 1);
-              DEBUG("Closing %d peer fd=%d", conn_fd, peer_shm_data[instance_no]->fd);
+              conn_fd =
+                  map_peer_fd(instance_no, peer_shm_data[instance_no]->fd, 1);
+              DEBUG("Closing %d peer fd=%d", conn_fd,
+                    peer_shm_data[instance_no]->fd);
             }
             if (conn_fd > 0) {
-              if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, conn_fd, NULL) == -1) {
+              if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, conn_fd,
+                            NULL) == -1) {
                 ERROR("epoll_ctl: EPOLL_CTL_DEL", "");
               }
               close(conn_fd);
             }
             break;
           default:
-            ERROR("Invalid CMD 0x%x from peer!", peer_shm_data[instance_no]->cmd);
+            ERROR("Invalid CMD 0x%x from peer!",
+                  peer_shm_data[instance_no]->cmd);
             break;
           } /* case peer_shm_data[instance_no]->cmd */
 
           /* Signal the other side that its buffer has been processed */
           DEBUG("Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC", "");
           peer_shm_data[instance_no]->cmd = -1;
-          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, remote_rc_int_no[instance_no]);
+          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
+                remote_rc_int_no[instance_no]);
         } /* End of "data arrived from the peer via shared memory" */
 
         else if (events[n].data.fd == server_socket) {
@@ -500,9 +520,9 @@ int run(int instance_no) {
             ERROR("shmem poll timeout for client fd=%d", events[n].data.fd);
           }
           if (my_buffer_fds.revents & ~POLLOUT) {
-            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d for client ", 
-                  "fd=%d",
-                  shmem_fd[instance_no], my_buffer_fds.revents, rv, events[n].data.fd);
+            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d for client ",
+                  "fd=%d", shmem_fd[instance_no], my_buffer_fds.revents, rv,
+                  events[n].data.fd);
           }
           DEBUG("Reading from connected client #%d", events[n].data.fd);
           len = read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
@@ -515,7 +535,8 @@ int run(int instance_no) {
             my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = events[n].data.fd;
             my_shm_data[instance_no]->len = len;
-            ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, local_rr_int_no[instance_no]);
+            ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
+                  local_rr_int_no[instance_no]);
           }
         } // End of "Data arrived from connected waypipe server"
       }
@@ -536,13 +557,16 @@ int run(int instance_no) {
         else {
           DEBUG("get_remote_socket: %d",
                 get_remote_socket(instance_no, events[n].data.fd, 0, 1));
-          my_shm_data[instance_no]->fd = get_remote_socket(instance_no, events[n].data.fd, 1, 1);
+          my_shm_data[instance_no]->fd =
+              get_remote_socket(instance_no, events[n].data.fd, 1, 1);
         }
         if (my_shm_data[instance_no]->fd > 0) {
           DEBUG("Sending close request for %d", my_shm_data[instance_no]->fd);
-          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, local_rr_int_no[instance_no]);
+          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
+                local_rr_int_no[instance_no]);
         }
-        if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd, NULL) == -1) {
+        if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
+                      NULL) == -1) {
           ERROR("epoll_ctl: EPOLL_CTL_DEL", "");
         }
         close(events[n].data.fd);
@@ -570,18 +594,17 @@ int main(int argc, char **argv) {
     run_as_server = 1;
   } else
     goto wrong_args;
-  
+
   socket_path = argv[2];
   if (!strlen(socket_path))
     goto wrong_args;
 
   if (strlen(argv[3])) {
     instance_no = atoi(argv[3]);
-  }
-  else
+  } else
     goto wrong_args;
 
-  for(i = 0; i < MAX_VMS; i++) {
+  for (i = 0; i < MAX_VMS; i++) {
     my_shm_data[i] = NULL;
     peer_shm_data[i] = NULL;
   }
@@ -601,12 +624,13 @@ int main(int argc, char **argv) {
      */
     server_init(instance_no);
     peer_vm_id[instance_no] = vm_control->client_vmid;
-    local_rr_int_no[instance_no] = peer_vm_id[instance_no] | (instance_no << 1) |
-                      LOCAL_RESOURCE_READY_INT_VEC;
-    remote_rc_int_no[instance_no] = peer_vm_id[instance_no] | (instance_no << 1) |
-                       REMOTE_RESOURCE_CONSUMED_INT_VEC;
+    local_rr_int_no[instance_no] = peer_vm_id[instance_no] |
+                                   (instance_no << 1) |
+                                   LOCAL_RESOURCE_READY_INT_VEC;
+    remote_rc_int_no[instance_no] = peer_vm_id[instance_no] |
+                                    (instance_no << 1) |
+                                    REMOTE_RESOURCE_CONSUMED_INT_VEC;
     /* Send LOGIN cmd to the client. Supply my_vmid
-     *  TODO: Wait for reply?
      */
     my_shm_data[instance_no]->cmd = CMD_LOGIN;
     my_shm_data[instance_no]->fd = my_vmid;
@@ -620,7 +644,7 @@ int main(int argc, char **argv) {
   run(instance_no);
   return 0;
 
-  wrong_args:
-    print_usage_and_exit();
-    return -1;
+wrong_args:
+  print_usage_and_exit();
+  return -1;
 }
