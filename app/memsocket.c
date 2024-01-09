@@ -271,7 +271,7 @@ int get_remote_socket(int instance_no, int my_fd, int close_fd,
 }
 
 int shmem_init(int instance_no) {
-  
+
   int res = -1;
   struct epoll_event ev;
   long int shmem_size;
@@ -633,6 +633,7 @@ int main(int argc, char **argv) {
   int i, res = -1;
   int instance_no;
 
+  printf("argc=%d\n, argc");
   if ((run_as_server && argc != 4) || (!run_as_server && argc != 3))
     goto wrong_args;
 
