@@ -658,9 +658,9 @@ int main(int argc, char **argv) {
   for (i = 0; i < VM_COUNT; i++) {
     my_shm_data[i] = NULL;
     peer_shm_data[i] = NULL;
+    peer_vm_id[i] = -1;
   }
 
-  memset(peer_vm_id, -1, sizeof(peer_vm_id));
   printf("%d\n", __LINE__);
 
   run(instance_no);
