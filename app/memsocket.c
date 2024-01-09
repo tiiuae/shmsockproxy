@@ -394,7 +394,9 @@ int run(int instance_no) {
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
 
+  printf("%d\n", __LINE__);
   thread_init(instance_no);
+  printf("%d\n", __LINE__);
 
   DEBUG("Listening for events", "");
   while (1) {
@@ -658,7 +660,6 @@ int main(int argc, char **argv) {
     peer_shm_data[i] = NULL;
   }
 
-  printf("%d\n", __LINE__);
   memset(peer_vm_id, -1, sizeof(peer_vm_id));
   printf("%d\n", __LINE__);
 
