@@ -391,7 +391,8 @@ int run(int instance_no) {
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
 
-  thread_init(instance_no);
+  // TODO:
+  // thread_init(instance_no);
 
   DEBUG("Listening for events", "");
   while (1) {
@@ -656,7 +657,38 @@ int main(int argc, char **argv) {
     peer_vm_id[i] = -1;
     shmem_fd[i] = -1;
   }
-  printf("%d>>>\n", __LINE__);
+  fd_map_clear(instance_no);
+  memset(peer_vm_id, -1, sizeof(peer_vm_id));
+
+  epollfd[instance_no] = epoll_create1(0);
+  if (epollfd[instance_no] == -1) {
+    FATAL("server_init: epoll_create1");
+  }
+
+  shmem_init(instance_no);
+
+  if (run_as_server) {
+    /* Create socket that waypipe can write to
+     * Add the socket fd to the epollfd
+     */
+    server_init(instance_no);
+    peer_vm_id[instance_no] = vm_control->client_vmid;
+    local_rr_int_no[instance_no] = peer_vm_id[instance_no] |
+                                   (instance_no << 1) |
+                                   LOCAL_RESOURCE_READY_INT_VEC;
+    remote_rc_int_no[instance_no] = peer_vm_id[instance_no] |
+                                    (instance_no << 1) |
+                                    REMOTE_RESOURCE_CONSUMED_INT_VEC;
+    /* Send LOGIN cmd to the client. Supply my_vmid
+     */
+    my_shm_data[instance_no]->cmd = CMD_LOGIN;
+    my_shm_data[instance_no]->fd = my_vmid;
+    res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
+                vm_control->client_vmid |
+                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC));
+    DEBUG("Client #%d: sent login vmid: 0x%x res=%d peer_vm_id=0x%x", 0,
+          my_vmid, res, peer_vm_id);
+  }
 
   run(instance_no);
   return 0;
