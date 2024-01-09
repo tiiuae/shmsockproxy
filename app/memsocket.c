@@ -633,7 +633,7 @@ int main(int argc, char **argv) {
   int i, res = -1;
   int instance_no;
 
-  printf("argc=%d\n, argc");
+  printf("argc=%d\n", argc);
   if ((run_as_server && argc != 4) || (!run_as_server && argc != 3))
     goto wrong_args;
 
