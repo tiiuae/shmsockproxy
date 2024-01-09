@@ -276,8 +276,6 @@ int shmem_init(int instance_no) {
   struct epoll_event ev;
   long int shmem_size;
 
-  memset(shmem_fd, -1, VM_COUNT);
-
   /* Open shared memory */
   shmem_fd[instance_no] = open(SHM_DEVICE_FN, O_RDWR);
   if (shmem_fd[instance_no] < 0) {
@@ -656,6 +654,7 @@ int main(int argc, char **argv) {
     my_shm_data[i] = NULL;
     peer_shm_data[i] = NULL;
     peer_vm_id[i] = -1;
+    shmem_fd[i] = -1;
   }
   printf("%d>>>\n", __LINE__);
 
