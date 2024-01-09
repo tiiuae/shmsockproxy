@@ -18,6 +18,6 @@ echo "Loading shared memory module"
 sudo rmmod kvm_ivshmem ; sudo insmod $MODDIR/kvm_ivshmem.ko; sudo chmod a+rwx /dev/ivshmem
 fi
 
-./memsocket -c "$SOCKET" 2 &
+./memsocket -c "$SOCKET" &
 echo "Starting waypipe"
 waypipe  -s "$SOCKET" client
