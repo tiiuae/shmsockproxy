@@ -388,7 +388,6 @@ int run(int instance_no) {
   int conn_fd, rv, nfds, i, n;
   struct sockaddr_un caddr; /* client address */
   int len = sizeof(caddr);  /* address length could change */
-  char buffer[BUFFER_SIZE + 1];
   struct pollfd my_buffer_fds = {
       .fd = shmem_fd[instance_no], .events = POLLOUT, .revents = 0};
   struct epoll_event ev;
