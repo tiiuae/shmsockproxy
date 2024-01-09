@@ -640,7 +640,7 @@ int main(int argc, char **argv) {
   } else
     goto wrong_args;
 
-  printf("argc=%d\n", argc);
+  printf("argc=%d run_as_server=%d\n", argc, run_as_server);
   if ((run_as_server && argc != 4) || (!run_as_server && argc != 3))
     goto wrong_args;
 
