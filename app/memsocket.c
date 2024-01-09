@@ -661,7 +661,7 @@ int main(int argc, char **argv) {
     peer_vm_id[i] = -1;
   }
 
-  printf("%d\n", __LINE__);
+  printf("%d>>>\n", __LINE__);
 
   run(instance_no);
   return 0;
