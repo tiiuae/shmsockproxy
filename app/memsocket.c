@@ -6,6 +6,7 @@
 #include <execinfo.h>
 #include <fcntl.h>
 #include <netinet/tcp.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,7 +29,7 @@
 
 #define MAX_EVENTS (1024)
 #define MAX_CLIENTS (10)
-#define MAX_VMS (3)
+#define VM_COUNT (3)
 #define BUFFER_SIZE (1024000)
 #define SHMEM_POLL_TIMEOUT (300)
 #define SHMEM_BUFFER_SIZE (1024000)
@@ -86,7 +87,7 @@ enum { CMD_LOGIN, CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_START };
 struct {
   int my_fd;
   int remote_fd;
-} fd_map[MAX_VMS][MAX_CLIENTS];
+} fd_map[VM_COUNT][MAX_CLIENTS];
 
 typedef struct {
   volatile int server_vmid;
@@ -96,24 +97,25 @@ typedef struct {
   volatile unsigned char data[SHMEM_BUFFER_SIZE];
 } vm_data;
 
-int epollfd[MAX_VMS];
+int epollfd[VM_COUNT];
 char *socket_path;
-int server_socket = -1, shmem_fd[MAX_VMS];
-int my_vmid = -1, peer_vm_id[MAX_VMS];
-vm_data *my_shm_data[MAX_VMS], *peer_shm_data[MAX_VMS];
+int server_socket = -1, shmem_fd[VM_COUNT];
+int my_vmid = -1, peer_vm_id[VM_COUNT];
+vm_data *my_shm_data[VM_COUNT], *peer_shm_data[VM_COUNT];
 int run_as_server = 0;
-int local_rr_int_no[MAX_VMS], remote_rc_int_no[MAX_VMS];
-
+int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
+pthread_t server_threads[VM_COUNT];
 struct {
   volatile int client_vmid;
-  vm_data client_data[MAX_VMS];
-  vm_data server_data[MAX_VMS];
+  vm_data client_data[VM_COUNT];
+  vm_data server_data[VM_COUNT];
 } *vm_control;
 
-static const char usage_string[] =
-    "Usage: memsocket [-c|-s] socket_path {instance number (server only)}\n";
+static const char usage_string[] = "Usage: memsocket [-c|-s] socket_path "
+                                   "{instance number (server mode only)}\n";
 
 void report(const char *msg, int terminate) {
+
   char tmp[256];
   if (errno)
     perror(msg);
@@ -125,6 +127,7 @@ void report(const char *msg, int terminate) {
 }
 
 int get_shmem_size(int instance_no) {
+
   int res;
 
   res = lseek(shmem_fd[instance_no], 0, SEEK_END);
@@ -136,7 +139,9 @@ int get_shmem_size(int instance_no) {
 }
 
 void fd_map_clear(int instance_no) {
+
   int i;
+
   for (i = 0; i < FD_MAP_COUNT; i++) {
     fd_map[instance_no][i].my_fd = -1;
     fd_map[instance_no][i].remote_fd = -1;
@@ -144,6 +149,7 @@ void fd_map_clear(int instance_no) {
 }
 
 int server_init(int instance_no) {
+
   struct sockaddr_un socket_name;
   struct epoll_event ev;
 
@@ -265,11 +271,12 @@ int get_remote_socket(int instance_no, int my_fd, int close_fd,
 }
 
 int shmem_init(int instance_no) {
+  
   int res = -1;
   struct epoll_event ev;
   long int shmem_size;
 
-  memset(shmem_fd, -1, MAX_VMS);
+  memset(shmem_fd, -1, VM_COUNT);
 
   /* Open shared memory */
   shmem_fd[instance_no] = open(SHM_DEVICE_FN, O_RDWR);
@@ -337,7 +344,45 @@ int shmem_init(int instance_no) {
   return 0;
 }
 
+void thread_init(int instance_no) {
+
+  int res;
+
+  fd_map_clear(instance_no);
+
+  epollfd[instance_no] = epoll_create1(0);
+  if (epollfd[instance_no] == -1) {
+    FATAL("server_init: epoll_create1");
+  }
+
+  shmem_init(instance_no);
+
+  if (run_as_server) {
+    /* Create socket that waypipe can write to
+     * Add the socket fd to the epollfd
+     */
+    server_init(instance_no);
+    peer_vm_id[instance_no] = vm_control->client_vmid;
+    local_rr_int_no[instance_no] = peer_vm_id[instance_no] |
+                                   (instance_no << 1) |
+                                   LOCAL_RESOURCE_READY_INT_VEC;
+    remote_rc_int_no[instance_no] = peer_vm_id[instance_no] |
+                                    (instance_no << 1) |
+                                    REMOTE_RESOURCE_CONSUMED_INT_VEC;
+    /* Send LOGIN cmd to the client. Supply my_vmid
+     */
+    my_shm_data[instance_no]->cmd = CMD_LOGIN;
+    my_shm_data[instance_no]->fd = my_vmid;
+    res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
+                vm_control->client_vmid |
+                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC));
+    DEBUG("Client #%d: sent login vmid: 0x%x res=%d peer_vm_id=0x%x", 0,
+          my_vmid, res, peer_vm_id);
+  }
+}
+
 int run(int instance_no) {
+
   fd_set rfds;
   struct timeval tv;
   int conn_fd, rv, nfds, i, n;
@@ -348,6 +393,8 @@ int run(int instance_no) {
       .fd = shmem_fd[instance_no], .events = POLLOUT, .revents = 0};
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
+
+  thread_init(instance_no);
 
   DEBUG("Listening for events", "");
   while (1) {
@@ -438,7 +485,7 @@ int run(int instance_no) {
           case CMD_LOGIN:
             DEBUG("Received login request from 0x%x",
                   peer_shm_data[instance_no]->fd);
-            // TODO: if peer VM starts again, close all opened files
+            /* If the peer VM starts again, close all opened file handles */
             for (i = 0; i < FD_MAP_COUNT; i++) {
               if (fd_map[instance_no][i].my_fd != -1)
                 close(fd_map[instance_no][i].my_fd);
@@ -580,12 +627,13 @@ void print_usage_and_exit() {
   fprintf(stderr, usage_string);
   exit(1);
 }
+
 int main(int argc, char **argv) {
 
   int i, res = -1;
   int instance_no;
 
-  if (argc != 4)
+  if ((run_as_server && argc != 4) || (!run_as_server && argc != 3))
     goto wrong_args;
 
   if (!strcmp(argv[1], "-c")) {
@@ -599,47 +647,17 @@ int main(int argc, char **argv) {
   if (!strlen(socket_path))
     goto wrong_args;
 
-  if (strlen(argv[3])) {
+  if (run_as_server && strlen(argv[3])) {
     instance_no = atoi(argv[3]);
   } else
     goto wrong_args;
 
-  for (i = 0; i < MAX_VMS; i++) {
+  for (i = 0; i < VM_COUNT; i++) {
     my_shm_data[i] = NULL;
     peer_shm_data[i] = NULL;
   }
-  fd_map_clear(instance_no);
+
   memset(peer_vm_id, -1, sizeof(peer_vm_id));
-
-  epollfd[instance_no] = epoll_create1(0);
-  if (epollfd[instance_no] == -1) {
-    FATAL("server_init: epoll_create1");
-  }
-
-  shmem_init(instance_no);
-
-  if (run_as_server) {
-    /* Create socket that waypipe can write to
-     * Add the socket fd to the epollfd
-     */
-    server_init(instance_no);
-    peer_vm_id[instance_no] = vm_control->client_vmid;
-    local_rr_int_no[instance_no] = peer_vm_id[instance_no] |
-                                   (instance_no << 1) |
-                                   LOCAL_RESOURCE_READY_INT_VEC;
-    remote_rc_int_no[instance_no] = peer_vm_id[instance_no] |
-                                    (instance_no << 1) |
-                                    REMOTE_RESOURCE_CONSUMED_INT_VEC;
-    /* Send LOGIN cmd to the client. Supply my_vmid
-     */
-    my_shm_data[instance_no]->cmd = CMD_LOGIN;
-    my_shm_data[instance_no]->fd = my_vmid;
-    res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                vm_control->client_vmid |
-                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC));
-    DEBUG("Client #%d: sent login vmid: 0x%x res=%d peer_vm_id=0x%x", 0,
-          my_vmid, res, peer_vm_id);
-  }
 
   run(instance_no);
   return 0;
