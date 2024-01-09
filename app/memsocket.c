@@ -633,15 +633,15 @@ int main(int argc, char **argv) {
   int i, res = -1;
   int instance_no;
 
-  printf("argc=%d\n", argc);
-  if ((run_as_server && argc != 4) || (!run_as_server && argc != 3))
-    goto wrong_args;
-
   if (!strcmp(argv[1], "-c")) {
     run_as_server = 0;
   } else if (!strcmp(argv[1], "-s")) {
     run_as_server = 1;
   } else
+    goto wrong_args;
+
+  printf("argc=%d\n", argc);
+  if ((run_as_server && argc != 4) || (!run_as_server && argc != 3))
     goto wrong_args;
 
   socket_path = argv[2];
