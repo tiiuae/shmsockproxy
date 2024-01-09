@@ -640,7 +640,6 @@ int main(int argc, char **argv) {
   } else
     goto wrong_args;
 
-  printf("argc=%d run_as_server=%d %d %d\n", argc, run_as_server, (run_as_server && argc != 4), (!run_as_server && argc != 3));
   if ((run_as_server && argc != 4) || (!run_as_server && argc != 3))
     goto wrong_args;
 
@@ -659,7 +658,9 @@ int main(int argc, char **argv) {
     peer_shm_data[i] = NULL;
   }
 
+  printf("%d\n", __LINE__);
   memset(peer_vm_id, -1, sizeof(peer_vm_id));
+  printf("%d\n", __LINE__);
 
   run(instance_no);
   return 0;
