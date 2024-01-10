@@ -367,7 +367,8 @@ void thread_init(int instance_no) {
     remote_rc_int_no[instance_no] = peer_vm_id[instance_no] |
                                     (instance_no << 1) |
                                     REMOTE_RESOURCE_CONSUMED_INT_VEC;
-    /* Send LOGIN cmd to the client. Supply my_vmid
+    /*
+     * Send LOGIN cmd to the client. Supply my_vmid
      */
     my_shm_data[instance_no]->cmd = CMD_LOGIN;
     my_shm_data[instance_no]->fd = my_vmid;
@@ -379,8 +380,9 @@ void thread_init(int instance_no) {
   }
 }
 
-int run(int instance_no) {
+void *run(void *arg) {
 
+  int instance_no = (intptr_t) arg;
   fd_set rfds;
   struct timeval tv;
   int conn_fd, rv, nfds, i, n;
@@ -390,6 +392,8 @@ int run(int instance_no) {
       .fd = shmem_fd[instance_no], .events = POLLOUT, .revents = 0};
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
+
+  thread_init(instance_no);
 
   DEBUG("Listening for events", "");
   while (1) {
@@ -626,7 +630,8 @@ void print_usage_and_exit() {
 int main(int argc, char **argv) {
 
   int i, res = -1;
-  int instance_no = 0;
+  int instance_no = 0, thread_count = 1;
+  pthread_t threads[VM_COUNT];
 
   if (!strcmp(argv[1], "-c")) {
     run_as_server = 0;
@@ -654,13 +659,29 @@ int main(int argc, char **argv) {
     peer_vm_id[i] = -1;
     shmem_fd[i] = -1;
   }
-  printf("%d>>>\n", __LINE__);
 
-  thread_init(instance_no);
-  run(instance_no);
+  /* On client site start thread for each display VM */
+  if (!run_as_server)
+    thread_count = VM_COUNT;
+
+  for (i = 0; i < thread_count; i++) {
+    res = pthread_create(&threads[i], NULL, run, (void*)(intptr_t) i);
+    if (res) {
+      ERROR("Thread id=%d", i);
+      FATAL("Cannot create a thread");
+    }
+  }
+
+  for (i = 0; i < thread_count; i++) {
+    res = pthread_join(threads[i], NULL);
+    if (res) {
+      ERROR("error %d waiting for the thread #%d", res, i);
+    }
+  }
+
   return 0;
 
 wrong_args:
   print_usage_and_exit();
-  return -1;
+  return 1;
 }
