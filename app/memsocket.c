@@ -392,8 +392,6 @@ int run(int instance_no) {
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
 
-  thread_init(instance_no);
-
   DEBUG("Listening for events", "");
   while (1) {
 
@@ -659,6 +657,7 @@ int main(int argc, char **argv) {
   }
   printf("%d>>>\n", __LINE__);
 
+  thread_init(instance_no);
   run(instance_no);
   return 0;
 
