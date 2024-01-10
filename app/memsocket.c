@@ -408,7 +408,7 @@ void *run(void *arg) {
 
   for(i = 0; i < sizeof(pr1); i++)
   if (pr1[i] != PR1) {
-    ERROR("i=%d", i);
+    ERROR("i=%d 0x%x", i, pr1[i]);
     FATAL("Broken");
   } 
   for(i = 0; i < sizeof(pr2); i++)
