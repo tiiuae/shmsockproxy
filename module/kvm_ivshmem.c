@@ -203,7 +203,10 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCRESTART:
     spin_lock(&rawhide_irq_lock);
+    init_waitqueue_head(&local_data_ready_wait_queue[i]);
+    init_waitqueue_head(&remote_data_ready_wait_queue[i]);
     local_resource_count[(unsigned long int)filp->private_data] = 1;
+    remote_resource_count[(unsigned long int)filp->private_data] = 0;
     spin_unlock(&rawhide_irq_lock);
     break;
 
@@ -562,7 +565,7 @@ static void __exit kvm_ivshmem_cleanup_module(void) {
 
 static int __init kvm_ivshmem_init_module(void) {
 
-  int err = -ENOMEM;
+  int err = -ENOMEM, i;
 
   /* Register device node ops. */
   err = misc_register(&kvm_ivshmem_misc_dev);
@@ -578,6 +581,12 @@ static int __init kvm_ivshmem_init_module(void) {
     goto error;
   }
 
+  for(i = 0; i < VM_COUNT; i++) {
+    init_waitqueue_head(&local_data_ready_wait_queue[i]);
+    init_waitqueue_head(&remote_data_ready_wait_queue[i]);
+    local_resource_count[i] = 1;
+    remote_resource_count[i] = 0;
+  }
   return 0;
 
 error:
