@@ -347,7 +347,6 @@ void thread_init(int instance_no) {
   int res;
 
   fd_map_clear(instance_no);
-  memset(peer_vm_id, -1, sizeof(peer_vm_id));
 
   epollfd[instance_no] = epoll_create1(0);
   if (epollfd[instance_no] == -1) {
@@ -644,9 +643,9 @@ int main(int argc, char **argv) {
     goto wrong_args;
 
   if (run_as_server)
-    if (strlen(argv[3])) 
+    if (strlen(argv[3]))
       instance_no = atoi(argv[3]);
-    else 
+    else
       goto wrong_args;
 
   for (i = 0; i < VM_COUNT; i++) {

@@ -1,15 +1,15 @@
-  /* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
+/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 
- * Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
- * SPDX-License-Identifier: Apache-2.0
- *
- *  Copyright 2009 Cam Macdonell <cam@cs.ualberta.ca>
- *
- * Based on cirrusfb.c and 8139cp.c:
- *         Copyright 1999-2001 Jeff Garzik
- *         Copyright 2001-2004 Jeff Garzik
- *
- */
+* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
+* SPDX-License-Identifier: Apache-2.0
+*
+*  Copyright 2009 Cam Macdonell <cam@cs.ualberta.ca>
+*
+* Based on cirrusfb.c and 8139cp.c:
+*         Copyright 1999-2001 Jeff Garzik
+*         Copyright 2001-2004 Jeff Garzik
+*
+*/
 
 #include "kvm_ivshmem.h"
 #include <linux/fcntl.h>
@@ -130,35 +130,41 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   unsigned int tmp;
   uint32_t msg;
 
-  KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx", (unsigned long int)filp->private_data,
-      cmd, arg);
-  if ((unsigned long int)filp->private_data >= VM_COUNT && cmd != SHMEM_IOCSETINSTANCENO) {
-      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", (unsigned long int)filp->private_data);
-      return -EINVAL;
+  KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx",
+                      (unsigned long int)filp->private_data, cmd, arg);
+  if ((unsigned long int)filp->private_data >= VM_COUNT &&
+      cmd != SHMEM_IOCSETINSTANCENO) {
+    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld",
+           (unsigned long int)filp->private_data);
+    return -EINVAL;
   }
   switch (cmd) {
   case SHMEM_IOCWLOCAL:
-    KVM_IVSHMEM_DPRINTK("%ld sleeping on local resource (cmd = 0x%08x)", (unsigned long int)filp->private_data, cmd);
+    KVM_IVSHMEM_DPRINTK("%ld sleeping on local resource (cmd = 0x%08x)",
+                        (unsigned long int)filp->private_data, cmd);
     if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
-      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWLOCAL: %ld invalid argument", (unsigned long int)filp->private_data);
+      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWLOCAL: %ld invalid argument",
+             (unsigned long int)filp->private_data);
       return -EINVAL;
     }
 
     tmp = HZ / 1000 * tmp;
-    KVM_IVSHMEM_DPRINTK("%ld timeout: %d ms", (unsigned long int)filp->private_data, tmp);
+    KVM_IVSHMEM_DPRINTK("%ld timeout: %d ms",
+                        (unsigned long int)filp->private_data, tmp);
     rv = wait_event_interruptible_timeout(
         local_data_ready_wait_queue[(unsigned long int)filp->private_data],
         (local_resource_count[(unsigned long int)filp->private_data] == 1),
         tmp);
-    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d", (unsigned long int)filp->private_data, rv);
+    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
+                        (unsigned long int)filp->private_data, rv);
     spin_lock(&rawhide_irq_lock);
     local_resource_count[(unsigned long int)filp->private_data] = 0;
     spin_unlock(&rawhide_irq_lock);
     break;
 
   case SHMEM_IOCWREMOTE:
-    KVM_IVSHMEM_DPRINTK("%ld sleeping on remote resource (cmd = 0x%08x)", (unsigned long int)filp->private_data,
-        cmd);
+    KVM_IVSHMEM_DPRINTK("%ld sleeping on remote resource (cmd = 0x%08x)",
+                        (unsigned long int)filp->private_data, cmd);
     if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
       printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWREMOTE: invalid argument rv=%d",
              rv);
@@ -166,12 +172,14 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     }
 
     tmp = HZ / 1000 * tmp;
-    KVM_IVSHMEM_DPRINTK("%ld timeout: %d ms", (unsigned long int)filp->private_data, tmp);
+    KVM_IVSHMEM_DPRINTK("%ld timeout: %d ms",
+                        (unsigned long int)filp->private_data, tmp);
     rv = wait_event_interruptible_timeout(
         remote_data_ready_wait_queue[(unsigned long int)filp->private_data],
         (remote_resource_count[(unsigned long int)filp->private_data] == 1),
         tmp);
-    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d", (unsigned long int)filp->private_data, rv);
+    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
+                        (unsigned long int)filp->private_data, rv);
     spin_lock(&rawhide_irq_lock);
     remote_resource_count[(unsigned long int)filp->private_data] = 0;
     spin_unlock(&rawhide_irq_lock);
@@ -179,7 +187,8 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCIVPOSN:
     msg = readl(kvm_ivshmem_dev.regs + IVPosition);
-    KVM_IVSHMEM_DPRINTK("%ld my vmid is 0x%08x", (unsigned long int)filp->private_data, msg);
+    KVM_IVSHMEM_DPRINTK("%ld my vmid is 0x%08x",
+                        (unsigned long int)filp->private_data, msg);
     rv = copy_to_user((void __user *)arg, &msg, sizeof(msg));
     break;
 
@@ -215,14 +224,15 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       goto unlock;
     }
     filp->private_data = (void *)arg;
-    printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
+    printk(KERN_INFO
+           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
            arg);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);
     init_waitqueue_head(&remote_data_ready_wait_queue[arg]);
     local_resource_count[arg] = 1;
     remote_resource_count[arg] = 0;
-unlock:
+  unlock:
     spin_unlock(&rawhide_irq_lock);
     break;
 
@@ -231,7 +241,8 @@ unlock:
     break;
 
   default:
-    KVM_IVSHMEM_DPRINTK("%ld bad ioctl (0x%08x)", (unsigned long int)filp->private_data, cmd);
+    KVM_IVSHMEM_DPRINTK("%ld bad ioctl (0x%08x)",
+                        (unsigned long int)filp->private_data, cmd);
     return -EINVAL;
   }
 
@@ -252,7 +263,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
     KVM_IVSHMEM_DPRINTK(
         "%ld poll: in: remote_resource_count=%d",
         (unsigned long int)filp->private_data,
-            remote_resource_count[(unsigned long int)filp->private_data]);
+        remote_resource_count[(unsigned long int)filp->private_data]);
     spin_lock(&rawhide_irq_lock);
     if (remote_resource_count[(unsigned long int)filp->private_data]) {
       remote_resource_count[(unsigned long int)filp->private_data] = 0;
@@ -349,9 +360,11 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
 
   offset = *poffset;
 
-  KVM_IVSHMEM_DPRINTK("%ld KVM_IVSHMEM: trying to write", (unsigned long int)filp->private_data);
+  KVM_IVSHMEM_DPRINTK("%ld KVM_IVSHMEM: trying to write",
+                      (unsigned long int)filp->private_data);
   if (!kvm_ivshmem_dev.base_addr) {
-    printk(KERN_ERR "KVM_IVSHMEM: %ld cannot write to ioaddr (NULL)", (unsigned long int)filp->private_data);
+    printk(KERN_ERR "KVM_IVSHMEM: %ld cannot write to ioaddr (NULL)",
+           (unsigned long int)filp->private_data);
     return 0;
   }
 
@@ -359,7 +372,8 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
     len = kvm_ivshmem_dev.ioaddr_size - offset;
   }
 
-  KVM_IVSHMEM_DPRINTK("%ld KVM_IVSHMEM: len is %u", (unsigned long int)filp->private_data, (unsigned)len);
+  KVM_IVSHMEM_DPRINTK("%ld KVM_IVSHMEM: len is %u",
+                      (unsigned long int)filp->private_data, (unsigned)len);
   if (len == 0)
     return 0;
 
@@ -370,7 +384,8 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
   }
 
   KVM_IVSHMEM_DPRINTK("%ld KVM_IVSHMEM: wrote %u bytes at offset %lu",
-                      (unsigned long int)filp->private_data, (unsigned)len, offset);
+                      (unsigned long int)filp->private_data, (unsigned)len,
+                      offset);
   *poffset += len;
   return len;
 }
@@ -386,7 +401,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
 
   KVM_IVSHMEM_DPRINTK("irq %d", irq);
   for (i = 0; i < VM_COUNT; i++) {
-    if (irq == irq_local_resource_ready[i]) { 
+    if (irq == irq_local_resource_ready[i]) {
       KVM_IVSHMEM_DPRINTK("%d wake up remote_data_ready_wait_queue", i);
       remote_resource_count[i] = 1;
       wake_up_interruptible(&remote_data_ready_wait_queue[i]);
@@ -578,7 +593,7 @@ static int __init kvm_ivshmem_init_module(void) {
     goto error;
   }
 
-  for(i = 0; i < VM_COUNT; i++) {
+  for (i = 0; i < VM_COUNT; i++) {
     init_waitqueue_head(&local_data_ready_wait_queue[i]);
     init_waitqueue_head(&remote_data_ready_wait_queue[i]);
     local_resource_count[i] = 1;
@@ -593,7 +608,7 @@ error:
 
 static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
   printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device");
-  filp->private_data = (void*) (unsigned long) -1;
+  filp->private_data = (void *)(unsigned long)-1;
   return 0;
 }
 
@@ -630,7 +645,8 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
                          vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
-    KVM_IVSHMEM_DPRINTK("%ld mmap failed", (unsigned long int)filp->private_data);
+    KVM_IVSHMEM_DPRINTK("%ld mmap failed",
+                        (unsigned long int)filp->private_data);
     return -ENXIO;
   }
 
