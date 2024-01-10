@@ -393,7 +393,7 @@ void *run(void *arg) {
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
 
-  thread_init(instance_no);
+  // thread_init(instance_no);
 
   DEBUG("Listening for events", "");
   while (1) {
@@ -662,9 +662,10 @@ int main(int argc, char **argv) {
 
   /* On client site start thread for each display VM */
   if (!run_as_server)
-    thread_count = VM_COUNT;
+    thread_count = 1; //VM_COUNT;
 
   for (i = 0; i < thread_count; i++) {
+    thread_init(i);
     res = pthread_create(&threads[i], NULL, run, (void*)(intptr_t) i);
     if (res) {
       ERROR("Thread id=%d", i);
