@@ -399,6 +399,10 @@ void *run(void *arg) {
 
   memset(pr1, PR1, sizeof(pr1));
   memset(pr2, PR2, sizeof(pr2));
+  for(i = 0; i < sizeof(pr1); i++) {
+    pr1[i] = PR1;
+    pr2[i] = PR2;
+  }
 
   thread_init(instance_no);
 
