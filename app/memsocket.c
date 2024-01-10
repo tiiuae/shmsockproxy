@@ -407,12 +407,12 @@ void *run(void *arg) {
 //  thread_init(instance_no);
 
   for(i = 0; i < sizeof(pr1); i++)
-  if (pr1[i] != PR1) {
+  if (pr1[i] != (char) PR1) {
     ERROR("i=%d 0x%x", i, pr1[i]);
     FATAL("Broken");
   } 
   for(i = 0; i < sizeof(pr2); i++)
-  if (pr2[i] != PR2) {
+  if (pr2[i] != (char) PR2) {
     ERROR("i=%d", i);
     FATAL("Broken");
   } 
