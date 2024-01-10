@@ -382,6 +382,7 @@ void thread_init(int instance_no) {
 
 void *run(void *arg) {
 
+  char pr1[100*1024];
   int instance_no = (intptr_t)arg;
   fd_set rfds;
   struct timeval tv;
@@ -392,8 +393,26 @@ void *run(void *arg) {
       .fd = shmem_fd[instance_no], .events = POLLOUT, .revents = 0};
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
+  char pr2[100*1024];
+#define PR1 0xaa
+#define PR2 0x55
+
+  memset(pr1, PR1, sizeof(pr1));
+  memset(pr2, PR2, sizeof(pr2));
 
   thread_init(instance_no);
+
+  for(i = 0; i < sizeof(pr1); i++)
+  if (pr1[i] != PR1) {
+    ERROR("i=%d", i);
+    FATAL("Broken");
+  } 
+  for(i = 0; i < sizeof(pr2); i++)
+  if (pr2[i] != PR2) {
+    ERROR("i=%d", i);
+    FATAL("Broken");
+  } 
+
 
   DEBUG("Listening for events", "");
   while (1) {
