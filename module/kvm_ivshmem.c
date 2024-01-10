@@ -203,10 +203,10 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCRESTART:
     spin_lock(&rawhide_irq_lock);
-    init_waitqueue_head(&local_data_ready_wait_queue[(unsigned long int)filp->private_data]);
-    init_waitqueue_head(&remote_data_ready_wait_queue[(unsigned long int)filp->private_data]);
+    // init_waitqueue_head(&local_data_ready_wait_queue[(unsigned long int)filp->private_data]);
+    // init_waitqueue_head(&remote_data_ready_wait_queue[(unsigned long int)filp->private_data]);
     local_resource_count[(unsigned long int)filp->private_data] = 1;
-    remote_resource_count[(unsigned long int)filp->private_data] = 0;
+    // remote_resource_count[(unsigned long int)filp->private_data] = 0;
     spin_unlock(&rawhide_irq_lock);
     break;
 
