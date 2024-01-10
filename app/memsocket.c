@@ -89,7 +89,6 @@ struct {
   int remote_fd;
 } fd_map[VM_COUNT][MAX_CLIENTS];
 
-int AAAAAA = FD_MAP_COUNT;
 typedef struct {
   volatile int server_vmid;
   volatile int cmd;
@@ -383,7 +382,7 @@ void thread_init(int instance_no) {
 
 void *run(void *arg) {
 
-  int instance_no = (intptr_t) arg;
+  int instance_no = (intptr_t)arg;
   fd_set rfds;
   struct timeval tv;
   int conn_fd, rv, nfds, i, n;
@@ -631,7 +630,7 @@ void print_usage_and_exit() {
 int main(int argc, char **argv) {
 
   int i, res = -1;
-  int instance_no = 0, thread_count = 1;
+  int instance_no = 0;
   pthread_t threads[VM_COUNT];
 
   if (!strcmp(argv[1], "-c")) {
@@ -663,26 +662,24 @@ int main(int argc, char **argv) {
 
   /* On client site start thread for each display VM */
   if (!run_as_server) {
-    thread_count = VM_COUNT;
-
-  for (i = 0; i < thread_count; i++) {
+    for (i = 0; i < VM_COUNT; i++) {
       thread_init(i);
-      res = pthread_create(&threads[i], NULL, run, (void*)(intptr_t) i);
+      res = pthread_create(&threads[i], NULL, run, (void *)(intptr_t)i);
       if (res) {
         ERROR("Thread id=%d", i);
         FATAL("Cannot create a thread");
       }
     }
 
-    for (i = 0; i < thread_count; i++) {
+    for (i = 0; i < VM_COUNT; i++) {
       res = pthread_join(threads[i], NULL);
       if (res) {
         ERROR("error %d waiting for the thread #%d", res, i);
       }
     }
-  } else { /* server mode - only one instance */
+  } else { /* server mode - run only one instance */
     thread_init(instance_no);
-    run((void*) (intptr_t) instance_no);
+    run((void *)(intptr_t)instance_no);
   }
 
   return 0;
