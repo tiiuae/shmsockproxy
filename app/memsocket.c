@@ -89,6 +89,7 @@ struct {
   int remote_fd;
 } fd_map[VM_COUNT][MAX_CLIENTS];
 
+int AAAAAA = FD_MAP_COUNT;
 typedef struct {
   volatile int server_vmid;
   volatile int cmd;
@@ -142,7 +143,7 @@ void fd_map_clear(int instance_no) {
 
   int i;
 
-  for (i = 0; i < FD_MAP_COUNT; i++) {
+  for (i = 0; i < MAX_CLIENTS; i++) {
     fd_map[instance_no][i].my_fd = -1;
     fd_map[instance_no][i].remote_fd = -1;
   }
@@ -221,7 +222,7 @@ void make_wayland_connection(int instance_no, int peer_fd) {
 
   int i;
 
-  for (i = 0; i < FD_MAP_COUNT; i++) {
+  for (i = 0; i < MAX_CLIENTS; i++) {
     if (fd_map[instance_no][i].my_fd == -1) {
       fd_map[instance_no][i].my_fd = wayland_connect(instance_no);
       fd_map[instance_no][i].remote_fd = peer_fd;
@@ -237,7 +238,7 @@ int map_peer_fd(int instance_no, int peer_fd, int close_fd) {
 
   int i, rv;
 
-  for (i = 0; i < FD_MAP_COUNT; i++) {
+  for (i = 0; i < MAX_CLIENTS; i++) {
     if (fd_map[instance_no][i].remote_fd == peer_fd) {
       rv = fd_map[instance_no][i].my_fd;
       if (close_fd)
@@ -256,7 +257,7 @@ int get_remote_socket(int instance_no, int my_fd, int close_fd,
   int i;
   struct epoll_event ev;
 
-  for (i = 0; i < FD_MAP_COUNT; i++) {
+  for (i = 0; i < MAX_CLIENTS; i++) {
     if (fd_map[instance_no][i].my_fd == my_fd) {
       if (close_fd)
         fd_map[instance_no][i].my_fd = -1;
@@ -485,7 +486,7 @@ void *run(void *arg) {
             DEBUG("Received login request from 0x%x",
                   peer_shm_data[instance_no]->fd);
             /* If the peer VM starts again, close all opened file handles */
-            for (i = 0; i < FD_MAP_COUNT; i++) {
+            for (i = 0; i < MAX_CLIENTS; i++) {
               if (fd_map[instance_no][i].my_fd != -1)
                 close(fd_map[instance_no][i].my_fd);
             }
@@ -681,7 +682,7 @@ int main(int argc, char **argv) {
     }
   } else { /* server mode - only one instance */
     thread_init(instance_no);
-    run((void*) instance_no);
+    run((void*) (intptr_t) instance_no);
   }
 
   return 0;
