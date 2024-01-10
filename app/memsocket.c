@@ -347,6 +347,7 @@ void thread_init(int instance_no) {
   int res;
 
   fd_map_clear(instance_no);
+  memset(peer_vm_id, -1, sizeof(peer_vm_id));
 
   epollfd[instance_no] = epoll_create1(0);
   if (epollfd[instance_no] == -1) {
