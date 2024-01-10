@@ -404,7 +404,7 @@ void *run(void *arg) {
     pr2[i] = PR2;
   }
 
-  thread_init(instance_no);
+//  thread_init(instance_no);
 
   for(i = 0; i < sizeof(pr1); i++)
   if (pr1[i] != PR1) {
@@ -686,7 +686,7 @@ int main(int argc, char **argv) {
   /* On client site start thread for each display VM */
   if (!run_as_server) {
     for (i = 0; i < VM_COUNT; i++) {
-      //thread_init(i);
+      thread_init(i);
       res = pthread_create(&threads[i], NULL, run, (void *)(intptr_t)i);
       if (res) {
         ERROR("Thread id=%d", i);
