@@ -34,7 +34,7 @@
 #define SHMEM_POLL_TIMEOUT (300)
 #define SHMEM_BUFFER_SIZE (1024000)
 #define UNKNOWN_PEER (-1)
-#if 0
+#if 1
 #define DEBUG(fmt, ...)                                                        \
   {}
 #else
@@ -116,7 +116,6 @@ static const char usage_string[] = "Usage: memsocket [-c|-s] socket_path "
 
 void report(const char *msg, int terminate) {
 
-  char tmp[256];
   if (errno)
     perror(msg);
   else
@@ -148,12 +147,12 @@ void fd_map_clear(int instance_no) {
   }
 }
 
-int server_init(int instance_no) {
+void server_init(int instance_no) {
 
   struct sockaddr_un socket_name;
   struct epoll_event ev;
 
-  // Remove socket file if exists
+  /* Remove socket file if exists */
   if (access(socket_path, F_OK) == 0) {
     remove(socket_path);
   }
@@ -254,7 +253,6 @@ int get_remote_socket(int instance_no, int my_fd, int close_fd,
                       int ignore_error) {
 
   int i;
-  struct epoll_event ev;
 
   for (i = 0; i < MAX_CLIENTS; i++) {
     if (fd_map[instance_no][i].my_fd == my_fd) {
@@ -270,7 +268,7 @@ int get_remote_socket(int instance_no, int my_fd, int close_fd,
   return -1;
 }
 
-int shmem_init(int instance_no) {
+void shmem_init(int instance_no) {
 
   int res = -1;
   struct epoll_event ev;
@@ -338,8 +336,6 @@ int shmem_init(int instance_no) {
   ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
 
   INFO("shared memory initialized", "");
-
-  return 0;
 }
 
 void thread_init(int instance_no) {
@@ -384,11 +380,9 @@ void *run(void *arg) {
 
   char pr1[100*1024];
   int instance_no = (intptr_t)arg;
-  fd_set rfds;
-  struct timeval tv;
   int conn_fd, rv, nfds, i, n;
   struct sockaddr_un caddr; /* client address */
-  int len = sizeof(caddr);  /* address length could change */
+  socklen_t len = sizeof(caddr);  /* address length could change */
   struct pollfd my_buffer_fds = {
       .fd = shmem_fd[instance_no], .events = POLLOUT, .revents = 0};
   struct epoll_event ev;
@@ -656,9 +650,9 @@ int main(int argc, char **argv) {
   int instance_no = 0;
   pthread_t threads[VM_COUNT];
 
-  if (!strcmp(argv[1], "-c")) {
+  if (strcmp(argv[1], "-c") == 0) {
     run_as_server = 0;
-  } else if (!strcmp(argv[1], "-s")) {
+  } else if (strcmp(argv[1], "-s") == 0) {
     run_as_server = 1;
   } else
     goto wrong_args;
@@ -670,12 +664,13 @@ int main(int argc, char **argv) {
   if (!strlen(socket_path))
     goto wrong_args;
 
-  if (run_as_server)
-    if (strlen(argv[3]))
+  if (run_as_server) {
+    if (strlen(argv[3])) {
       instance_no = atoi(argv[3]);
-    else
+    } else {
       goto wrong_args;
-
+    }
+  }
   for (i = 0; i < VM_COUNT; i++) {
     my_shm_data[i] = NULL;
     peer_shm_data[i] = NULL;
@@ -684,7 +679,7 @@ int main(int argc, char **argv) {
   }
 
   /* On client site start thread for each display VM */
-  if (!run_as_server) {
+  if (run_as_server == 0) {
     for (i = 0; i < VM_COUNT; i++) {
       // thread_init(i);
       res = pthread_create(&threads[i], NULL, run, (void *)(intptr_t)i);
