@@ -11,3 +11,12 @@
 #define SHMEM_IOCRESTART _IOR(SHMEM_IOC_MAGIC, 5, int)
 #define SHMEM_IOCSETINSTANCENO _IOR(SHMEM_IOC_MAGIC, 6, int)
 #define SHMEM_IOCNOP _IOR(SHMEM_IOC_MAGIC, 7, int)
+
+#define DEBUG_IOCTL
+struct ioctl_data {
+   int peer_vm_id;
+   int int_no;
+   int fd;
+   int cmd;
+   int len;
+};
