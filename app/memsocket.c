@@ -380,7 +380,7 @@ void thread_init(int instance_no) {
 
     res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
                 /*vm_control->client_vmid |
-                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC)*/ ioctl_data);
+                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC)*/ &ioctl_data);
     DEBUG("Client #%d: sent login vmid: 0x%x ioctl result=%d peer_vm_id=0x%x", instance_no,
           my_vmid, res, peer_vm_id[instance_no]);
   }
@@ -471,7 +471,7 @@ void *run(void *arg) {
           ioctl_data.len = 0;
           #endif
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                /*local_rr_int_no[instance_no]*/ ioctl_data);
+                /*local_rr_int_no[instance_no]*/ &ioctl_data);
           DEBUG("Added client on fd %d", conn_fd);
         }
 
@@ -513,7 +513,7 @@ void *run(void *arg) {
             #endif
 
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                  /*local_rr_int_no[instance_no]*/ ioctl_data);
+                  /*local_rr_int_no[instance_no]*/ &ioctl_data);
           }
         } /* received data from Wayland server */
 
@@ -599,7 +599,7 @@ void *run(void *arg) {
           ioctl_data.len = 0;
           #endif
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                /* remote_rc_int_no[instance_no]*/ ioctl_data);
+                /* remote_rc_int_no[instance_no]*/ &ioctl_data);
         } /* End of "data arrived from the peer via shared memory" */
 
         else if (events[n].data.fd == server_socket) {
@@ -641,7 +641,7 @@ void *run(void *arg) {
             #endif
             
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                  /*local_rr_int_no[instance_no]*/ioctl_data);
+                  /*local_rr_int_no[instance_no]*/&ioctl_data);
           }
         } // End of "Data arrived from connected waypipe server"
       }
@@ -676,7 +676,7 @@ void *run(void *arg) {
             #endif
 
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                /*local_rr_int_no[instance_no]*/ ioctl_data);
+                /*local_rr_int_no[instance_no]*/ &ioctl_data);
         }
         if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
                       NULL) == -1) {
