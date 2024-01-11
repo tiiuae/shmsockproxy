@@ -129,6 +129,8 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   int rv = 0;
   unsigned int tmp;
   uint32_t msg;
+  struct ioctl_data ioctl_data;
+
 
   KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx",
                       (unsigned long int)filp->private_data, cmd, arg);
@@ -193,8 +195,21 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     break;
 
   case SHMEM_IOCDORBELL:
+
+    if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
+        printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCDORBELL: %ld invalid argument",
+              (unsigned long int)filp->private_data);
+        rv = -EINVAL;
+        break;
+    }
+    
     unsigned int vec;
-    vec = arg & 0xffff;
+    vec = ioctl_data.int_no /*arg*/ & 0xffff;
+    #ifdef DEBUG_IOCTL
+      KVM_IVSHMEM_DPRINTK("%ld ioctl cmd=%d fd=%d len=%d int_no=0x%x",
+      (unsigned long int)filp->private_data, ioctl_data.cmd, ioctl_data.fd, 
+      ioctl_data.len, ioctl_data.int_no);
+    #endif
     KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%lx on vector 0x%x",
                         (unsigned long int)filp->private_data, (arg >> 16),
                         vec);

@@ -341,6 +341,7 @@ void shmem_init(int instance_no) {
 void thread_init(int instance_no) {
 
   int res;
+  struct ioctl_data ioctl_data;
 
   fd_map_clear(instance_no);
 
@@ -368,9 +369,18 @@ void thread_init(int instance_no) {
      */
     my_shm_data[instance_no]->cmd = CMD_LOGIN;
     my_shm_data[instance_no]->fd = my_vmid;
+
+    ioctl_data.int_no = vm_control->client_vmid |
+                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC);
+    #ifdef DEBUG_IOCTL
+    ioctl_data.cmd = my_shm_data[instance_no]->cmd;
+    ioctl_data.fd = my_shm_data[instance_no]->fd;
+    ioctl_data.len = 0;
+    #endif
+
     res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                vm_control->client_vmid |
-                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC));
+                /*vm_control->client_vmid |
+                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC)*/ ioctl_data);
     DEBUG("Client #%d: sent login vmid: 0x%x ioctl result=%d peer_vm_id=0x%x", instance_no,
           my_vmid, res, peer_vm_id[instance_no]);
   }
@@ -387,6 +397,8 @@ void *run(void *arg) {
       .fd = shmem_fd[instance_no], .events = POLLOUT, .revents = 0};
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
+  struct ioctl_data ioctl_data;
+  
   char pr2[100*1024];
 #define PR1 0xaa
 #define PR2 0x55
@@ -451,8 +463,15 @@ void *run(void *arg) {
           /* Send the connect request to the wayland peer */
           my_shm_data[instance_no]->cmd = CMD_CONNECT;
           my_shm_data[instance_no]->fd = conn_fd;
+
+          ioctl_data.int_no = local_rr_int_no[instance_no];
+          #ifdef DEBUG_IOCTL
+          ioctl_data.cmd = my_shm_data[instance_no]->cmd;
+          ioctl_data.fd = my_shm_data[instance_no]->fd;
+          ioctl_data.len = 0;
+          #endif
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                local_rr_int_no[instance_no]);
+                /*local_rr_int_no[instance_no]*/ ioctl_data);
           DEBUG("Added client on fd %d", conn_fd);
         }
 
@@ -485,8 +504,16 @@ void *run(void *arg) {
             my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = conn_fd;
             my_shm_data[instance_no]->len = len;
+
+            ioctl_data.int_no = local_rr_int_no[instance_no];
+            #ifdef DEBUG_IOCTL
+            ioctl_data.cmd = my_shm_data[instance_no]->cmd;
+            ioctl_data.fd = my_shm_data[instance_no]->fd;
+            ioctl_data.len = 0;
+            #endif
+
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                  local_rr_int_no[instance_no]);
+                  /*local_rr_int_no[instance_no]*/ ioctl_data);
           }
         } /* received data from Wayland server */
 
@@ -564,8 +591,15 @@ void *run(void *arg) {
           /* Signal the other side that its buffer has been processed */
           DEBUG("Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC", "");
           peer_shm_data[instance_no]->cmd = -1;
+          
+          ioctl_data.int_no = remote_rc_int_no[instance_no];
+          #ifdef DEBUG_IOCTL
+          ioctl_data.cmd = -1;
+          ioctl_data.fd = 0;
+          ioctl_data.len = 0;
+          #endif
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                remote_rc_int_no[instance_no]);
+                /* remote_rc_int_no[instance_no]*/ ioctl_data);
         } /* End of "data arrived from the peer via shared memory" */
 
         else if (events[n].data.fd == server_socket) {
@@ -598,8 +632,16 @@ void *run(void *arg) {
             my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = events[n].data.fd;
             my_shm_data[instance_no]->len = len;
+
+            ioctl_data.int_no = local_rr_int_no[instance_no];
+            #ifdef DEBUG_IOCTL
+            ioctl_data.cmd = my_shm_data[instance_no]->cmd;
+            ioctl_data.fd = my_shm_data[instance_no]->fd;
+            ioctl_data.len = my_shm_data[instance_no]->len;
+            #endif
+            
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                  local_rr_int_no[instance_no]);
+                  /*local_rr_int_no[instance_no]*/ioctl_data);
           }
         } // End of "Data arrived from connected waypipe server"
       }
@@ -625,8 +667,16 @@ void *run(void *arg) {
         }
         if (my_shm_data[instance_no]->fd > 0) {
           DEBUG("Sending close request for %d", my_shm_data[instance_no]->fd);
+
+            ioctl_data.int_no = local_rr_int_no[instance_no];
+            #ifdef DEBUG_IOCTL
+            ioctl_data.cmd = my_shm_data[instance_no]->cmd;
+            ioctl_data.fd = my_shm_data[instance_no]->fd;
+            ioctl_data.len = my_shm_data[instance_no]->len;
+            #endif
+
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                local_rr_int_no[instance_no]);
+                /*local_rr_int_no[instance_no]*/ ioctl_data);
         }
         if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
                       NULL) == -1) {
