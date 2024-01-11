@@ -371,8 +371,8 @@ void thread_init(int instance_no) {
     res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
                 vm_control->client_vmid |
                     (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC));
-    DEBUG("Client #%d: sent login vmid: 0x%x res=%d peer_vm_id=0x%x", 0,
-          my_vmid, res, peer_vm_id);
+    DEBUG("Client #%d: sent login vmid: 0x%x ioctl result=%d peer_vm_id=0x%x", instance_no,
+          my_vmid, res, peer_vm_id[instance_no]);
   }
 }
 
@@ -696,7 +696,7 @@ int main(int argc, char **argv) {
       }
     }
   } else { /* server mode - run only one instance */
-    thread_init(instance_no);
+    // thread_init(instance_no);
     run((void *)(intptr_t)instance_no);
   }
 
