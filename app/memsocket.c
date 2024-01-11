@@ -34,7 +34,7 @@
 #define SHMEM_POLL_TIMEOUT (300)
 #define SHMEM_BUFFER_SIZE (1024000)
 #define UNKNOWN_PEER (-1)
-#if 1
+#if 0
 #define DEBUG(fmt, ...)                                                        \
   {}
 #else
