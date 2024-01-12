@@ -419,7 +419,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
     if (irq == irq_local_resource_ready[i]) {
       KVM_IVSHMEM_DPRINTK("%d wake up remote_data_ready_wait_queue", i);
       if (remote_resource_count[i]) {
-        KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count=%d", i, remote_resource_count[i]);
+        KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i, remote_resource_count[i]);
       }
       remote_resource_count[i] = 1;
       wake_up_interruptible(&remote_data_ready_wait_queue[i]);
@@ -428,7 +428,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
     if (irq == irq_remote_resource_ready[i]) {
       KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue", i);
       if (local_resource_count[i]) {
-        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count=%d", i, local_resource_count[i]);
+        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i, local_resource_count[i]);
       }
       local_resource_count[i] = 1;
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
