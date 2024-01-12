@@ -369,13 +369,14 @@ void thread_init(int instance_no) {
      */
     my_shm_data[instance_no]->cmd = CMD_LOGIN;
     my_shm_data[instance_no]->fd = my_vmid;
+    my_shm_data[instance_no]->len = 0;
 
     ioctl_data.int_no = vm_control->client_vmid |
                     (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC);
     #ifdef DEBUG_IOCTL
     ioctl_data.cmd = my_shm_data[instance_no]->cmd;
     ioctl_data.fd = my_shm_data[instance_no]->fd;
-    ioctl_data.len = 0;
+    ioctl_data.len = my_shm_data[instance_no]->len;
     #endif
 
     res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,

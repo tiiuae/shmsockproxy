@@ -275,20 +275,17 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
         &remote_data_ready_wait_queue[(unsigned long int)filp->private_data],
         wait);
 
-    KVM_IVSHMEM_DPRINTK(
-        "%ld poll: in: remote_resource_count=%d",
-        (unsigned long int)filp->private_data,
-        remote_resource_count[(unsigned long int)filp->private_data]);
     spin_lock(&rawhide_irq_lock);
     if (remote_resource_count[(unsigned long int)filp->private_data]) {
+      KVM_IVSHMEM_DPRINTK(
+          "%ld poll: in: remote_resource_count=%d",
+          (unsigned long int)filp->private_data,
+          remote_resource_count[(unsigned long int)filp->private_data]);
+
       remote_resource_count[(unsigned long int)filp->private_data] = 0;
       mask |= (POLLIN | POLLRDNORM);
     }
     spin_unlock(&rawhide_irq_lock);
-    KVM_IVSHMEM_DPRINTK(
-        "%ld poll: out: remote_resource_count=%d",
-        (unsigned long int)filp->private_data,
-        remote_resource_count[(unsigned long int)filp->private_data]);
   }
 
   if (req_events & EPOLLOUT) {
@@ -296,20 +293,17 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
         filp,
         &local_data_ready_wait_queue[(unsigned long int)filp->private_data],
         wait);
-    KVM_IVSHMEM_DPRINTK(
-        "%ld poll: in: local_resource_count=%d",
-        (unsigned long int)filp->private_data,
-        local_resource_count[(unsigned long int)filp->private_data]);
     spin_lock(&rawhide_irq_lock);
     if (local_resource_count[(unsigned long int)filp->private_data]) {
+      KVM_IVSHMEM_DPRINTK(
+          "%ld poll: in: local_resource_count=%d",
+          (unsigned long int)filp->private_data,
+          local_resource_count[(unsigned long int)filp->private_data]);
+
       local_resource_count[(unsigned long int)filp->private_data] = 0;
       mask |= (POLLOUT | POLLWRNORM);
     }
     spin_unlock(&rawhide_irq_lock);
-    KVM_IVSHMEM_DPRINTK(
-        "%ld poll: out: local_resource_count=%d",
-        (unsigned long int)filp->private_data,
-        local_resource_count[(unsigned long int)filp->private_data]);
   }
 
   return mask;
