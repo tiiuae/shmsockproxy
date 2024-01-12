@@ -198,7 +198,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     unsigned int vec;
 
     if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
-        printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCDORBELL: %ld invalid argument 0x%x",
+        printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCDORBELL: %ld invalid argument 0x%lx",
               (unsigned long int)filp->private_data, arg);
         rv = -EINVAL;
         break;
