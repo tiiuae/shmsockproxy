@@ -463,12 +463,13 @@ void *run(void *arg) {
           /* Send the connect request to the wayland peer */
           my_shm_data[instance_no]->cmd = CMD_CONNECT;
           my_shm_data[instance_no]->fd = conn_fd;
+          my_shm_data[instance_no]->len = 0;
 
           ioctl_data.int_no = local_rr_int_no[instance_no];
           #ifdef DEBUG_IOCTL
           ioctl_data.cmd = my_shm_data[instance_no]->cmd;
           ioctl_data.fd = my_shm_data[instance_no]->fd;
-          ioctl_data.len = 0;
+          ioctl_data.len = my_shm_data[instance_no]->len;
           #endif
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
                 /*local_rr_int_no[instance_no]*/ &ioctl_data);

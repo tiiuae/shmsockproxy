@@ -210,7 +210,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       (unsigned long int)filp->private_data, ioctl_data.cmd, ioctl_data.fd, 
       ioctl_data.len, ioctl_data.int_no);
     #endif
-    KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%lx on vector 0x%x",
+    KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%x on vector 0x%x",
                         (unsigned long int)filp->private_data, (ioctl_data.int_no >> 16),
                         vec);
     if (vec & LOCAL_RESOURCE_READY_INT_VEC) {
@@ -418,12 +418,18 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   for (i = 0; i < VM_COUNT; i++) {
     if (irq == irq_local_resource_ready[i]) {
       KVM_IVSHMEM_DPRINTK("%d wake up remote_data_ready_wait_queue", i);
+      if (remote_resource_count[i]) {
+        KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count=%d", i, remote_resource_count[i]);
+      }
       remote_resource_count[i] = 1;
       wake_up_interruptible(&remote_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
     if (irq == irq_remote_resource_ready[i]) {
       KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue", i);
+      if (local_resource_count[i]) {
+        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count=%d", i, local_resource_count[i]);
+      }
       local_resource_count[i] = 1;
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
