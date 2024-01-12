@@ -280,7 +280,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
           (unsigned long int)filp->private_data,
           remote_resource_count[(unsigned long int)filp->private_data]);
       // TODO: delete?
-      // remote_resource_count[(unsigned long int)filp->private_data] = 0;
+      remote_resource_count[(unsigned long int)filp->private_data] = 0;
       mask |= (POLLIN | POLLRDNORM);
     }
     spin_unlock(&rawhide_irq_lock);
@@ -299,7 +299,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
           local_resource_count[(unsigned long int)filp->private_data]);
 
       // TODO: delete?
-      // local_resource_count[(unsigned long int)filp->private_data] = 0;
+      local_resource_count[(unsigned long int)filp->private_data] = 0;
       mask |= (POLLOUT | POLLWRNORM);
     }
     spin_unlock(&rawhide_irq_lock);
