@@ -213,15 +213,13 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%x on vector 0x%x",
                         (unsigned long int)filp->private_data, (ioctl_data.int_no >> 16),
                         vec);
+    spin_lock(&rawhide_irq_lock);
     if (vec & LOCAL_RESOURCE_READY_INT_VEC) {
-      spin_lock(&rawhide_irq_lock);
       local_resource_count[(unsigned long int)filp->private_data] = 0;
-      spin_unlock(&rawhide_irq_lock);
     } else {
-      spin_lock(&rawhide_irq_lock);
       remote_resource_count[(unsigned long int)filp->private_data] = 0;
-      spin_unlock(&rawhide_irq_lock);
     }
+    spin_unlock(&rawhide_irq_lock);
     writel(ioctl_data.int_no, kvm_ivshmem_dev.regs + Doorbell);
     break;
 
@@ -281,8 +279,8 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
           "%ld poll: in: remote_resource_count=%d",
           (unsigned long int)filp->private_data,
           remote_resource_count[(unsigned long int)filp->private_data]);
-
-      remote_resource_count[(unsigned long int)filp->private_data] = 0;
+      // TODO: delete?
+      // remote_resource_count[(unsigned long int)filp->private_data] = 0;
       mask |= (POLLIN | POLLRDNORM);
     }
     spin_unlock(&rawhide_irq_lock);
@@ -300,7 +298,8 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
           (unsigned long int)filp->private_data,
           local_resource_count[(unsigned long int)filp->private_data]);
 
-      local_resource_count[(unsigned long int)filp->private_data] = 0;
+      // TODO: delete?
+      // local_resource_count[(unsigned long int)filp->private_data] = 0;
       mask |= (POLLOUT | POLLWRNORM);
     }
     spin_unlock(&rawhide_irq_lock);

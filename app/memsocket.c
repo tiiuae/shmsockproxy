@@ -474,7 +474,7 @@ void *run(void *arg) {
           #endif
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
                 /*local_rr_int_no[instance_no]*/ &ioctl_data);
-          DEBUG("Added client on fd %d", conn_fd);
+          DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
         }
 
         /* Display/client side: received data from Wayland server. It needs to
