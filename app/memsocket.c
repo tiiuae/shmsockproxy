@@ -34,7 +34,7 @@
 #define SHMEM_POLL_TIMEOUT (300)
 #define SHMEM_BUFFER_SIZE (1024000)
 #define UNKNOWN_PEER (-1)
-#if 0
+#if 1
 #define DEBUG(fmt, ...)                                                        \
   {}
 #else
@@ -372,18 +372,19 @@ void thread_init(int instance_no) {
     my_shm_data[instance_no]->len = 0;
 
     ioctl_data.int_no = vm_control->client_vmid |
-                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC);
-    #ifdef DEBUG_IOCTL
+                        (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC);
+#ifdef DEBUG_IOCTL
     ioctl_data.cmd = my_shm_data[instance_no]->cmd;
     ioctl_data.fd = my_shm_data[instance_no]->fd;
     ioctl_data.len = my_shm_data[instance_no]->len;
-    #endif
+#endif
 
     res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
                 /*vm_control->client_vmid |
-                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC)*/ &ioctl_data);
-    DEBUG("Client #%d: sent login vmid: 0x%x ioctl result=%d peer_vm_id=0x%x", instance_no,
-          my_vmid, res, peer_vm_id[instance_no]);
+                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC)*/
+                &ioctl_data);
+    DEBUG("Client #%d: sent login vmid: 0x%x ioctl result=%d peer_vm_id=0x%x",
+          instance_no, my_vmid, res, peer_vm_id[instance_no]);
   }
 }
 
@@ -391,14 +392,14 @@ void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
   int conn_fd, rv, nfds, i, n;
-  struct sockaddr_un caddr; /* client address */
-  socklen_t len = sizeof(caddr);  /* address length could change */
+  struct sockaddr_un caddr;      /* client address */
+  socklen_t len = sizeof(caddr); /* address length could change */
   struct pollfd my_buffer_fds;
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
 
-  // thread_init(instance_no);
+  thread_init(instance_no);
 
   DEBUG("Listening for events", "");
   while (1) {
@@ -444,11 +445,11 @@ void *run(void *arg) {
           my_shm_data[instance_no]->len = 0;
 
           ioctl_data.int_no = local_rr_int_no[instance_no];
-          #ifdef DEBUG_IOCTL
+#ifdef DEBUG_IOCTL
           ioctl_data.cmd = my_shm_data[instance_no]->cmd;
           ioctl_data.fd = my_shm_data[instance_no]->fd;
           ioctl_data.len = my_shm_data[instance_no]->len;
-          #endif
+#endif
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
                 /*local_rr_int_no[instance_no]*/ &ioctl_data);
           DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
@@ -488,11 +489,11 @@ void *run(void *arg) {
             my_shm_data[instance_no]->len = len;
 
             ioctl_data.int_no = local_rr_int_no[instance_no];
-            #ifdef DEBUG_IOCTL
+#ifdef DEBUG_IOCTL
             ioctl_data.cmd = my_shm_data[instance_no]->cmd;
             ioctl_data.fd = my_shm_data[instance_no]->fd;
             ioctl_data.len = 0;
-            #endif
+#endif
 
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
                   /*local_rr_int_no[instance_no]*/ &ioctl_data);
@@ -573,13 +574,13 @@ void *run(void *arg) {
           /* Signal the other side that its buffer has been processed */
           DEBUG("Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC", "");
           peer_shm_data[instance_no]->cmd = -1;
-          
+
           ioctl_data.int_no = remote_rc_int_no[instance_no];
-          #ifdef DEBUG_IOCTL
+#ifdef DEBUG_IOCTL
           ioctl_data.cmd = -1;
           ioctl_data.fd = 0;
           ioctl_data.len = 0;
-          #endif
+#endif
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
                 /* remote_rc_int_no[instance_no]*/ &ioctl_data);
         } /* End of "data arrived from the peer via shared memory" */
@@ -619,14 +620,14 @@ void *run(void *arg) {
             my_shm_data[instance_no]->len = len;
 
             ioctl_data.int_no = local_rr_int_no[instance_no];
-            #ifdef DEBUG_IOCTL
+#ifdef DEBUG_IOCTL
             ioctl_data.cmd = my_shm_data[instance_no]->cmd;
             ioctl_data.fd = my_shm_data[instance_no]->fd;
             ioctl_data.len = my_shm_data[instance_no]->len;
-            #endif
-            
+#endif
+
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                  /*local_rr_int_no[instance_no]*/&ioctl_data);
+                  /*local_rr_int_no[instance_no]*/ &ioctl_data);
           }
         } // End of "Data arrived from connected waypipe server"
       }
@@ -656,12 +657,12 @@ void *run(void *arg) {
         if (my_shm_data[instance_no]->fd > 0) {
           DEBUG("Sending close request for %d", my_shm_data[instance_no]->fd);
 
-            ioctl_data.int_no = local_rr_int_no[instance_no];
-            #ifdef DEBUG_IOCTL
-            ioctl_data.cmd = my_shm_data[instance_no]->cmd;
-            ioctl_data.fd = my_shm_data[instance_no]->fd;
-            ioctl_data.len = my_shm_data[instance_no]->len;
-            #endif
+          ioctl_data.int_no = local_rr_int_no[instance_no];
+#ifdef DEBUG_IOCTL
+          ioctl_data.cmd = my_shm_data[instance_no]->cmd;
+          ioctl_data.fd = my_shm_data[instance_no]->fd;
+          ioctl_data.len = my_shm_data[instance_no]->len;
+#endif
 
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
                 /*local_rr_int_no[instance_no]*/ &ioctl_data);
@@ -719,7 +720,6 @@ int main(int argc, char **argv) {
   /* On client site start thread for each display VM */
   if (run_as_server == 0) {
     for (i = 0; i < VM_COUNT; i++) {
-      thread_init(i);
       res = pthread_create(&threads[i], NULL, run, (void *)(intptr_t)i);
       if (res) {
         ERROR("Thread id=%d", i);
@@ -734,7 +734,6 @@ int main(int argc, char **argv) {
       }
     }
   } else { /* server mode - run only one instance */
-    thread_init(instance_no);
     run((void *)(intptr_t)instance_no);
   }
 

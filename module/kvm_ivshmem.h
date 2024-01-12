@@ -12,7 +12,7 @@
 #define SHMEM_IOCDORBELL _IOR(SHMEM_IOC_MAGIC, 6, int)
 #define SHMEM_IOCNOP _IOR(SHMEM_IOC_MAGIC, 7, int)
 
-#define DEBUG_IOCTL
+//#define DEBUG_IOCTL
 struct ioctl_data {
    int peer_vm_id;
    unsigned int int_no;

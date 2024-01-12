@@ -31,7 +31,7 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 #define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 #define LOCAL_RESOURCE_READY_INT_VEC (1)
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
   do {                                                                         \
@@ -131,7 +131,6 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   uint32_t msg;
   struct ioctl_data ioctl_data;
 
-
   KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx",
                       (unsigned long int)filp->private_data, cmd, arg);
   if ((unsigned long int)filp->private_data >= VM_COUNT &&
@@ -198,21 +197,22 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     unsigned int vec;
 
     if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
-        printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCDORBELL: %ld invalid argument 0x%lx",
-              (unsigned long int)filp->private_data, arg);
-        rv = -EINVAL;
-        break;
+      printk(KERN_ERR
+             "KVM_IVSHMEM: SHMEM_IOCDORBELL: %ld invalid argument 0x%lx",
+             (unsigned long int)filp->private_data, arg);
+      rv = -EINVAL;
+      break;
     }
-    
+
     vec = ioctl_data.int_no /*arg*/ & 0xffff;
-    #ifdef DEBUG_IOCTL
-      KVM_IVSHMEM_DPRINTK("%ld ioctl cmd=%d fd=%d len=%d int_no=0x%x",
-      (unsigned long int)filp->private_data, ioctl_data.cmd, ioctl_data.fd, 
-      ioctl_data.len, ioctl_data.int_no);
-    #endif
+#ifdef DEBUG_IOCTL
+    KVM_IVSHMEM_DPRINTK("%ld ioctl cmd=%d fd=%d len=%d int_no=0x%x",
+                        (unsigned long int)filp->private_data, ioctl_data.cmd,
+                        ioctl_data.fd, ioctl_data.len, ioctl_data.int_no);
+#endif
     KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%x on vector 0x%x",
-                        (unsigned long int)filp->private_data, (ioctl_data.int_no >> 16),
-                        vec);
+                        (unsigned long int)filp->private_data,
+                        (ioctl_data.int_no >> 16), vec);
     spin_lock(&rawhide_irq_lock);
     if (vec & LOCAL_RESOURCE_READY_INT_VEC) {
       local_resource_count[(unsigned long int)filp->private_data] = 0;
@@ -410,7 +410,8 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
     if (irq == irq_local_resource_ready[i]) {
       KVM_IVSHMEM_DPRINTK("%d wake up remote_data_ready_wait_queue", i);
       if (remote_resource_count[i]) {
-        KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i, remote_resource_count[i]);
+        KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i,
+                            remote_resource_count[i]);
       }
       remote_resource_count[i] = 1;
       wake_up_interruptible(&remote_data_ready_wait_queue[i]);
@@ -419,7 +420,8 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
     if (irq == irq_remote_resource_ready[i]) {
       KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue", i);
       if (local_resource_count[i]) {
-        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i, local_resource_count[i]);
+        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
+                            local_resource_count[i]);
       }
       local_resource_count[i] = 1;
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
