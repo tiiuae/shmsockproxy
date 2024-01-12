@@ -211,7 +211,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       ioctl_data.len, ioctl_data.int_no);
     #endif
     KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%lx on vector 0x%x",
-                        (unsigned long int)filp->private_data, (arg >> 16),
+                        (unsigned long int)filp->private_data, (ioctl_data.int_no >> 16),
                         vec);
     if (vec & LOCAL_RESOURCE_READY_INT_VEC) {
       spin_lock(&rawhide_irq_lock);
@@ -222,7 +222,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       remote_resource_count[(unsigned long int)filp->private_data] = 0;
       spin_unlock(&rawhide_irq_lock);
     }
-    writel(arg, kvm_ivshmem_dev.regs + Doorbell);
+    writel(ioctl_data.int_no, kvm_ivshmem_dev.regs + Doorbell);
     break;
 
   case SHMEM_IOCRESTART:

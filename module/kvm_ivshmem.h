@@ -15,7 +15,7 @@
 #define DEBUG_IOCTL
 struct ioctl_data {
    int peer_vm_id;
-   int int_no;
+   unsigned int int_no;
    int fd;
    int cmd;
    int len;
