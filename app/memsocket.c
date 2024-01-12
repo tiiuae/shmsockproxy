@@ -394,11 +394,14 @@ void *run(void *arg) {
   int conn_fd, rv, nfds, i, n;
   struct sockaddr_un caddr; /* client address */
   socklen_t len = sizeof(caddr);  /* address length could change */
-  struct pollfd my_buffer_fds = {
-      .fd = shmem_fd[(intptr_t)arg], .events = POLLOUT, .revents = 0};
+  struct pollfd my_buffer_fds;
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
+
+  my_buffer_fds.fd = instance_no;
+  my_buffer_fds.events = POLLOUT;
+  my_buffer_fds.revents = 0;
   
   char pr2[100*1024];
 #define PR1 0xaa
