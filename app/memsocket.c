@@ -398,14 +398,9 @@ void *run(void *arg) {
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
 
-  my_buffer_fds.fd = shmem_fd[instance_no];
-  my_buffer_fds.events = POLLOUT;
-  my_buffer_fds.revents = 0;
-
   thread_init(instance_no);
 
-
- DEBUG("Listening for events", "");
+  DEBUG("Listening for events", "");
   while (1) {
 
     nfds = epoll_wait(epollfd[instance_no], events, MAX_EVENTS, -1);
@@ -432,14 +427,13 @@ void *run(void *arg) {
             FATAL("epoll_ctl: conn_fd");
           }
 
-          // my_buffer_fds.fd = shmem_fd[instance_no];
-          // my_buffer_fds.events = POLLOUT;
-          // my_buffer_fds.revents = 0;
+          my_buffer_fds.fd = shmem_fd[instance_no];
+          my_buffer_fds.events = POLLOUT;
+          my_buffer_fds.revents = 0;
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if (rv < 0) {
             ERROR("shmem poll timeout", "");
           }
-
           if (my_buffer_fds.revents & ~POLLOUT) {
             ERROR("unexpected event on shmem_fd %d: 0x%x",
                   shmem_fd[instance_no], my_buffer_fds.revents);
@@ -469,9 +463,9 @@ void *run(void *arg) {
           DEBUG("get_remote_socket: %d", conn_fd);
 
           /* Wait for the memory buffer to be ready */
-          // my_buffer_fds.fd = shmem_fd[instance_no];
-          // my_buffer_fds.events = POLLOUT;
-          // my_buffer_fds.revents = 0;
+          my_buffer_fds.fd = shmem_fd[instance_no];
+          my_buffer_fds.events = POLLOUT;
+          my_buffer_fds.revents = 0;
           DEBUG("Data from wayland. Waiting for shmem buffer", "");
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if ((rv <= 0) || (my_buffer_fds.revents & ~POLLOUT)) {
@@ -598,9 +592,9 @@ void *run(void *arg) {
         else {
           /* Wait for the memory buffer to be ready */
           DEBUG("Data from client. Waiting for shmem buffer", "");
-          // my_buffer_fds.fd = shmem_fd[instance_no];
-          // my_buffer_fds.events = POLLOUT;
-          // my_buffer_fds.revents = 0;
+          my_buffer_fds.fd = shmem_fd[instance_no];
+          my_buffer_fds.events = POLLOUT;
+          my_buffer_fds.revents = 0;
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if (rv < 0) {
             ERROR("shmem poll for client fd=%d", events[n].data.fd);
@@ -642,9 +636,9 @@ void *run(void *arg) {
         DEBUG("Closing fd#%d", events[n].data.fd);
 
         // Inform the peer that the closed is being closed
-        // my_buffer_fds.fd = shmem_fd[instance_no];
-        // my_buffer_fds.events = POLLOUT;
-        // my_buffer_fds.revents = 0;
+        my_buffer_fds.fd = shmem_fd[instance_no];
+        my_buffer_fds.events = POLLOUT;
+        my_buffer_fds.revents = 0;
         rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
         if (rv < 0) {
           ERROR("shmem poll timeout", "");
