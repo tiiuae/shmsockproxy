@@ -407,6 +407,7 @@ void *run(void *arg) {
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
 
+  TRACE_FDS;
   thread_init(instance_no);
   TRACE_FDS;
   DEBUG("Listening for events", "");
