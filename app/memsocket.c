@@ -414,10 +414,10 @@ void *run(void *arg) {
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
 
+  pollfd_ptr = &my_buffer_fds;
   thread_init(instance_no);
   my_buffer_fds.fd = shmem_fd[instance_no];
 
-  pollfd_ptr = &my_buffer_fds;
   TRACE_FDS;
   DEBUG("Listening fo r events", "");
   while (1) {
