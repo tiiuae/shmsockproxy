@@ -387,12 +387,15 @@ void thread_init(int instance_no) {
           instance_no, my_vmid, res, peer_vm_id[instance_no]);
   }
 }
+
+struct pollfd* pollfd_ptr;
+
 #define TRACE_FDS { \
-  if (my_buffer_fds.fd != shmem_fd[instance_no]) { \
-    ERROR("mybuffer_fd=0x%x", my_buffer_fds.fd) \
+  if (pollfd_ptr->fd != shmem_fd[instance_no]) { \
+    ERROR("mybuffer_fd=0x%x", pollfd_ptr->fd) \
   }; \
-  if (my_buffer_fds.events != POLLOUT) { \
-    ERROR("mybuffer_fds.events=0x%x", my_buffer_fds.events)  \
+  if (pollfd_ptr->events != POLLOUT) { \
+    ERROR("mybuffer_fds.events=0x%x", pollfd_ptr->events)  \
   }; \
   }
 
@@ -407,6 +410,7 @@ void *run(void *arg) {
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
 
+  pollfd_ptr = &my_buffer_fds;
   TRACE_FDS;
   thread_init(instance_no);
   TRACE_FDS;
