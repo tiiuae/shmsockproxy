@@ -387,6 +387,14 @@ void thread_init(int instance_no) {
           instance_no, my_vmid, res, peer_vm_id[instance_no]);
   }
 }
+#define TRACE_FDS { \
+  if (my_buffer_fds.fd != shmem_fd[instance_no]) { \
+    ERROR("mybuffer_fd=0x%x", my_buffer_fds.fd) \
+  }; \
+  if (my_buffer_fds.events != POLLOUT) { \
+    ERROR("mybuffer_fds.events=0x%x", my_buffer_fds.events)  \
+  }; \
+  }
 
 void *run(void *arg) {
 
@@ -400,7 +408,7 @@ void *run(void *arg) {
   struct ioctl_data ioctl_data;
 
   thread_init(instance_no);
-
+  TRACE_FDS;
   DEBUG("Listening for events", "");
   while (1) {
 
@@ -409,14 +417,6 @@ void *run(void *arg) {
       FATAL("epoll_wait");
     }
 
-#define TRACE_FDS { \
-  if (my_buffer_fds.fd != shmem_fd[instance_no]) { \
-    ERROR("mybuffer_fd=0x%x", my_buffer_fd) \
-  }; \
-  if (my_buffer_fds.events != POLLOUT) { \
-    ERROR("mybuffer_fds.events=0x%x", my_buffer_fds.events)  \
-  } \
-  }
     for (n = 0; n < nfds; n++) {
 
       DEBUG("Event 0x%x on fd %d", events[n].events, events[n].data.fd)
