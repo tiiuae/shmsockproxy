@@ -9,7 +9,7 @@ KDIR  := /run/current-system/sw/lib/modules/$(shell uname -r)/build/
 PWD   := $(shell pwd)
 
 default:
-	$(MAKE) -C $(KDIR) M=$(PWD)../drivers/char/ivshmem/ modules
+	$(MAKE) -C $(KDIR) M=$(PWD)/../drivers/char/ivshmem/ modules
 
 install:
 	cp kvm_ivshmem.ko /lib/modules/$(shell uname -r)/kernel/drivers/char
