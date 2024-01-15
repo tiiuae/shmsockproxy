@@ -244,7 +244,7 @@ int map_peer_fd(int instance_no, int peer_fd, int close_fd) {
       return rv;
     }
   }
-  ERROR("FAILED fd#%d", peer_fd);
+  ERROR("FAILED on mapping remote fd#%d", peer_fd);
   return -1;
 }
 
@@ -378,10 +378,7 @@ void thread_init(int instance_no) {
     ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
 
-    res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                /*vm_control->client_vmid |
-                    (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC)*/
-                &ioctl_data);
+    res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
     DEBUG("Client #%d: sent login vmid: 0x%x ioctl result=%d peer_vm_id=0x%x",
           instance_no, my_vmid, res, peer_vm_id[instance_no]);
   }
@@ -400,7 +397,7 @@ void close_peer_vm(int instance_no) {
 void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
-  int conn_fd, rv, nfds, i, n;
+  int conn_fd, rv, nfds, n;
   struct sockaddr_un caddr;      /* client address */
   socklen_t len = sizeof(caddr); /* address length could change */
   struct pollfd my_buffer_fds = {.events = POLLOUT};
@@ -456,8 +453,7 @@ void *run(void *arg) {
           ioctl_data.fd = my_shm_data[instance_no]->fd;
           ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
-          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                /*local_rr_int_no[instance_no]*/ &ioctl_data);
+          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
           DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
         }
 
@@ -474,14 +470,17 @@ void *run(void *arg) {
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if ((rv <= 0) || (my_buffer_fds.revents & ~POLLOUT)) {
             /* Peer VM is probably down */
-            ERROR("Unexpected event on shmem_fd %d: 0x%x poll=%d. Peer VM is probably down.",
+            ERROR("Unexpected event on shmem_fd %d: 0x%x poll=%d. Peer VM is "
+                  "probably down.",
                   shmem_fd[instance_no], my_buffer_fds.revents, rv);
             ERROR("event 0x%x on fd %d", events[n].events, events[n].data.fd)
-            ERROR("my_buffer_fds: fd=%d events=0x%x revents=0x%x", my_buffer_fds.fd, my_buffer_fds.events, my_buffer_fds.revents);
+            ERROR("my_buffer_fds: fd=%d events=0x%x revents=0x%x",
+                  my_buffer_fds.fd, my_buffer_fds.events,
+                  my_buffer_fds.revents);
             close_peer_vm(instance_no);
             if (events[n].data.fd > 0) {
-              if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
-                            NULL) == -1) {
+              if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL,
+                            events[n].data.fd, NULL) == -1) {
                 ERROR("epoll_ctl: EPOLL_CTL_DEL %d", events[n].data.fd);
               }
               close(events[n].data.fd);
@@ -509,8 +508,7 @@ void *run(void *arg) {
             ioctl_data.len = 0;
 #endif
 
-            ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                  /*local_rr_int_no[instance_no]*/ &ioctl_data);
+            ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
           }
         } /* received data from Wayland server */
 
@@ -579,7 +577,7 @@ void *run(void *arg) {
             ERROR("Invalid CMD 0x%x from peer!",
                   peer_shm_data[instance_no]->cmd);
             break;
-          } /* case peer_shm_data[instance_no]->cmd */
+          } /* switch peer_shm_data[instance_no]->cmd */
 
           /* Signal the other side that its buffer has been processed */
           DEBUG("Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC", "");
@@ -591,8 +589,7 @@ void *run(void *arg) {
           ioctl_data.fd = 0;
           ioctl_data.len = 0;
 #endif
-          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                /* remote_rc_int_no[instance_no]*/ &ioctl_data);
+          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
         } /* End of "data arrived from the peer via shared memory" */
 
         else if (events[n].data.fd == server_socket) {
@@ -608,7 +605,9 @@ void *run(void *arg) {
             ERROR("shmem poll for client fd=%d", events[n].data.fd);
           } else if (rv == 0) {
             ERROR("shmem poll timeout for client fd=%d", events[n].data.fd);
-            ERROR("my_buffer_fds: fd=%d events=0x%x revents=0x%x", my_buffer_fds.fd, my_buffer_fds.events, my_buffer_fds.revents);
+            ERROR("my_buffer_fds: fd=%d events=0x%x revents=0x%x",
+                  my_buffer_fds.fd, my_buffer_fds.events,
+                  my_buffer_fds.revents);
           }
           if (my_buffer_fds.revents & ~POLLOUT) {
             ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d for client ",
@@ -634,8 +633,7 @@ void *run(void *arg) {
             ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
 
-            ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                  /*local_rr_int_no[instance_no]*/ &ioctl_data);
+            ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
           }
         } // End of "Data arrived from connected waypipe server"
       }
@@ -669,8 +667,7 @@ void *run(void *arg) {
           ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
 
-          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL,
-                /*local_rr_int_no[instance_no]*/ &ioctl_data);
+          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
         }
         if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
                       NULL) == -1) {
