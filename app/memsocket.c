@@ -421,7 +421,7 @@ void *run(void *arg) {
           if (conn_fd == -1) {
             FATAL("accept");
           }
-          fcntl(conn_fd, F_SETFL, O_NONBLOCK);
+          // fcntl(conn_fd, F_SETFL, O_NONBLOCK);
           ev.events = EPOLLIN | EPOLLET | EPOLLHUP;
           ev.data.fd = conn_fd;
           if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_ADD, conn_fd, &ev) ==
