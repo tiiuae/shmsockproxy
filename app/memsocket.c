@@ -421,7 +421,6 @@ void *run(void *arg) {
           if (conn_fd == -1) {
             FATAL("accept");
           }
-          // fcntl(conn_fd, F_SETFL, O_NONBLOCK);
           ev.events = EPOLLIN | EPOLLET | EPOLLHUP;
           ev.data.fd = conn_fd;
           if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_ADD, conn_fd, &ev) ==
@@ -465,10 +464,18 @@ void *run(void *arg) {
           DEBUG("Data from wayland. Waiting for shmem buffer", "");
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if ((rv <= 0) || (my_buffer_fds.revents & ~POLLOUT)) {
-            ERROR("Unexpected event on shmem_fd %d: 0x%x poll=%d",
+            /* Peer VM is probably down */
+            ERROR("Unexpected event on shmem_fd %d: 0x%x poll=%d. Peer VM is probably down.",
                   shmem_fd[instance_no], my_buffer_fds.revents, rv);
             ERROR("event 0x%x on fd %d", events[n].events, events[n].data.fd)
             ERROR("my_buffer_fds: fd=%d events=0x%x revents=0x%x", my_buffer_fds.fd, my_buffer_fds.events, my_buffer_fds.revents);
+            if (events[n].data.fd > 0) {
+              if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
+                            NULL) == -1) {
+                ERROR("epoll_ctl: EPOLL_CTL_DEL %d", events[n].data.fd);
+              }
+              close(events[n].data.fd);
+            }
           }
 
           DEBUG("Reading from wayland socket", "");
