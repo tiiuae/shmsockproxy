@@ -111,17 +111,6 @@ struct {
   vm_data server_data[VM_COUNT];
 } *vm_control;
 
-struct pollfd* pollfd_ptr;
-
-#define TRACE_FDS { \
-  if (pollfd_ptr->fd != shmem_fd[instance_no]) { \
-    ERROR("mybuffer_fd=0x%x", pollfd_ptr->fd) \
-  }; \
-  if (pollfd_ptr->events != POLLOUT) { \
-    ERROR("mybuffer_fds.events=0x%x", pollfd_ptr->events)  \
-  }; \
-  }
-
 static const char usage_string[] = "Usage: memsocket [-c|-s] socket_path "
                                    "{instance number (server mode only)}\n";
 
@@ -410,11 +399,9 @@ void *run(void *arg) {
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
 
-  pollfd_ptr = &my_buffer_fds;
   thread_init(instance_no);
   my_buffer_fds.fd = shmem_fd[instance_no];
 
-  TRACE_FDS;
   DEBUG("Listening for events", "");
   while (1) {
 
@@ -478,8 +465,9 @@ void *run(void *arg) {
           DEBUG("Data from wayland. Waiting for shmem buffer", "");
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if ((rv <= 0) || (my_buffer_fds.revents & ~POLLOUT)) {
-            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d",
+            ERROR("Unexpected event on shmem_fd %d: 0x%x poll=%d",
                   shmem_fd[instance_no], my_buffer_fds.revents, rv);
+            ERROR("event 0x%x on fd %d", events[n].events, events[n].data.fd)
           }
 
           DEBUG("Reading from wayland socket", "");
