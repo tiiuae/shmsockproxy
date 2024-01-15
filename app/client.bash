@@ -2,7 +2,7 @@
 
 SOCKET=./client.sock
 DEVICE=/dev/ivshmem
-MODDIR=~ghaf/shmsockproxy/module
+MODDIR=~ghaf/shmsockproxy/drivers/char/ivshmem
 
 kill $(ps | grep memsocket | awk '{print $1}')
 sudo rmmod kvm_ivshmem

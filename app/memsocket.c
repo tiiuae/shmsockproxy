@@ -20,7 +20,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "../module/kvm_ivshmem.h"
+#include "../drivers/char/ivshmem/kvm_ivshmem.h"
 
 #define SHM_DEVICE_FN "/dev/ivshmem"
 

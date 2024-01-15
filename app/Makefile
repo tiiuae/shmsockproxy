@@ -3,5 +3,7 @@
 
 memsocket: memsocket.c
 
+memsocket.c: ../drivers/char/ivshmem/kvm_ivshmem.h
+
 clean:
 	rm memsocket
