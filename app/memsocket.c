@@ -245,7 +245,6 @@ int map_peer_fd(int instance_no, int peer_fd, int close_fd) {
     }
   }
   ERROR("FAILED fd#%d", peer_fd);
-  FATAL("peer fd  not found");
   return -1;
 }
 
