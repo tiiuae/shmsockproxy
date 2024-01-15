@@ -310,7 +310,7 @@ void shmem_init(int instance_no) {
     FATAL("Got NULL pointer from mmap");
   }
   DEBUG("Shared memory at address %p 0x%lx bytes", vm_control, shmem_size);
-
+TRACE_FDS;
   if (run_as_server) {
     my_shm_data[instance_no] = &vm_control->server_data[instance_no];
     peer_shm_data[instance_no] = &vm_control->client_data[instance_no];
@@ -318,7 +318,7 @@ void shmem_init(int instance_no) {
     my_shm_data[instance_no] = &vm_control->client_data[instance_no];
     peer_shm_data[instance_no] = &vm_control->server_data[instance_no];
   }
-
+TRACE_FDS;
   /* get my VM Id */
   res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &my_vmid);
   if (res < 0) {
@@ -331,6 +331,7 @@ void shmem_init(int instance_no) {
     vm_control->client_vmid = my_vmid;
     vm_control->server_data[instance_no].server_vmid = UNKNOWN_PEER;
   }
+  TRACE_FDS;
   INFO("My VM id = 0x%x. Running as a ", my_vmid);
   if (run_as_server) {
     INFO("server", "");
