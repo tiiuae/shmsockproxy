@@ -468,6 +468,7 @@ void *run(void *arg) {
             ERROR("Unexpected event on shmem_fd %d: 0x%x poll=%d",
                   shmem_fd[instance_no], my_buffer_fds.revents, rv);
             ERROR("event 0x%x on fd %d", events[n].events, events[n].data.fd)
+            ERROR("my_buffer_fds: fd=%d events=0x%x revents=0x%x", my_buffer_fds.fd, my_buffer_fds.events, my_buffer_fds.revents);
           }
 
           DEBUG("Reading from wayland socket", "");
@@ -594,6 +595,7 @@ void *run(void *arg) {
             ERROR("shmem poll for client fd=%d", events[n].data.fd);
           } else if (rv == 0) {
             ERROR("shmem poll timeout for client fd=%d", events[n].data.fd);
+            ERROR("my_buffer_fds: fd=%d events=0x%x revents=0x%x", my_buffer_fds.fd, my_buffer_fds.events, my_buffer_fds.revents);
           }
           if (my_buffer_fds.revents & ~POLLOUT) {
             ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d for client ",
