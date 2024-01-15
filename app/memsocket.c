@@ -111,6 +111,17 @@ struct {
   vm_data server_data[VM_COUNT];
 } *vm_control;
 
+struct pollfd* pollfd_ptr;
+
+#define TRACE_FDS { \
+  if (pollfd_ptr->fd != shmem_fd[instance_no]) { \
+    ERROR("mybuffer_fd=0x%x", pollfd_ptr->fd) \
+  }; \
+  if (pollfd_ptr->events != POLLOUT) { \
+    ERROR("mybuffer_fds.events=0x%x", pollfd_ptr->events)  \
+  }; \
+  }
+
 static const char usage_string[] = "Usage: memsocket [-c|-s] socket_path "
                                    "{instance number (server mode only)}\n";
 
@@ -342,16 +353,16 @@ void thread_init(int instance_no) {
 
   int res;
   struct ioctl_data ioctl_data;
-
+TRACE_FDS;
   fd_map_clear(instance_no);
-
+TRACE_FDS;
   epollfd[instance_no] = epoll_create1(0);
   if (epollfd[instance_no] == -1) {
     FATAL("server_init: epoll_create1");
   }
-
+TRACE_FDS;
   shmem_init(instance_no);
-
+TRACE_FDS;
   if (run_as_server) {
     /* Create socket that waypipe can write to
      * Add the socket fd to the epollfd
@@ -387,17 +398,6 @@ void thread_init(int instance_no) {
           instance_no, my_vmid, res, peer_vm_id[instance_no]);
   }
 }
-
-struct pollfd* pollfd_ptr;
-
-#define TRACE_FDS { \
-  if (pollfd_ptr->fd != shmem_fd[instance_no]) { \
-    ERROR("mybuffer_fd=0x%x", pollfd_ptr->fd) \
-  }; \
-  if (pollfd_ptr->events != POLLOUT) { \
-    ERROR("mybuffer_fds.events=0x%x", pollfd_ptr->events)  \
-  }; \
-  }
 
 void *run(void *arg) {
 
