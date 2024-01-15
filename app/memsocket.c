@@ -290,7 +290,6 @@ void shmem_init(int instance_no) {
   if (shmem_fd[instance_no] < 0) {
     FATAL("Open " SHM_DEVICE_FN);
   }
-TRACE_FDS;
   INFO("shared memory fd: %d", shmem_fd[instance_no]);
   /* Store instance number inside driver */
   ioctl(shmem_fd[instance_no], SHMEM_IOCSETINSTANCENO, instance_no);
@@ -300,20 +299,18 @@ TRACE_FDS;
   if (shmem_size <= 0) {
     FATAL("No shared memory detected");
   }
-TRACE_FDS;
   if (shmem_size < sizeof(*vm_control)) {
     ERROR("Shared memory too small: %ld bytes allocated whereas %ld needed",
           shmem_size, sizeof(*vm_control));
     FATAL("Exiting");
   }
-TRACE_FDS;
   vm_control = mmap(NULL, shmem_size, PROT_READ | PROT_WRITE,
                     MAP_SHARED | MAP_NORESERVE, shmem_fd[instance_no], 0);
   if (!vm_control) {
     FATAL("Got NULL pointer from mmap");
   }
   DEBUG("Shared memory at address %p 0x%lx bytes", vm_control, shmem_size);
-TRACE_FDS;
+
   if (run_as_server) {
     my_shm_data[instance_no] = &vm_control->server_data[instance_no];
     peer_shm_data[instance_no] = &vm_control->client_data[instance_no];
@@ -321,7 +318,7 @@ TRACE_FDS;
     my_shm_data[instance_no] = &vm_control->client_data[instance_no];
     peer_shm_data[instance_no] = &vm_control->server_data[instance_no];
   }
-TRACE_FDS;
+
   /* get my VM Id */
   res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &my_vmid);
   if (res < 0) {
@@ -334,7 +331,6 @@ TRACE_FDS;
     vm_control->client_vmid = my_vmid;
     vm_control->server_data[instance_no].server_vmid = UNKNOWN_PEER;
   }
-  TRACE_FDS;
   INFO("My VM id = 0x%x. Running as a ", my_vmid);
   if (run_as_server) {
     INFO("server", "");
@@ -357,16 +353,16 @@ void thread_init(int instance_no) {
 
   int res;
   struct ioctl_data ioctl_data;
-TRACE_FDS;
+
   fd_map_clear(instance_no);
-TRACE_FDS;
+
   epollfd[instance_no] = epoll_create1(0);
   if (epollfd[instance_no] == -1) {
     FATAL("server_init: epoll_create1");
   }
-TRACE_FDS;
+
   shmem_init(instance_no);
-TRACE_FDS;
+
   if (run_as_server) {
     /* Create socket that waypipe can write to
      * Add the socket fd to the epollfd
@@ -446,9 +442,6 @@ void *run(void *arg) {
             FATAL("epoll_ctl: conn_fd");
           }
 
-          // my_buffer_fds.fd = shmem_fd[instance_no];
-          // my_buffer_fds.events = POLLOUT;
-          // my_buffer_fds.revents = 0;
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if (rv < 0) {
             ERROR("shmem poll timeout", "");
@@ -482,9 +475,6 @@ void *run(void *arg) {
           DEBUG("get_remote_socket: %d", conn_fd);
 
           /* Wait for the memory buffer to be ready */
-          // my_buffer_fds.fd = shmem_fd[instance_no];
-          // my_buffer_fds.events = POLLOUT;
-          // my_buffer_fds.revents = 0;
           DEBUG("Data from wayland. Waiting for shmem buffer", "");
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if ((rv <= 0) || (my_buffer_fds.revents & ~POLLOUT)) {
@@ -611,9 +601,6 @@ void *run(void *arg) {
         else {
           /* Wait for the memory buffer to be ready */
           DEBUG("Data from client. Waiting for shmem buffer", "");
-          // my_buffer_fds.fd = shmem_fd[instance_no];
-          // my_buffer_fds.events = POLLOUT;
-          // my_buffer_fds.revents = 0;
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if (rv < 0) {
             ERROR("shmem poll for client fd=%d", events[n].data.fd);
@@ -655,9 +642,6 @@ void *run(void *arg) {
         DEBUG("Closing fd#%d", events[n].data.fd);
 
         // Inform the peer that the closed is being closed
-        // my_buffer_fds.fd = shmem_fd[instance_no];
-        // my_buffer_fds.events = POLLOUT;
-        // my_buffer_fds.revents = 0;
         rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
         if (rv < 0) {
           ERROR("shmem poll timeout", "");
