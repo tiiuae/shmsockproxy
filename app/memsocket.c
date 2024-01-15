@@ -388,6 +388,16 @@ void thread_init(int instance_no) {
   }
 }
 
+void close_peer_vm(int instance_no) {
+  int i;
+
+  for (i = 0; i < MAX_CLIENTS; i++) {
+    if (fd_map[instance_no][i].my_fd != -1)
+      close(fd_map[instance_no][i].my_fd);
+  }
+  fd_map_clear(instance_no);
+}
+
 void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
@@ -469,6 +479,7 @@ void *run(void *arg) {
                   shmem_fd[instance_no], my_buffer_fds.revents, rv);
             ERROR("event 0x%x on fd %d", events[n].events, events[n].data.fd)
             ERROR("my_buffer_fds: fd=%d events=0x%x revents=0x%x", my_buffer_fds.fd, my_buffer_fds.events, my_buffer_fds.revents);
+            close_peer_vm(instance_no);
             if (events[n].data.fd > 0) {
               if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
                             NULL) == -1) {
@@ -516,11 +527,7 @@ void *run(void *arg) {
             DEBUG("Received login request from 0x%x",
                   peer_shm_data[instance_no]->fd);
             /* If the peer VM starts again, close all opened file handles */
-            for (i = 0; i < MAX_CLIENTS; i++) {
-              if (fd_map[instance_no][i].my_fd != -1)
-                close(fd_map[instance_no][i].my_fd);
-            }
-            fd_map_clear(instance_no);
+            close_peer_vm(instance_no);
 
             peer_vm_id[instance_no] = peer_shm_data[instance_no]->fd;
             local_rr_int_no[instance_no] = peer_vm_id[instance_no] |
