@@ -671,7 +671,7 @@ void *run(void *arg) {
         }
         if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
                       NULL) == -1) {
-          ERROR("epoll_ctl: EPOLL_CTL_DEL", "");
+          ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", events[n].data.fd);
         }
         close(events[n].data.fd);
       } /* Handling connection close */
