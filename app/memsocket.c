@@ -415,7 +415,7 @@ void *run(void *arg) {
   my_buffer_fds.fd = shmem_fd[instance_no];
 
   TRACE_FDS;
-  DEBUG("Listening fo r events", "");
+  DEBUG("Listening for events", "");
   while (1) {
 
     nfds = epoll_wait(epollfd[instance_no], events, MAX_EVENTS, -1);
