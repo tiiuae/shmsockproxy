@@ -394,7 +394,7 @@ void *run(void *arg) {
   int conn_fd, rv, nfds, i, n;
   struct sockaddr_un caddr;      /* client address */
   socklen_t len = sizeof(caddr); /* address length could change */
-  struct pollfd my_buffer_fds;
+  struct pollfd my_buffer_fds = {.fd = shmem_fd[instance_no], .events = POLLOUT};
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
@@ -409,6 +409,14 @@ void *run(void *arg) {
       FATAL("epoll_wait");
     }
 
+#define TRACE_FDS { \
+  if (my_buffer_fds.fd != shmem_fd[instance_no]) { \
+    ERROR("mybuffer_fd=0x%x", my_buffer_fd) \
+  }; \
+  if (my_buffer_fds.events != POLLOUT) { \
+    ERROR("mybuffer_fds.events=0x%x", my_buffer_fds.events)  \
+  } \
+  }
     for (n = 0; n < nfds; n++) {
 
       DEBUG("Event 0x%x on fd %d", events[n].events, events[n].data.fd)
