@@ -290,6 +290,7 @@ void shmem_init(int instance_no) {
   if (shmem_fd[instance_no] < 0) {
     FATAL("Open " SHM_DEVICE_FN);
   }
+TRACE_FDS;
   INFO("shared memory fd: %d", shmem_fd[instance_no]);
   /* Store instance number inside driver */
   ioctl(shmem_fd[instance_no], SHMEM_IOCSETINSTANCENO, instance_no);
@@ -299,11 +300,13 @@ void shmem_init(int instance_no) {
   if (shmem_size <= 0) {
     FATAL("No shared memory detected");
   }
+TRACE_FDS;
   if (shmem_size < sizeof(*vm_control)) {
     ERROR("Shared memory too small: %ld bytes allocated whereas %ld needed",
           shmem_size, sizeof(*vm_control));
     FATAL("Exiting");
   }
+TRACE_FDS;
   vm_control = mmap(NULL, shmem_size, PROT_READ | PROT_WRITE,
                     MAP_SHARED | MAP_NORESERVE, shmem_fd[instance_no], 0);
   if (!vm_control) {
