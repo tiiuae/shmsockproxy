@@ -29,12 +29,11 @@
 
 #define MAX_EVENTS (1024)
 #define MAX_CLIENTS (10)
-#define VM_COUNT (3)
 #define BUFFER_SIZE (1024000)
 #define SHMEM_POLL_TIMEOUT (3000)
 #define SHMEM_BUFFER_SIZE (1024000)
 #define UNKNOWN_PEER (-1)
-#if 1
+#ifndef DEBUG_ON
 #define DEBUG(fmt, ...)                                                        \
   {}
 #else
