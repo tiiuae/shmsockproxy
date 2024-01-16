@@ -1,18 +1,32 @@
-From 2e1236898c90d027852d072d194a6abe5c848a1c Mon Sep 17 00:00:00 2001
+From 7c54f93f6558a8ee8be3f1e546da3085434f493c Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 16 Jan 2024 13:17:08 +0400
+Date: Tue, 16 Jan 2024 15:01:59 +0400
 Subject: ivshmem driver
 
 ---
+ drivers/char/Kconfig               |   2 +
  drivers/char/Makefile              |   1 +
+ drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
  drivers/char/ivshmem/kvm_ivshmem.c | 676 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 4 files changed, 700 insertions(+)
+ 6 files changed, 708 insertions(+)
+ create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.h
 
+diff --git a/drivers/char/Kconfig b/drivers/char/Kconfig
+index 801d6c83f..a89a7bb13 100644
+--- a/drivers/char/Kconfig
++++ b/drivers/char/Kconfig
+@@ -421,4 +421,6 @@ config ADI
+ 	  and SSM (Silicon Secured Memory).  Intended consumers of this
+ 	  driver include crash and makedumpfile.
+ 
++source "ivshmem/Kconfig"
++
+ endmenu
 diff --git a/drivers/char/Makefile b/drivers/char/Makefile
 index c5f532e41..fc17a75f3 100644
 --- a/drivers/char/Makefile
@@ -22,6 +36,18 @@ index c5f532e41..fc17a75f3 100644
  obj-$(CONFIG_POWERNV_OP_PANEL)	+= powernv-op-panel.o
  obj-$(CONFIG_ADI)		+= adi.o
 +obj-y                          += ivshmem/
+diff --git a/drivers/char/ivshmem/Kconfig b/drivers/char/ivshmem/Kconfig
+new file mode 100644
+index 000000000..f0f75200c
+--- /dev/null
++++ b/drivers/char/ivshmem/Kconfig
+@@ -0,0 +1,6 @@
++# Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
++# SPDX-License-Identifier: Apache-2.0
++
++config KVM_IVSHMEM_VM_COUNT
++	int "Application VMs count"
++	default 5
 diff --git a/drivers/char/ivshmem/Makefile b/drivers/char/ivshmem/Makefile
 new file mode 100644
 index 000000000..ecd1ca180

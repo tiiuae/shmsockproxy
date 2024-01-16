@@ -9,6 +9,7 @@ pushd linux
   git clean -xdf
 
   cp -Rv ../drivers/char/ivshmem ./drivers/char
+  cp -v ../drivers/char/Kconfig ./drivers/char
   cat ../drivers/char/Makefile >> drivers/char/Makefile
 
   git add .
