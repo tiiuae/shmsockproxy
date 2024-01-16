@@ -26,7 +26,7 @@
 #include <linux/uio.h>
 
 DEFINE_SPINLOCK(rawhide_irq_lock);
-#define VM_COUNT (3)
+#define VM_COUNT (1)
 #define VECTORS_COUNT (2 * VM_COUNT)
 #define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 #define LOCAL_RESOURCE_READY_INT_VEC (1)

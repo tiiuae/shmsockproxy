@@ -1,6 +1,6 @@
-From 3fc02dc2d8a0f8d6499304ba1681cf22430cd202 Mon Sep 17 00:00:00 2001
+From 2e1236898c90d027852d072d194a6abe5c848a1c Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Mon, 15 Jan 2024 15:37:31 +0400
+Date: Tue, 16 Jan 2024 13:17:08 +0400
 Subject: ivshmem driver
 
 ---
@@ -31,7 +31,7 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..e72e0e536
+index 000000000..04c175314
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,676 @@
@@ -63,7 +63,7 @@ index 000000000..e72e0e536
 +#include <linux/uio.h>
 +
 +DEFINE_SPINLOCK(rawhide_irq_lock);
-+#define VM_COUNT (3)
++#define VM_COUNT (1)
 +#define VECTORS_COUNT (2 * VM_COUNT)
 +#define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 +#define LOCAL_RESOURCE_READY_INT_VEC (1)
