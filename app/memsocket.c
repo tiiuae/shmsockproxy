@@ -644,7 +644,7 @@ void *run(void *arg) {
         // Inform the peer that the closed is being closed
         rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
         if (rv < 0) {
-          ERROR("shmem poll timeout", "");
+          ERROR("shmem poll timeout poll=%d", rv);
         }
 
         my_shm_data[instance_no]->cmd = CMD_CLOSE;
