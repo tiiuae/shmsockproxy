@@ -48,7 +48,7 @@
   }
 #endif
 
-#if 0
+#ifndef DEBUG_ON
 #define INFO(fmt, ...)                                                         \
   {}
 #else
