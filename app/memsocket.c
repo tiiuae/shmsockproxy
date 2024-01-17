@@ -592,7 +592,7 @@ void *run(void *arg) {
         } /* End of "data arrived from the peer via shared memory" */
 
         else if (events[n].data.fd == server_socket) {
-          ERROR("Ignored data from server socket", "");
+          ERROR("Ignored data from server socket");
         }
 
         /* Server side: Data arrived from connected waypipe server */
