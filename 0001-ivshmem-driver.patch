@@ -1,6 +1,6 @@
-From 0383036054a65011892c6e820b5cccfe45b74386 Mon Sep 17 00:00:00 2001
+From a84d4bab477fe714c555292b7e8f7b61a78005df Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 16 Jan 2024 15:11:20 +0400
+Date: Wed, 17 Jan 2024 11:39:36 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 676 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 681 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 6 files changed, 708 insertions(+)
+ 6 files changed, 713 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..04c175314
+index 000000000..7dec63139
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,676 @@
+@@ -0,0 +1,681 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -88,8 +88,13 @@ index 000000000..04c175314
 +#include <linux/proc_fs.h>
 +#include <linux/uio.h>
 +
++#ifndef CONFIG_KVM_IVSHMEM_VM_COUNT
++#warning CONFIG_KVM_IVSHMEM_VM_COUNT not defined. Assuming 5.
++#define CONFIG_KVM_IVSHMEM_VM_COUNT (5)
++#endif
++
 +DEFINE_SPINLOCK(rawhide_irq_lock);
-+#define VM_COUNT (1)
++#define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 +#define VECTORS_COUNT (2 * VM_COUNT)
 +#define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 +#define LOCAL_RESOURCE_READY_INT_VEC (1)
@@ -198,8 +203,8 @@ index 000000000..04c175314
 +                      (unsigned long int)filp->private_data, cmd, arg);
 +  if ((unsigned long int)filp->private_data >= VM_COUNT &&
 +      cmd != SHMEM_IOCSETINSTANCENO) {
-+    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld",
-+           (unsigned long int)filp->private_data);
++    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld > VM_COUNT=%d",
++           (unsigned long int)filp->private_data, VM_COUNT);
 +    return -EINVAL;
 +  }
 +  switch (cmd) {
@@ -301,8 +306,8 @@ index 000000000..04c175314
 +    }
 +    filp->private_data = (void *)arg;
 +    printk(KERN_INFO
-+           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
-+           arg);
++           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx VM_COUNT=%d",
++           arg, VM_COUNT);
 +
 +    init_waitqueue_head(&local_data_ready_wait_queue[arg]);
 +    init_waitqueue_head(&remote_data_ready_wait_queue[arg]);

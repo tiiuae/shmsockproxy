@@ -25,8 +25,13 @@
 #include <linux/proc_fs.h>
 #include <linux/uio.h>
 
+#ifndef CONFIG_KVM_IVSHMEM_VM_COUNT
+#warning CONFIG_KVM_IVSHMEM_VM_COUNT not defined. Assuming 5.
+#define CONFIG_KVM_IVSHMEM_VM_COUNT (5)
+#endif
+
 DEFINE_SPINLOCK(rawhide_irq_lock);
-#define VM_COUNT (1)
+#define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 #define VECTORS_COUNT (2 * VM_COUNT)
 #define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 #define LOCAL_RESOURCE_READY_INT_VEC (1)
@@ -135,8 +140,8 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                       (unsigned long int)filp->private_data, cmd, arg);
   if ((unsigned long int)filp->private_data >= VM_COUNT &&
       cmd != SHMEM_IOCSETINSTANCENO) {
-    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld",
-           (unsigned long int)filp->private_data);
+    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld > VM_COUNT=%d",
+           (unsigned long int)filp->private_data, VM_COUNT);
     return -EINVAL;
   }
   switch (cmd) {
@@ -238,8 +243,8 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     }
     filp->private_data = (void *)arg;
     printk(KERN_INFO
-           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
-           arg);
+           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx VM_COUNT=%d",
+           arg, VM_COUNT);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);
     init_waitqueue_head(&remote_data_ready_wait_queue[arg]);
