@@ -404,7 +404,7 @@ void close_peer_vm(int instance_no) {
 void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
-  int conn_fd, rv, nfds, n;
+  int conn_fd, rv, nfds, n, read_count;
   struct sockaddr_un caddr;      /* client address */
   socklen_t len = sizeof(caddr); /* address length could change */
   struct pollfd my_buffer_fds = {.events = POLLOUT};
@@ -495,18 +495,18 @@ void *run(void *arg) {
           }
 
           DEBUG("Reading from wayland socket", "");
-          len = read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
+          read_count = read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
                      sizeof(my_shm_data[instance_no]->data));
-          if (len <= 0) {
+          if (read_count <= 0) {
             ERROR("read from wayland socket failed fd=%d", events[n].data.fd);
           } else {
-            DEBUG("Read & sent %d bytes on fd#%d sent to %d", len,
+            DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
                   events[n].data.fd, conn_fd);
 
             /* Send the data to the peer Wayland app server */
             my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = conn_fd;
-            my_shm_data[instance_no]->len = len;
+            my_shm_data[instance_no]->len = read_count;
 
             ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
@@ -622,16 +622,16 @@ void *run(void *arg) {
                   events[n].data.fd);
           }
           DEBUG("Reading from connected client #%d", events[n].data.fd);
-          len = read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
+          read_count = read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
                      sizeof(my_shm_data[instance_no]->data));
-          if (len <= 0) {
+          if (read_count <= 0) {
             ERROR("read from connected client failed fd=%d", events[n].data.fd);
           } else {
-            DEBUG("Read & sent %d bytes on fd#%d", len, events[n].data.fd);
+            DEBUG("Read & sent %d bytes on fd#%d", read_count, events[n].data.fd);
             /* Send the data to the wayland display side */
             my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = events[n].data.fd;
-            my_shm_data[instance_no]->len = len;
+            my_shm_data[instance_no]->len = read_count;
 
             ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL

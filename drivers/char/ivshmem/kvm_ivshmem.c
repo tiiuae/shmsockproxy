@@ -243,7 +243,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     }
     filp->private_data = (void *)arg;
     printk(KERN_INFO
-           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
+           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx*9*/-*/6+*-+*-*+9-5639*/6+399-*/+*--*/*/-",
            arg);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);
@@ -308,6 +308,9 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
     spin_unlock(&rawhide_irq_lock);
   }
 
+  if (!mask) {
+    printk(KERN_ERR "KVM_IVSHMEM: poll: query for events 0x%x", req_events);
+  }
   return mask;
 }
 
