@@ -1,6 +1,6 @@
-From e26013ff32b22d4f01eaa40b78ce4e075106c3ff Mon Sep 17 00:00:00 2001
+From 9dad896813d2d2148105f2c45f3b4bd8a5709b12 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Wed, 17 Jan 2024 15:09:05 +0400
+Date: Wed, 17 Jan 2024 17:02:06 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 681 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 684 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 6 files changed, 713 insertions(+)
+ 6 files changed, 716 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..d89e886b6
+index 000000000..5a515bf5c
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,681 @@
+@@ -0,0 +1,684 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -306,7 +306,7 @@ index 000000000..d89e886b6
 +    }
 +    filp->private_data = (void *)arg;
 +    printk(KERN_INFO
-+           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
++           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx*9*/-*/6+*-+*-*+9-5639*/6+399-*/+*--*/*/-",
 +           arg);
 +
 +    init_waitqueue_head(&local_data_ready_wait_queue[arg]);
@@ -371,6 +371,9 @@ index 000000000..d89e886b6
 +    spin_unlock(&rawhide_irq_lock);
 +  }
 +
++  if (!mask) {
++    printk(KERN_ERR "KVM_IVSHMEM: poll: query for events 0x%x", req_events);
++  }
 +  return mask;
 +}
 +
