@@ -1,6 +1,6 @@
-From a84d4bab477fe714c555292b7e8f7b61a78005df Mon Sep 17 00:00:00 2001
+From e26013ff32b22d4f01eaa40b78ce4e075106c3ff Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Wed, 17 Jan 2024 11:39:36 +0400
+Date: Wed, 17 Jan 2024 15:09:05 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..7dec63139
+index 000000000..d89e886b6
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,681 @@
@@ -272,7 +272,7 @@ index 000000000..7dec63139
 +      break;
 +    }
 +
-+    vec = ioctl_data.int_no /*arg*/ & 0xffff;
++    vec = ioctl_data.int_no & 0xffff;
 +#ifdef DEBUG_IOCTL
 +    KVM_IVSHMEM_DPRINTK("%ld ioctl cmd=%d fd=%d len=%d int_no=0x%x",
 +                        (unsigned long int)filp->private_data, ioctl_data.cmd,
@@ -306,8 +306,8 @@ index 000000000..7dec63139
 +    }
 +    filp->private_data = (void *)arg;
 +    printk(KERN_INFO
-+           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx VM_COUNT=%d",
-+           arg, VM_COUNT);
++           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
++           arg);
 +
 +    init_waitqueue_head(&local_data_ready_wait_queue[arg]);
 +    init_waitqueue_head(&remote_data_ready_wait_queue[arg]);
