@@ -209,7 +209,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       break;
     }
 
-    vec = ioctl_data.int_no /*arg*/ & 0xffff;
+    vec = ioctl_data.int_no & 0xffff;
 #ifdef DEBUG_IOCTL
     KVM_IVSHMEM_DPRINTK("%ld ioctl cmd=%d fd=%d len=%d int_no=0x%x",
                         (unsigned long int)filp->private_data, ioctl_data.cmd,
@@ -243,8 +243,8 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     }
     filp->private_data = (void *)arg;
     printk(KERN_INFO
-           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx VM_COUNT=%d",
-           arg, VM_COUNT);
+           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
+           arg);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);
     init_waitqueue_head(&remote_data_ready_wait_queue[arg]);
