@@ -63,6 +63,14 @@
   }
 #endif
 
+#define ERROR0(msg)                                                            \
+  {                                                                            \
+    char tmp[256];                                                             \
+    sprintf(tmp, "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,     \
+            msg);                                                              \
+    report(tmp, 0);                                                            \
+  }
+
 #define ERROR(fmt, ...)                                                        \
   {                                                                            \
     char tmp1[256], tmp2[256];                                                 \
@@ -435,7 +443,7 @@ void *run(void *arg) {
 
           rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
           if (rv < 0) {
-            ERROR("shmem poll timeout", "");
+            ERROR0("shmem poll timeout");
           }
           if (my_buffer_fds.revents & ~POLLOUT) {
             ERROR("unexpected event on shmem_fd %d: 0x%x",
@@ -567,7 +575,7 @@ void *run(void *arg) {
             if (conn_fd > 0) {
               if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, conn_fd,
                             NULL) == -1) {
-                ERROR("epoll_ctl: EPOLL_CTL_DEL", "");
+                ERROR0("epoll_ctl: EPOLL_CTL_DEL");
               }
               close(conn_fd);
             }
@@ -592,7 +600,7 @@ void *run(void *arg) {
         } /* End of "data arrived from the peer via shared memory" */
 
         else if (events[n].data.fd == server_socket) {
-          ERROR("Ignored data from server socket");
+          ERROR0("Ignored data from server socket");
         }
 
         /* Server side: Data arrived from connected waypipe server */
