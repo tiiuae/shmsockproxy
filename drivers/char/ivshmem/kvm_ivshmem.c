@@ -243,7 +243,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     }
     filp->private_data = (void *)arg;
     printk(KERN_INFO
-           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx*9*/-*/6+*-+*-*+9-5639*/6+399-*/+*--*/*/-",
+           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
            arg);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);

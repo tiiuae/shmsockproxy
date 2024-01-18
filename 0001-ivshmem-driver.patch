@@ -1,6 +1,6 @@
-From 9dad896813d2d2148105f2c45f3b4bd8a5709b12 Mon Sep 17 00:00:00 2001
+From 57b25b8ae3050dfbae71403991f9569b65037b97 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Wed, 17 Jan 2024 17:02:06 +0400
+Date: Thu, 18 Jan 2024 10:21:21 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..5a515bf5c
+index 000000000..61ba671af
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,684 @@
@@ -306,7 +306,7 @@ index 000000000..5a515bf5c
 +    }
 +    filp->private_data = (void *)arg;
 +    printk(KERN_INFO
-+           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx*9*/-*/6+*-+*-*+9-5639*/6+399-*/+*--*/*/-",
++           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
 +           arg);
 +
 +    init_waitqueue_head(&local_data_ready_wait_queue[arg]);

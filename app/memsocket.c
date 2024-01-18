@@ -401,6 +401,26 @@ void close_peer_vm(int instance_no) {
   fd_map_clear(instance_no);
 }
 
+int wait_shmem_ready(int instance_no, struct pollfd *my_buffer_fds) {
+  int rv;
+
+  rv = poll(my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
+  if (rv < 0) {
+    ERROR("poll failed fd=%d poll=%d", my_buffer_fds->fd, rv);
+    return -1;
+  }
+
+  if (rv == 0 || my_buffer_fds->revents & ~POLLOUT) {
+    ERROR("unexpected event or timeout on shmem_fd %d: poll=%d fd=%d revents=0x%x "
+          "events=0x%x",
+          shmem_fd[instance_no], rv, my_buffer_fds->fd, my_buffer_fds->revents,
+          my_buffer_fds->events);
+    return 1;
+  }
+
+  return 0;
+}
+
 void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
@@ -427,7 +447,55 @@ void *run(void *arg) {
 
       DEBUG("Event 0x%x on fd %d", events[n].events, events[n].data.fd)
 
-      /* Handle the new connection on the socket */
+      /* Handling connection close/error */
+      if (events[n].events & (EPOLLHUP | EPOLLERR)) {
+        DEBUG("Closing fd#%d", events[n].data.fd);
+
+        /* Handle unusual close/error */
+        if (events[n].data.fd == shmem_fd[instance_no]) {
+          ERROR("Event 0x%x on shmem fd %d", events[n].events,
+                events[n].data.fd)
+          FATAL("Received HUP from shmem. Exiting.")
+          /* No continuation - FATAL exits */
+        }
+
+        /* Inform the peer that the file descriptor is being closed */
+        rv = wait_shmem_ready(instance_no, &my_buffer_fds);
+        if (rv) {
+          ERROR("While closing fd#%d", events[n].data.fd);
+        }
+
+        my_shm_data[instance_no]->cmd = CMD_CLOSE;
+        if (run_as_server)
+          my_shm_data[instance_no]->fd = events[n].data.fd;
+        else {
+          DEBUG("get_remote_socket: %d",
+                get_remote_socket(instance_no, events[n].data.fd, 0, 1));
+          my_shm_data[instance_no]->fd =
+              get_remote_socket(instance_no, events[n].data.fd, 1, 1);
+        }
+        if (my_shm_data[instance_no]->fd > 0) {
+          DEBUG("Sending close request for %d", my_shm_data[instance_no]->fd);
+
+          ioctl_data.int_no = local_rr_int_no[instance_no];
+#ifdef DEBUG_IOCTL
+          ioctl_data.cmd = my_shm_data[instance_no]->cmd;
+          ioctl_data.fd = my_shm_data[instance_no]->fd;
+          ioctl_data.len = my_shm_data[instance_no]->len;
+#endif
+
+          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
+        }
+        if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
+                      NULL) == -1) {
+          ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", events[n].data.fd);
+        }
+        close(events[n].data.fd);
+        /* Do not check other events, as it was an error/close on a fd */
+        continue;
+      } /* Handling connection close/error */
+
+      /* Handle the new connection on the wayland/waypipe socket */
       if (events[n].events & EPOLLIN) {
         if (run_as_server && events[n].data.fd == server_socket) {
           conn_fd = accept(server_socket, (struct sockaddr *)&caddr, &len);
@@ -441,13 +509,9 @@ void *run(void *arg) {
             FATAL("epoll_ctl: conn_fd");
           }
 
-          rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
-          if (rv < 0) {
-            ERROR0("shmem poll timeout");
-          }
-          if (my_buffer_fds.revents & ~POLLOUT) {
-            ERROR("unexpected event on shmem_fd %d: 0x%x",
-                  shmem_fd[instance_no], my_buffer_fds.revents);
+          rv = wait_shmem_ready(instance_no, &my_buffer_fds);
+          if (rv) {
+            ERROR("While creating fd#%d", conn_fd);
           }
           /* Send the connect request to the wayland peer */
           my_shm_data[instance_no]->cmd = CMD_CONNECT;
@@ -464,7 +528,7 @@ void *run(void *arg) {
           DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
         }
 
-        /* Display/client side: received data from Wayland server. It needs to
+        /* Client side: received data from Wayland server. It needs to
           be sent to the peer (server) */
         else if (!run_as_server &&
                  get_remote_socket(instance_no, events[n].data.fd, 0, 1) > 0) {
@@ -474,16 +538,12 @@ void *run(void *arg) {
 
           /* Wait for the memory buffer to be ready */
           DEBUG("Data from wayland. Waiting for shmem buffer", "");
-          rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
-          if ((rv <= 0) || (my_buffer_fds.revents & ~POLLOUT)) {
+          rv = wait_shmem_ready(instance_no, &my_buffer_fds);
+          if (rv) {
             /* Peer VM is probably down */
-            ERROR("Unexpected event on shmem_fd %d: 0x%x poll=%d. Peer VM is "
-                  "probably down.",
-                  shmem_fd[instance_no], my_buffer_fds.revents, rv);
+            ERROR("Unexpected event on shmem_fd %d", shmem_fd[instance_no]);
             ERROR("event 0x%x on fd %d", events[n].events, events[n].data.fd)
-            ERROR("my_buffer_fds: fd=%d events=0x%x revents=0x%x",
-                  my_buffer_fds.fd, my_buffer_fds.events,
-                  my_buffer_fds.revents);
+
             close_peer_vm(instance_no);
             if (events[n].data.fd > 0) {
               if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL,
@@ -495,8 +555,9 @@ void *run(void *arg) {
           }
 
           DEBUG("Reading from wayland socket", "");
-          read_count = read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
-                     sizeof(my_shm_data[instance_no]->data));
+          read_count =
+              read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
+                   sizeof(my_shm_data[instance_no]->data));
           if (read_count <= 0) {
             ERROR("read from wayland socket failed fd=%d", events[n].data.fd);
           } else {
@@ -607,27 +668,20 @@ void *run(void *arg) {
         else {
           /* Wait for the memory buffer to be ready */
           DEBUG("Data from client. Waiting for shmem buffer", "");
-          rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
-          if (rv < 0) {
-            ERROR("shmem poll for client fd=%d", events[n].data.fd);
-          } else if (rv == 0) {
-            ERROR("shmem poll timeout for client fd=%d", events[n].data.fd);
-            ERROR("my_buffer_fds: fd=%d events=0x%x revents=0x%x",
-                  my_buffer_fds.fd, my_buffer_fds.events,
-                  my_buffer_fds.revents);
-          }
-          if (my_buffer_fds.revents & ~POLLOUT) {
-            ERROR("unexpected event on shmem_fd %d: 0x%x poll=%d for client ",
-                  "fd=%d", shmem_fd[instance_no], my_buffer_fds.revents, rv,
-                  events[n].data.fd);
+          rv = wait_shmem_ready(instance_no, &my_buffer_fds);
+          if (rv) {
+            ERROR("shmem poll timeout shmem_fd=%d for client fd=%d",
+                  shmem_fd[instance_no], events[n].data.fd);
           }
           DEBUG("Reading from connected client #%d", events[n].data.fd);
-          read_count = read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
-                     sizeof(my_shm_data[instance_no]->data));
+          read_count =
+              read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
+                   sizeof(my_shm_data[instance_no]->data));
           if (read_count <= 0) {
             ERROR("read from connected client failed fd=%d", events[n].data.fd);
           } else {
-            DEBUG("Read & sent %d bytes on fd#%d", read_count, events[n].data.fd);
+            DEBUG("Read & sent %d bytes on fd#%d", read_count,
+                  events[n].data.fd);
             /* Send the data to the wayland display side */
             my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = events[n].data.fd;
@@ -645,46 +699,9 @@ void *run(void *arg) {
         } // End of "Data arrived from connected waypipe server"
       }
 
-      /* Handling connection close */
-      if (events[n].events & (EPOLLHUP | EPOLLERR)) {
-        DEBUG("Closing fd#%d", events[n].data.fd);
-
-        // Inform the peer that the closed is being closed
-        rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
-        if (rv < 0) {
-          ERROR("shmem poll timeout poll=%d", rv);
-        }
-
-        my_shm_data[instance_no]->cmd = CMD_CLOSE;
-        if (run_as_server)
-          my_shm_data[instance_no]->fd = events[n].data.fd;
-        else {
-          DEBUG("get_remote_socket: %d",
-                get_remote_socket(instance_no, events[n].data.fd, 0, 1));
-          my_shm_data[instance_no]->fd =
-              get_remote_socket(instance_no, events[n].data.fd, 1, 1);
-        }
-        if (my_shm_data[instance_no]->fd > 0) {
-          DEBUG("Sending close request for %d", my_shm_data[instance_no]->fd);
-
-          ioctl_data.int_no = local_rr_int_no[instance_no];
-#ifdef DEBUG_IOCTL
-          ioctl_data.cmd = my_shm_data[instance_no]->cmd;
-          ioctl_data.fd = my_shm_data[instance_no]->fd;
-          ioctl_data.len = my_shm_data[instance_no]->len;
-#endif
-
-          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
-        }
-        if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
-                      NULL) == -1) {
-          ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", events[n].data.fd);
-        }
-        close(events[n].data.fd);
-      } /* Handling connection close */
-    }
-  } /* while(1) */
-  return 0;
+    } /* while(1) */
+    return 0;
+  }
 }
 
 void print_usage_and_exit() {
