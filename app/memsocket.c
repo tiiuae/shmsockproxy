@@ -34,7 +34,7 @@
 #define SHMEM_POLL_TIMEOUT (3000)
 #define SHMEM_BUFFER_SIZE (1024000)
 #define UNKNOWN_PEER (-1)
-#if 1
+#ifndef DEBUG_ON
 #define DEBUG(fmt, ...)                                                        \
   {}
 #else
@@ -49,7 +49,7 @@
   }
 #endif
 
-#if 0
+#ifndef DEBUG_ON
 #define INFO(fmt, ...)                                                         \
   {}
 #else
@@ -63,6 +63,14 @@
     report(tmp1, 0);                                                           \
   }
 #endif
+
+#define ERROR0(msg)                                                            \
+  {                                                                            \
+    char tmp[256];                                                             \
+    sprintf(tmp, "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,     \
+            msg);                                                              \
+    report(tmp, 0);                                                            \
+  }
 
 #define ERROR(fmt, ...)                                                        \
   {                                                                            \
@@ -394,10 +402,30 @@ void close_peer_vm(int instance_no) {
   fd_map_clear(instance_no);
 }
 
+int wait_shmem_ready(int instance_no, struct pollfd *my_buffer_fds) {
+  int rv;
+
+  rv = poll(my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
+  if (rv < 0) {
+    ERROR("poll failed fd=%d poll=%d", my_buffer_fds->fd, rv);
+    return -1;
+  }
+
+  if (rv == 0 || (my_buffer_fds->revents & ~POLLOUT)) {
+    ERROR("unexpected event or timeout on shmem_fd %d: poll=%d fd=%d revents=0x%x "
+          "events=0x%x",
+          shmem_fd[instance_no], rv, my_buffer_fds->fd, my_buffer_fds->revents,
+          my_buffer_fds->events);
+    return 1;
+  }
+
+  return 0;
+}
+
 void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
-  int conn_fd, rv, nfds, n;
+  int conn_fd, rv, nfds, n, read_count;
   struct sockaddr_un caddr;      /* client address */
   socklen_t len = sizeof(caddr); /* address length could change */
   struct pollfd my_buffer_fds = {.events = POLLOUT};
@@ -457,7 +485,7 @@ void *run(void *arg) {
           DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
         }
 
-        /* Display/client side: received data from Wayland server. It needs to
+        /* Client side: received data from Wayland server. It needs to
           be sent to the peer (server) */
         else if (!run_as_server &&
                  get_remote_socket(instance_no, events[n].data.fd, 0, 1) > 0) {
@@ -488,18 +516,19 @@ void *run(void *arg) {
           }
 
           DEBUG("Reading from wayland socket", "");
-          len = read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
-                     sizeof(my_shm_data[instance_no]->data));
-          if (len <= 0) {
+          read_count =
+              read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
+                   sizeof(my_shm_data[instance_no]->data));
+          if (read_count <= 0) {
             ERROR("read from wayland socket failed fd=%d", events[n].data.fd);
           } else {
-            DEBUG("Read & sent %d bytes on fd#%d sent to %d", len,
+            DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
                   events[n].data.fd, conn_fd);
 
             /* Send the data to the peer Wayland app server */
             my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = conn_fd;
-            my_shm_data[instance_no]->len = len;
+            my_shm_data[instance_no]->len = read_count;
 
             ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
@@ -568,7 +597,7 @@ void *run(void *arg) {
             if (conn_fd > 0) {
               if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, conn_fd,
                             NULL) == -1) {
-                ERROR("epoll_ctl: EPOLL_CTL_DEL", "");
+                ERROR0("epoll_ctl: EPOLL_CTL_DEL");
               }
               close(conn_fd);
             }
@@ -593,7 +622,7 @@ void *run(void *arg) {
         } /* End of "data arrived from the peer via shared memory" */
 
         else if (events[n].data.fd == server_socket) {
-          ERROR("Ignored data from server socket", "");
+          ERROR0("Ignored data from server socket");
         }
 
         /* Server side: Data arrived from connected waypipe server */
@@ -615,16 +644,18 @@ void *run(void *arg) {
                   events[n].data.fd);
           }
           DEBUG("Reading from connected client #%d", events[n].data.fd);
-          len = read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
-                     sizeof(my_shm_data[instance_no]->data));
-          if (len <= 0) {
+          read_count =
+              read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
+                   sizeof(my_shm_data[instance_no]->data));
+          if (read_count <= 0) {
             ERROR("read from connected client failed fd=%d", events[n].data.fd);
           } else {
-            DEBUG("Read & sent %d bytes on fd#%d", len, events[n].data.fd);
+            DEBUG("Read & sent %d bytes on fd#%d", read_count,
+                  events[n].data.fd);
             /* Send the data to the wayland display side */
             my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = events[n].data.fd;
-            my_shm_data[instance_no]->len = len;
+            my_shm_data[instance_no]->len = read_count;
 
             ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
