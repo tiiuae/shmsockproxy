@@ -36,7 +36,7 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 #define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 #define LOCAL_RESOURCE_READY_INT_VEC (1)
 
-//#define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
   do {                                                                         \
@@ -309,7 +309,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
   }
 
   if (!mask) {
-    printk(KERN_ERR "KVM_IVSHMEM: poll: query for events 0x%x", req_events);
+    printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x", req_events);
   }
   return mask;
 }

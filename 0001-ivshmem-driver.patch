@@ -1,6 +1,6 @@
-From 57b25b8ae3050dfbae71403991f9569b65037b97 Mon Sep 17 00:00:00 2001
+From 2429b3d7fdcd870bd02167fd0bee53b0a9ebaa03 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Thu, 18 Jan 2024 10:21:21 +0400
+Date: Thu, 18 Jan 2024 11:06:53 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..61ba671af
+index 000000000..d8709b313
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,684 @@
@@ -99,7 +99,7 @@ index 000000000..61ba671af
 +#define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 +#define LOCAL_RESOURCE_READY_INT_VEC (1)
 +
-+//#define DEBUG
++#define DEBUG
 +#ifdef DEBUG
 +#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
 +  do {                                                                         \
@@ -372,7 +372,7 @@ index 000000000..61ba671af
 +  }
 +
 +  if (!mask) {
-+    printk(KERN_ERR "KVM_IVSHMEM: poll: query for events 0x%x", req_events);
++    printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x", req_events);
 +  }
 +  return mask;
 +}
