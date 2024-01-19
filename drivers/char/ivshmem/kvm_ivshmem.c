@@ -25,13 +25,18 @@
 #include <linux/proc_fs.h>
 #include <linux/uio.h>
 
+#ifndef CONFIG_KVM_IVSHMEM_VM_COUNT
+#warning CONFIG_KVM_IVSHMEM_VM_COUNT not defined. Assuming 5.
+#define CONFIG_KVM_IVSHMEM_VM_COUNT (5)
+#endif
+
 DEFINE_SPINLOCK(rawhide_irq_lock);
-#define VM_COUNT (3)
+#define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 #define VECTORS_COUNT (2 * VM_COUNT)
 #define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 #define LOCAL_RESOURCE_READY_INT_VEC (1)
 
-//#define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
   do {                                                                         \
@@ -135,8 +140,8 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                       (unsigned long int)filp->private_data, cmd, arg);
   if ((unsigned long int)filp->private_data >= VM_COUNT &&
       cmd != SHMEM_IOCSETINSTANCENO) {
-    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld",
-           (unsigned long int)filp->private_data);
+    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld > VM_COUNT=%d",
+           (unsigned long int)filp->private_data, VM_COUNT);
     return -EINVAL;
   }
   switch (cmd) {
@@ -204,7 +209,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       break;
     }
 
-    vec = ioctl_data.int_no /*arg*/ & 0xffff;
+    vec = ioctl_data.int_no & 0xffff;
 #ifdef DEBUG_IOCTL
     KVM_IVSHMEM_DPRINTK("%ld ioctl cmd=%d fd=%d len=%d int_no=0x%x",
                         (unsigned long int)filp->private_data, ioctl_data.cmd,
@@ -303,6 +308,9 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
     spin_unlock(&rawhide_irq_lock);
   }
 
+  if (!mask) {
+    printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x", req_events);
+  }
   return mask;
 }
 

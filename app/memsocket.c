@@ -22,6 +22,10 @@
 
 #include "../drivers/char/ivshmem/kvm_ivshmem.h"
 
+#ifndef VM_COUNT
+#define VM_COUNT (5)
+#endif
+
 #define SHM_DEVICE_FN "/dev/ivshmem"
 
 #define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
@@ -29,7 +33,6 @@
 
 #define MAX_EVENTS (1024)
 #define MAX_CLIENTS (10)
-#define VM_COUNT (3)
 #define BUFFER_SIZE (1024000)
 #define SHMEM_POLL_TIMEOUT (3000)
 #define SHMEM_BUFFER_SIZE (1024000)
