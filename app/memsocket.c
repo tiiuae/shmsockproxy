@@ -462,13 +462,9 @@ void *run(void *arg) {
             FATAL("epoll_ctl: conn_fd");
           }
 
-          rv = poll(&my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
-          if (rv < 0) {
-            ERROR("shmem poll timeout", "");
-          }
-          if (my_buffer_fds.revents & ~POLLOUT) {
-            ERROR("unexpected event on shmem_fd %d: 0x%x",
-                  shmem_fd[instance_no], my_buffer_fds.revents);
+          rv = wait_shmem_ready(instance_no, &my_buffer_fds);
+          if (rv) {
+            ERROR("While creating fd#%d", conn_fd);
           }
           /* Send the connect request to the wayland peer */
           my_shm_data[instance_no]->cmd = CMD_CONNECT;
