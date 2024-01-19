@@ -518,18 +518,12 @@ void *run(void *arg) {
                    sizeof(my_shm_data[instance_no]->data));
           if (read_count <= 0) {
             ERROR("read from wayland socket failed fd=%d", events[n].data.fd);
-          }
-          if (read_count > 0 || events[n].events & EPOLLHUP) {
+          } else {
             DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
                   events[n].data.fd, conn_fd);
 
             /* Send the data to the peer Wayland app server */
-            if (events[n].events & EPOLLHUP) {
-              my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
-              events[n].events &= ~EPOLLHUP;
-            } else
-              my_shm_data[instance_no]->cmd = CMD_DATA;
-
+            my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = conn_fd;
             my_shm_data[instance_no]->len = read_count;
 
@@ -663,19 +657,11 @@ void *run(void *arg) {
                    sizeof(my_shm_data[instance_no]->data));
           if (read_count <= 0) {
             ERROR("read from connected client failed fd=%d", events[n].data.fd);
-          }
-
-          if (read_count > 0 || events[n].events & EPOLLHUP) {
+          } else {
             DEBUG("Read & sent %d bytes on fd#%d", read_count,
                   events[n].data.fd);
-
-            if (events[n].events & EPOLLHUP) {
-              my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
-              events[n].events &= ~EPOLLHUP;
-            } else
-              my_shm_data[instance_no]->cmd = CMD_DATA;
-
             /* Send the data to the wayland display side */
+            my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = events[n].data.fd;
             my_shm_data[instance_no]->len = read_count;
 
