@@ -1,20 +1,32 @@
-From 0b3de7ba1b36e2a0278f78efb4f2845249738188 Mon Sep 17 00:00:00 2001
+From 5e76b9b1486e949e4bbe2188737320904b1215b3 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Fri, 19 Jan 2024 15:35:38 +0400
+Date: Fri, 19 Jan 2024 15:42:07 +0400
 Subject: ivshmem driver
 
 ---
+ drivers/char/Kconfig               |   2 +
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
  drivers/char/ivshmem/kvm_ivshmem.c | 684 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 5 files changed, 714 insertions(+)
+ 6 files changed, 716 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.h
 
+diff --git a/drivers/char/Kconfig b/drivers/char/Kconfig
+index 801d6c83f..e93d4265a 100644
+--- a/drivers/char/Kconfig
++++ b/drivers/char/Kconfig
+@@ -421,4 +421,6 @@ config ADI
+ 	  and SSM (Silicon Secured Memory).  Intended consumers of this
+ 	  driver include crash and makedumpfile.
+ 
++source "drivers/char/ivshmem/Kconfig"
++
+ endmenu
 diff --git a/drivers/char/Makefile b/drivers/char/Makefile
 index c5f532e41..fc17a75f3 100644
 --- a/drivers/char/Makefile
