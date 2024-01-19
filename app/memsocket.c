@@ -482,53 +482,6 @@ void *run(void *arg) {
           DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
         }
 
-        /* Client side: received data from Wayland server. It needs to
-          be sent to the peer (server) */
-        else if (!run_as_server &&
-                 get_remote_socket(instance_no, events[n].data.fd, 0, 1) > 0) {
-
-          int conn_fd = get_remote_socket(instance_no, events[n].data.fd, 0, 1);
-          DEBUG("get_remote_socket: %d", conn_fd);
-
-          /* Wait for the memory buffer to be ready */
-          DEBUG("Data from wayland. Waiting for shmem buffer", "");
-          rv = wait_shmem_ready(instance_no, &my_buffer_fds);
-          if (rv <= 0) {
-            ERROR("While reading from fd#%d", conn_fd);
-          }
-
-          DEBUG("Reading from wayland socket", "");
-          read_count =
-              read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
-                   sizeof(my_shm_data[instance_no]->data));
-          if (read_count <= 0) {
-            ERROR("read from wayland socket failed fd=%d", events[n].data.fd);
-          }
-          if (read_count > 0 || events[n].events & EPOLLHUP) {
-            DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
-                  events[n].data.fd, conn_fd);
-
-            /* Send the data to the peer Wayland app server */
-            if (events[n].events & EPOLLHUP) {
-              my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
-              events[n].events &= ~EPOLLHUP;
-            } else
-              my_shm_data[instance_no]->cmd = CMD_DATA;
-
-            my_shm_data[instance_no]->fd = conn_fd;
-            my_shm_data[instance_no]->len = read_count;
-
-            ioctl_data.int_no = local_rr_int_no[instance_no];
-#ifdef DEBUG_IOCTL
-            ioctl_data.cmd = my_shm_data[instance_no]->cmd;
-            ioctl_data.fd = my_shm_data[instance_no]->fd;
-            ioctl_data.len = 0;
-#endif
-
-            ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
-          }
-        } /* received data from Wayland server */
-
         /* Both sides: Received data from the peer via shared memory*/
         else if (events[n].data.fd == shmem_fd[instance_no]) {
           DEBUG(
@@ -615,9 +568,52 @@ void *run(void *arg) {
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
         } /* End of "data arrived from the peer via shared memory" */
 
-        else if (events[n].data.fd == server_socket) {
-          ERROR0("Ignored data from server socket");
-        }
+        /* Client side: received data from Wayland server. It needs to
+          be sent to the peer (server) */
+        else if (!run_as_server &&
+                 get_remote_socket(instance_no, events[n].data.fd, 0, 1) > 0) {
+
+          int conn_fd = get_remote_socket(instance_no, events[n].data.fd, 0, 1);
+          DEBUG("get_remote_socket: %d", conn_fd);
+
+          /* Wait for the memory buffer to be ready */
+          DEBUG("Data from wayland. Waiting for shmem buffer", "");
+          rv = wait_shmem_ready(instance_no, &my_buffer_fds);
+          if (rv <= 0) {
+            ERROR("While reading from fd#%d", conn_fd);
+          }
+
+          DEBUG("Reading from wayland socket", "");
+          read_count =
+              read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
+                   sizeof(my_shm_data[instance_no]->data));
+          if (read_count <= 0) {
+            ERROR("read from wayland socket failed fd=%d", events[n].data.fd);
+          }
+          if (read_count > 0 || events[n].events & EPOLLHUP) {
+            DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
+                  events[n].data.fd, conn_fd);
+
+            /* Send the data to the peer Wayland app server */
+            if (events[n].events & EPOLLHUP) {
+              my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
+              events[n].events &= ~EPOLLHUP;
+            } else
+              my_shm_data[instance_no]->cmd = CMD_DATA;
+
+            my_shm_data[instance_no]->fd = conn_fd;
+            my_shm_data[instance_no]->len = read_count;
+
+            ioctl_data.int_no = local_rr_int_no[instance_no];
+#ifdef DEBUG_IOCTL
+            ioctl_data.cmd = my_shm_data[instance_no]->cmd;
+            ioctl_data.fd = my_shm_data[instance_no]->fd;
+            ioctl_data.len = 0;
+#endif
+
+            ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
+          }
+        } /* received data from Wayland server */
 
         /* Server side: Data arrived from connected waypipe server */
         else {
