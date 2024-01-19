@@ -1,14 +1,16 @@
-From 3fc02dc2d8a0f8d6499304ba1681cf22430cd202 Mon Sep 17 00:00:00 2001
+From 0b3de7ba1b36e2a0278f78efb4f2845249738188 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Mon, 15 Jan 2024 15:37:31 +0400
+Date: Fri, 19 Jan 2024 15:35:38 +0400
 Subject: ivshmem driver
 
 ---
  drivers/char/Makefile              |   1 +
+ drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 676 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 684 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 4 files changed, 700 insertions(+)
+ 5 files changed, 714 insertions(+)
+ create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.h
@@ -22,6 +24,18 @@ index c5f532e41..fc17a75f3 100644
  obj-$(CONFIG_POWERNV_OP_PANEL)	+= powernv-op-panel.o
  obj-$(CONFIG_ADI)		+= adi.o
 +obj-y                          += ivshmem/
+diff --git a/drivers/char/ivshmem/Kconfig b/drivers/char/ivshmem/Kconfig
+new file mode 100644
+index 000000000..f0f75200c
+--- /dev/null
++++ b/drivers/char/ivshmem/Kconfig
+@@ -0,0 +1,6 @@
++# Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
++# SPDX-License-Identifier: Apache-2.0
++
++config KVM_IVSHMEM_VM_COUNT
++	int "Application VMs count"
++	default 5
 diff --git a/drivers/char/ivshmem/Makefile b/drivers/char/ivshmem/Makefile
 new file mode 100644
 index 000000000..ecd1ca180
@@ -31,10 +45,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..e72e0e536
+index 000000000..d8709b313
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,676 @@
+@@ -0,0 +1,684 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -62,13 +76,18 @@ index 000000000..e72e0e536
 +#include <linux/proc_fs.h>
 +#include <linux/uio.h>
 +
++#ifndef CONFIG_KVM_IVSHMEM_VM_COUNT
++#warning CONFIG_KVM_IVSHMEM_VM_COUNT not defined. Assuming 5.
++#define CONFIG_KVM_IVSHMEM_VM_COUNT (5)
++#endif
++
 +DEFINE_SPINLOCK(rawhide_irq_lock);
-+#define VM_COUNT (3)
++#define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 +#define VECTORS_COUNT (2 * VM_COUNT)
 +#define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 +#define LOCAL_RESOURCE_READY_INT_VEC (1)
 +
-+//#define DEBUG
++#define DEBUG
 +#ifdef DEBUG
 +#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
 +  do {                                                                         \
@@ -172,8 +191,8 @@ index 000000000..e72e0e536
 +                      (unsigned long int)filp->private_data, cmd, arg);
 +  if ((unsigned long int)filp->private_data >= VM_COUNT &&
 +      cmd != SHMEM_IOCSETINSTANCENO) {
-+    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld",
-+           (unsigned long int)filp->private_data);
++    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld > VM_COUNT=%d",
++           (unsigned long int)filp->private_data, VM_COUNT);
 +    return -EINVAL;
 +  }
 +  switch (cmd) {
@@ -241,7 +260,7 @@ index 000000000..e72e0e536
 +      break;
 +    }
 +
-+    vec = ioctl_data.int_no /*arg*/ & 0xffff;
++    vec = ioctl_data.int_no & 0xffff;
 +#ifdef DEBUG_IOCTL
 +    KVM_IVSHMEM_DPRINTK("%ld ioctl cmd=%d fd=%d len=%d int_no=0x%x",
 +                        (unsigned long int)filp->private_data, ioctl_data.cmd,
@@ -340,6 +359,9 @@ index 000000000..e72e0e536
 +    spin_unlock(&rawhide_irq_lock);
 +  }
 +
++  if (!mask) {
++    printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x", req_events);
++  }
 +  return mask;
 +}
 +
