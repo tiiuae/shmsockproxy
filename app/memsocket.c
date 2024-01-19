@@ -568,11 +568,9 @@ void *run(void *arg) {
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
         } /* End of "data arrived from the peer via shared memory" */
 
-        /* Client side: received data from Wayland server. It needs to
-          be sent to the peer (server) */
+        /* Received data from Wayland or from waypipe. It needs to
+          be sent to the peer */
         else {
-          int conn_fd;
-
           if (!run_as_server) {
             conn_fd = get_remote_socket(instance_no, events[n].data.fd, 0, 1);
             DEBUG("get_remote_socket: %d", conn_fd);
