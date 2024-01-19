@@ -90,7 +90,7 @@
     report(tmp1, 1);                                                           \
   }
 
-enum { CMD_LOGIN, CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_START };
+enum { CMD_LOGIN, CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_DATA_CLOSE };
 #define FD_MAP_COUNT (sizeof(fd_map) / sizeof(fd_map[0]))
 struct {
   int my_fd;
@@ -412,14 +412,15 @@ int wait_shmem_ready(int instance_no, struct pollfd *my_buffer_fds) {
   }
 
   if (rv == 0 || (my_buffer_fds->revents & ~POLLOUT)) {
-    ERROR("unexpected event or timeout on shmem_fd %d: poll=%d fd=%d revents=0x%x "
+    ERROR("unexpected event or timeout on shmem_fd %d: poll=%d fd=%d "
+          "revents=0x%x "
           "events=0x%x",
           shmem_fd[instance_no], rv, my_buffer_fds->fd, my_buffer_fds->revents,
           my_buffer_fds->events);
-    return 1;
+    return 0;
   }
 
-  return 0;
+  return rv;
 }
 
 void *run(void *arg) {
@@ -463,7 +464,7 @@ void *run(void *arg) {
           }
 
           rv = wait_shmem_ready(instance_no, &my_buffer_fds);
-          if (rv) {
+          if (!rv) {
             ERROR("While creating fd#%d", conn_fd);
           }
           /* Send the connect request to the wayland peer */
@@ -517,12 +518,18 @@ void *run(void *arg) {
                    sizeof(my_shm_data[instance_no]->data));
           if (read_count <= 0) {
             ERROR("read from wayland socket failed fd=%d", events[n].data.fd);
-          } else {
+          }
+          if (read_count > 0 || events[n].events & EPOLLHUP) {
             DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
                   events[n].data.fd, conn_fd);
 
             /* Send the data to the peer Wayland app server */
-            my_shm_data[instance_no]->cmd = CMD_DATA;
+            if (events[n].events & EPOLLHUP) {
+              my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
+              events[n].events &= ~EPOLLHUP;
+            } else
+              my_shm_data[instance_no]->cmd = CMD_DATA;
+
             my_shm_data[instance_no]->fd = conn_fd;
             my_shm_data[instance_no]->len = read_count;
 
@@ -539,10 +546,11 @@ void *run(void *arg) {
 
         /* Both sides: Received data from the peer via shared memory*/
         else if (events[n].data.fd == shmem_fd[instance_no]) {
-          DEBUG("shmem_fd=%d event: 0x%x cmd: %d remote fd: %d remote len: %d",
-                shmem_fd[instance_no], events[n].events,
-                peer_shm_data[instance_no]->cmd, peer_shm_data[instance_no]->fd,
-                peer_shm_data[instance_no]->len);
+          DEBUG(
+              "shmem_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote len: %d",
+              shmem_fd[instance_no], events[n].events,
+              peer_shm_data[instance_no]->cmd, peer_shm_data[instance_no]->fd,
+              peer_shm_data[instance_no]->len);
 
           switch (peer_shm_data[instance_no]->cmd) {
           case CMD_LOGIN:
@@ -562,6 +570,7 @@ void *run(void *arg) {
             peer_shm_data[instance_no]->fd = -1;
             break;
           case CMD_DATA:
+          case CMD_DATA_CLOSE:
             conn_fd = run_as_server
                           ? peer_shm_data[instance_no]->fd
                           : map_peer_fd(instance_no,
@@ -575,6 +584,15 @@ void *run(void *arg) {
                     peer_shm_data[instance_no]->len, conn_fd);
             }
             DEBUG("Received data has been sent", "");
+
+            if (peer_shm_data[instance_no]->cmd == CMD_DATA_CLOSE) {
+              if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, conn_fd,
+                            NULL) == -1) {
+                ERROR0("epoll_ctl: EPOLL_CTL_DEL");
+              }
+              DEBUG("Closing %d", conn_fd);
+              close(conn_fd);
+            }
             break;
           case CMD_CONNECT:
             make_wayland_connection(instance_no,
@@ -645,11 +663,19 @@ void *run(void *arg) {
                    sizeof(my_shm_data[instance_no]->data));
           if (read_count <= 0) {
             ERROR("read from connected client failed fd=%d", events[n].data.fd);
-          } else {
+          }
+
+          if (read_count > 0 || events[n].events & EPOLLHUP) {
             DEBUG("Read & sent %d bytes on fd#%d", read_count,
                   events[n].data.fd);
+
+            if (events[n].events & EPOLLHUP) {
+              my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
+              events[n].events &= ~EPOLLHUP;
+            } else
+              my_shm_data[instance_no]->cmd = CMD_DATA;
+
             /* Send the data to the wayland display side */
-            my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = events[n].data.fd;
             my_shm_data[instance_no]->len = read_count;
 
