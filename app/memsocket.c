@@ -518,12 +518,18 @@ void *run(void *arg) {
                    sizeof(my_shm_data[instance_no]->data));
           if (read_count <= 0) {
             ERROR("read from wayland socket failed fd=%d", events[n].data.fd);
-          } else {
+          }
+          if (read_count > 0 || events[n].events & EPOLLHUP) {
             DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
                   events[n].data.fd, conn_fd);
 
             /* Send the data to the peer Wayland app server */
-            my_shm_data[instance_no]->cmd = CMD_DATA;
+            if (events[n].events & EPOLLHUP) {
+              my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
+              events[n].events &= ~EPOLLHUP;
+            } else
+              my_shm_data[instance_no]->cmd = CMD_DATA;
+
             my_shm_data[instance_no]->fd = conn_fd;
             my_shm_data[instance_no]->len = read_count;
 
@@ -579,19 +585,10 @@ void *run(void *arg) {
             }
             DEBUG("Received data has been sent", "");
 
-            if (peer_shm_data[instance_no]->cmd == CMD_DATA_CLOSE) {
-              if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, conn_fd,
-                            NULL) == -1) {
-                ERROR0("epoll_ctl: EPOLL_CTL_DEL");
-              }
-              DEBUG("Closing %d", conn_fd);
-              close(conn_fd);
+            if (peer_shm_data[instance_no]->cmd == CMD_DATA) {
+              break;
             }
-            break;
-          case CMD_CONNECT:
-            make_wayland_connection(instance_no,
-                                    peer_shm_data[instance_no]->fd);
-            break;
+            /* no break if we need to the the fd */
           case CMD_CLOSE:
             if (run_as_server) {
               conn_fd = peer_shm_data[instance_no]->fd;
@@ -609,6 +606,10 @@ void *run(void *arg) {
               }
               close(conn_fd);
             }
+            break;
+          case CMD_CONNECT:
+            make_wayland_connection(instance_no,
+                                    peer_shm_data[instance_no]->fd);
             break;
           default:
             ERROR("Invalid CMD 0x%x from peer!",
@@ -657,11 +658,19 @@ void *run(void *arg) {
                    sizeof(my_shm_data[instance_no]->data));
           if (read_count <= 0) {
             ERROR("read from connected client failed fd=%d", events[n].data.fd);
-          } else {
+          }
+
+          if (read_count > 0 || events[n].events & EPOLLHUP) {
             DEBUG("Read & sent %d bytes on fd#%d", read_count,
                   events[n].data.fd);
+
+            if (events[n].events & EPOLLHUP) {
+              my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
+              events[n].events &= ~EPOLLHUP;
+            } else
+              my_shm_data[instance_no]->cmd = CMD_DATA;
+
             /* Send the data to the wayland display side */
-            my_shm_data[instance_no]->cmd = CMD_DATA;
             my_shm_data[instance_no]->fd = events[n].data.fd;
             my_shm_data[instance_no]->len = read_count;
 
