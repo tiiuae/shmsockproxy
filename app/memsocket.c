@@ -327,7 +327,7 @@ void shmem_init(int instance_no) {
   }
   vm_id = vm_id << 16;
   if (run_as_server) {
-     my_vmid = &vm_control->server_data[instance_no].server_vmid;
+    my_vmid = &vm_control->server_data[instance_no].server_vmid;
   } else {
     my_vmid = &vm_control->client_vmid;
     vm_control->server_data[instance_no].server_vmid = UNKNOWN_PEER;
@@ -576,7 +576,8 @@ void *run(void *arg) {
           be sent to the peer */
         else {
           if (!run_as_server) {
-            conn_fd = get_remote_socket(instance_no, events[n].data.fd, 0, IGNORE_ERROR);
+            conn_fd = get_remote_socket(instance_no, events[n].data.fd, 0,
+                                        IGNORE_ERROR);
             DEBUG("get_remote_socket: %d", conn_fd);
           } else {
             conn_fd = events[n].data.fd;
@@ -608,7 +609,8 @@ void *run(void *arg) {
 
               /* unmap local fd */
               if (!run_as_server)
-                get_remote_socket(instance_no, events[n].data.fd, CLOSE_FD, IGNORE_ERROR);
+                get_remote_socket(instance_no, events[n].data.fd, CLOSE_FD,
+                                  IGNORE_ERROR);
               /* close local fd*/
               close(events[n].data.fd);
             } else
@@ -623,11 +625,13 @@ void *run(void *arg) {
             ioctl_data.fd = my_shm_data[instance_no]->fd;
             ioctl_data.len = 0;
 #endif
-
+            DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d",
+                  my_shm_data[instance_no]->cmd, my_shm_data[instance_no]->fd,
+                  my_shm_data[instance_no]->read_count);
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
           }
         } /* received data from Wayland/waypipe server */
-      } /* events[n].events & EPOLLIN */
+      }   /* events[n].events & EPOLLIN */
 
       /* Handling connection close */
       if (events[n].events & (EPOLLHUP | EPOLLERR)) {
@@ -644,12 +648,13 @@ void *run(void *arg) {
           my_shm_data[instance_no]->fd = events[n].data.fd;
         else {
           DEBUG("get_remote_socket: %d",
-                get_remote_socket(instance_no, events[n].data.fd, 0, IGNORE_ERROR));
-          my_shm_data[instance_no]->fd =
-              get_remote_socket(instance_no, events[n].data.fd, CLOSE_FD, IGNORE_ERROR);
+                get_remote_socket(instance_no, events[n].data.fd, 0,
+                                  IGNORE_ERROR));
+          my_shm_data[instance_no]->fd = get_remote_socket(
+              instance_no, events[n].data.fd, CLOSE_FD, IGNORE_ERROR);
         }
         if (my_shm_data[instance_no]->fd > 0) {
-          DEBUG("Sending close request for %d", my_shm_data[instance_no]->fd);
+          DEBUG("ioctl ending close request for %d", my_shm_data[instance_no]->fd);
 
           ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
