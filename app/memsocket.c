@@ -627,7 +627,7 @@ void *run(void *arg) {
 #endif
             DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d",
                   my_shm_data[instance_no]->cmd, my_shm_data[instance_no]->fd,
-                  my_shm_data[instance_no]->read_count);
+                  my_shm_data[instance_no]->len);
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
           }
         } /* received data from Wayland/waypipe server */
