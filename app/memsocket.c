@@ -346,6 +346,7 @@ void shmem_init(int instance_no) {
                 &ev) == -1) {
     FATAL("epoll_ctl: -1");
   }
+  /* Force releasing output buffer */
   ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
 
   INFO("shared memory initialized", "");
@@ -594,15 +595,17 @@ void *run(void *arg) {
           read_count =
               read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
                    sizeof(my_shm_data[instance_no]->data));
+
           if (read_count <= 0) {
             ERROR("read from wayland/waypipe socket failed fd=%d",
                   events[n].data.fd);
-          }
-          if (read_count > 0) {
+            /* Release output buffer */
+            ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
+
+          } else { /* read_count > 0 */
             DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
                   events[n].data.fd, conn_fd);
 
-            /* Send the data to the peer wayland/waypipe */
             if (events[n].events & EPOLLHUP) {
               my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
               events[n].events &= ~EPOLLHUP;
@@ -638,6 +641,7 @@ void *run(void *arg) {
         DEBUG("Closing fd#%d", events[n].data.fd);
 
         // Inform the peer that the closed is being closed
+        /* Lock output buffer */
         rv = wait_shmem_ready(instance_no, &my_buffer_fds);
         if (rv < 0) {
           ERROR("On close fd#%d", events[n].data.fd);
@@ -654,7 +658,8 @@ void *run(void *arg) {
               instance_no, events[n].data.fd, CLOSE_FD, IGNORE_ERROR);
         }
         if (my_shm_data[instance_no]->fd > 0) {
-          DEBUG("ioctl ending close request for %d", my_shm_data[instance_no]->fd);
+          DEBUG("ioctl ending close request for %d",
+                my_shm_data[instance_no]->fd);
 
           ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
@@ -664,6 +669,9 @@ void *run(void *arg) {
 #endif
 
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
+        } else { /* unlock output buffer */
+          ERROR("Attempt to close invalid fd %d", events[n].data.fd);
+          ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
         }
         if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
                       NULL) == -1) {
