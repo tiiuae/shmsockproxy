@@ -549,14 +549,8 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   }
 
   if (request_msix_vectors(&kvm_ivshmem_dev, VECTORS_COUNT) != 0) {
-    printk(KERN_INFO "KVM_IVSHMEM: regular IRQs");
-    if (request_irq(pdev->irq, kvm_ivshmem_interrupt, IRQF_SHARED,
-                    "kvm_ivshmem", &kvm_ivshmem_dev)) {
-      printk(KERN_ERR "KVM_IVSHMEM: cannot get interrupt %d", pdev->irq);
-      printk(KERN_ERR "KVM_IVSHMEM: irq = %u regaddr = %x reg_size = %d",
-             pdev->irq, kvm_ivshmem_dev.regaddr, kvm_ivshmem_dev.reg_size);
-      goto reg_release;
-    }
+    printk(KERN_ERR "KVM_IVSHMEM: Check ivshmem and qemu configured interrupts number");
+    goto reg_release;
   } else {
     printk(KERN_INFO "KVM_IVSHMEM: MSI-X enabled");
   }
