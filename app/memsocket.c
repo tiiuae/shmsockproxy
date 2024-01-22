@@ -469,7 +469,7 @@ void *run(void *arg) {
             FATAL("epoll_ctl: conn_fd");
           }
 
-          DEBUG(">>> shmem");
+          DEBUG(">>> shmem", "");
           rv = wait_shmem_ready(instance_no, &my_buffer_fds);
           if (rv <= 0) {
             ERROR("While creating fd#%d", conn_fd);
@@ -485,7 +485,7 @@ void *run(void *arg) {
           ioctl_data.fd = my_shm_data[instance_no]->fd;
           ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
-          DEBUG("<<< shmem");
+          DEBUG("<<< shmem", "");
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
           DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
         }
@@ -572,7 +572,7 @@ void *run(void *arg) {
           ioctl_data.fd = 0;
           ioctl_data.len = 0;
 #endif
-          DEBUG("<<< shmem");
+          DEBUG("<<< shmem", "");
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
         } /* End of "data arrived from the peer via shared memory" */
 
@@ -589,7 +589,7 @@ void *run(void *arg) {
 
           /* Wait for the memory buffer to be ready */
           DEBUG("Data from wayland/waypipe. Waiting for shmem buffer", "");
-          DEBUG(">>> shmem");
+          DEBUG(">>> shmem", "");
           rv = wait_shmem_ready(instance_no, &my_buffer_fds);
           if (rv <= 0) {
             ERROR("While reading from fd#%d", conn_fd);
@@ -604,7 +604,7 @@ void *run(void *arg) {
             ERROR("read from wayland/waypipe socket failed fd=%d",
                   events[n].data.fd);
             /* Release output buffer */
-            DEBUG("<<< shmem");
+            DEBUG("<<< shmem", "");
             ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
 
           } else { /* read_count > 0 */
@@ -636,7 +636,7 @@ void *run(void *arg) {
             DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d",
                   my_shm_data[instance_no]->cmd, my_shm_data[instance_no]->fd,
                   my_shm_data[instance_no]->len);
-            DEBUG("<<< shmem");
+            DEBUG("<<< shmem", "");
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
           }
         } /* received data from Wayland/waypipe server */
@@ -648,7 +648,7 @@ void *run(void *arg) {
 
         // Inform the peer that the closed is being closed
         /* Lock output buffer */
-        DEBUG(">>> shmem");
+        DEBUG(">>> shmem", "");
         rv = wait_shmem_ready(instance_no, &my_buffer_fds);
         if (rv < 0) {
           ERROR("On close fd#%d", events[n].data.fd);
@@ -674,7 +674,7 @@ void *run(void *arg) {
           ioctl_data.fd = my_shm_data[instance_no]->fd;
           ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
-          DEBUG("<<< shmem");
+          DEBUG("<<< shmem", "");
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
         } else { /* unlock output buffer */
           ERROR("Attempt to close invalid fd %d", events[n].data.fd);
