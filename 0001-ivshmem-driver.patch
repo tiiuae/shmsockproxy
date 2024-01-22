@@ -1,6 +1,6 @@
-From 5e76b9b1486e949e4bbe2188737320904b1215b3 Mon Sep 17 00:00:00 2001
+From 33b38800c4991d2246254c8c49785d19f3af71c2 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Fri, 19 Jan 2024 15:42:07 +0400
+Date: Mon, 22 Jan 2024 11:28:20 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 684 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 678 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 6 files changed, 716 insertions(+)
+ 6 files changed, 710 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..d8709b313
+index 000000000..b8345a3a8
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,684 @@
+@@ -0,0 +1,678 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -612,14 +612,8 @@ index 000000000..d8709b313
 +  }
 +
 +  if (request_msix_vectors(&kvm_ivshmem_dev, VECTORS_COUNT) != 0) {
-+    printk(KERN_INFO "KVM_IVSHMEM: regular IRQs");
-+    if (request_irq(pdev->irq, kvm_ivshmem_interrupt, IRQF_SHARED,
-+                    "kvm_ivshmem", &kvm_ivshmem_dev)) {
-+      printk(KERN_ERR "KVM_IVSHMEM: cannot get interrupt %d", pdev->irq);
-+      printk(KERN_ERR "KVM_IVSHMEM: irq = %u regaddr = %x reg_size = %d",
-+             pdev->irq, kvm_ivshmem_dev.regaddr, kvm_ivshmem_dev.reg_size);
-+      goto reg_release;
-+    }
++    printk(KERN_ERR "KVM_IVSHMEM: Check ivshmem and qemu configured interrupts number");
++    goto reg_release;
 +  } else {
 +    printk(KERN_INFO "KVM_IVSHMEM: MSI-X enabled");
 +  }
