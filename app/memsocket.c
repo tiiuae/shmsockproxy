@@ -112,7 +112,6 @@ int epollfd[VM_COUNT];
 char *socket_path;
 int server_socket = -1, shmem_fd[VM_COUNT];
 volatile int *my_vmid = NULL;
-int peer_vm_id[VM_COUNT];
 vm_data *my_shm_data[VM_COUNT], *peer_shm_data[VM_COUNT];
 int run_as_server = 0;
 int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
@@ -369,11 +368,10 @@ void thread_init(int instance_no) {
      * Add the socket fd to the epollfd
      */
     server_init(instance_no);
-    peer_vm_id[instance_no] = vm_control->client_vmid;
-    local_rr_int_no[instance_no] = peer_vm_id[instance_no] |
+    local_rr_int_no[instance_no] = vm_control->client_vmid |
                                    (instance_no << 1) |
                                    LOCAL_RESOURCE_READY_INT_VEC;
-    remote_rc_int_no[instance_no] = peer_vm_id[instance_no] |
+    remote_rc_int_no[instance_no] = vm_control->client_vmid |
                                     (instance_no << 1) |
                                     REMOTE_RESOURCE_CONSUMED_INT_VEC;
     /*
@@ -383,8 +381,8 @@ void thread_init(int instance_no) {
     my_shm_data[instance_no]->fd = *my_vmid;
     my_shm_data[instance_no]->len = 0;
 
-    ioctl_data.int_no = vm_control->client_vmid |
-                        (instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC);
+    ioctl_data.int_no = local_rr_int_no[instance_no];
+
 #ifdef DEBUG_IOCTL
     ioctl_data.cmd = my_shm_data[instance_no]->cmd;
     ioctl_data.fd = my_shm_data[instance_no]->fd;
@@ -392,8 +390,8 @@ void thread_init(int instance_no) {
 #endif
 
     res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
-    DEBUG("Client #%d: sent login vmid: 0x%x ioctl result=%d peer_vm_id=0x%x",
-          instance_no, *my_vmid, res, peer_vm_id[instance_no]);
+    DEBUG("Client #%d: sent login vmid: 0x%x ioctl result=%d client vm_id=0x%x",
+          instance_no, *my_vmid, res, vm_control->client_vmid);
   }
 }
 
@@ -502,11 +500,10 @@ void *run(void *arg) {
             /* If the peer VM starts again, close all opened file handles */
             close_peer_vm(instance_no);
 
-            peer_vm_id[instance_no] = peer_shm_data[instance_no]->fd;
-            local_rr_int_no[instance_no] = peer_vm_id[instance_no] |
+            local_rr_int_no[instance_no] = peer_shm_data[instance_no]->fd |
                                            (instance_no << 1) |
                                            LOCAL_RESOURCE_READY_INT_VEC;
-            remote_rc_int_no[instance_no] = peer_vm_id[instance_no] |
+            remote_rc_int_no[instance_no] = peer_shm_data[instance_no]->fd |
                                             (instance_no << 1) |
                                             REMOTE_RESOURCE_CONSUMED_INT_VEC;
 
@@ -701,7 +698,6 @@ int main(int argc, char **argv) {
   for (i = 0; i < VM_COUNT; i++) {
     my_shm_data[i] = NULL;
     peer_shm_data[i] = NULL;
-    peer_vm_id[i] = -1;
     shmem_fd[i] = -1;
   }
 
