@@ -1,6 +1,6 @@
-From 091f53e076aaafea0c74de3e2dbca0c7e1cea989 Mon Sep 17 00:00:00 2001
+From 5be67d79542b78366523592a820211a0139a6742 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Mon, 22 Jan 2024 17:15:09 +0400
+Date: Mon, 22 Jan 2024 17:41:41 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..b8345a3a8
+index 000000000..969207843
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,678 @@
@@ -99,7 +99,7 @@ index 000000000..b8345a3a8
 +#define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 +#define LOCAL_RESOURCE_READY_INT_VEC (1)
 +
-+#define DEBUG
++//#define DEBUG
 +#ifdef DEBUG
 +#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
 +  do {                                                                         \
