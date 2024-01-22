@@ -111,7 +111,8 @@ typedef struct {
 int epollfd[VM_COUNT];
 char *socket_path;
 int server_socket = -1, shmem_fd[VM_COUNT];
-int my_vmid = -1, peer_vm_id[VM_COUNT];
+volatile int *my_vmid = NULL;
+int peer_vm_id[VM_COUNT];
 vm_data *my_shm_data[VM_COUNT], *peer_shm_data[VM_COUNT];
 int run_as_server = 0;
 int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
@@ -280,7 +281,7 @@ int get_remote_socket(int instance_no, int my_fd, int close_fd,
 
 void shmem_init(int instance_no) {
 
-  int res = -1;
+  int res = -1, vm_id;
   struct epoll_event ev;
   long int shmem_size;
 
@@ -319,18 +320,19 @@ void shmem_init(int instance_no) {
   }
 
   /* get my VM Id */
-  res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &my_vmid);
+  res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &vm_id);
   if (res < 0) {
     FATAL("ioctl SHMEM_IOCIVPOSN failed");
   }
-  my_vmid = my_vmid << 16;
+  vm_id = vm_id << 16;
   if (run_as_server) {
-    vm_control->server_data[instance_no].server_vmid = my_vmid;
+     my_vmid = &vm_control->server_data[instance_no].server_vmid;
   } else {
-    vm_control->client_vmid = my_vmid;
+    my_vmid = &vm_control->client_vmid;
     vm_control->server_data[instance_no].server_vmid = UNKNOWN_PEER;
   }
-  INFO("My VM id = 0x%x. Running as a ", my_vmid);
+  *my_vmid = vm_id;
+  INFO("My VM id = 0x%x. Running as a ", *my_vmid);
   if (run_as_server) {
     INFO("server", "");
   } else {
@@ -378,7 +380,7 @@ void thread_init(int instance_no) {
      * Send LOGIN cmd to the client. Supply my_vmid
      */
     my_shm_data[instance_no]->cmd = CMD_LOGIN;
-    my_shm_data[instance_no]->fd = my_vmid;
+    my_shm_data[instance_no]->fd = *my_vmid;
     my_shm_data[instance_no]->len = 0;
 
     ioctl_data.int_no = vm_control->client_vmid |
@@ -391,7 +393,7 @@ void thread_init(int instance_no) {
 
     res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
     DEBUG("Client #%d: sent login vmid: 0x%x ioctl result=%d peer_vm_id=0x%x",
-          instance_no, my_vmid, res, peer_vm_id[instance_no]);
+          instance_no, *my_vmid, res, peer_vm_id[instance_no]);
   }
 }
 
