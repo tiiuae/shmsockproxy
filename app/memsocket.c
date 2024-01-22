@@ -678,7 +678,7 @@ void *run(void *arg) {
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
         } else { /* unlock output buffer */
           ERROR("Attempt to close invalid fd %d", events[n].data.fd);
-          DEBUG("<<< shmem reset");
+          DEBUG("<<< shmem reset", "");
           ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
         }
         if (epoll_ctl(epollfd[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
