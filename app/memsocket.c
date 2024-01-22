@@ -37,6 +37,8 @@
 #define SHMEM_POLL_TIMEOUT (3000)
 #define SHMEM_BUFFER_SIZE (1024000)
 #define UNKNOWN_PEER (-1)
+#define CLOSE_FD (1)
+#define IGNORE_ERROR (1)
 #ifndef DEBUG_ON
 #define DEBUG(fmt, ...)                                                        \
   {}
@@ -574,7 +576,7 @@ void *run(void *arg) {
           be sent to the peer */
         else {
           if (!run_as_server) {
-            conn_fd = get_remote_socket(instance_no, events[n].data.fd, 0, 1);
+            conn_fd = get_remote_socket(instance_no, events[n].data.fd, 0, IGNORE_ERROR);
             DEBUG("get_remote_socket: %d", conn_fd);
           } else {
             conn_fd = events[n].data.fd;
@@ -595,7 +597,7 @@ void *run(void *arg) {
             ERROR("read from wayland/waypipe socket failed fd=%d",
                   events[n].data.fd);
           }
-          if (read_count > 0 || events[n].events & EPOLLHUP) {
+          if (read_count > 0) {
             DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
                   events[n].data.fd, conn_fd);
 
@@ -603,6 +605,12 @@ void *run(void *arg) {
             if (events[n].events & EPOLLHUP) {
               my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
               events[n].events &= ~EPOLLHUP;
+
+              /* unmap local fd */
+              if (!run_as_server)
+                get_remote_socket(instance_no, events[n].data.fd, CLOSE_FD, IGNORE_ERROR);
+              /* close local fd*/
+              close(events[n].data.fd);
             } else
               my_shm_data[instance_no]->cmd = CMD_DATA;
 
@@ -619,7 +627,7 @@ void *run(void *arg) {
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
           }
         } /* received data from Wayland/waypipe server */
-      }
+      } /* events[n].events & EPOLLIN */
 
       /* Handling connection close */
       if (events[n].events & (EPOLLHUP | EPOLLERR)) {
@@ -636,9 +644,9 @@ void *run(void *arg) {
           my_shm_data[instance_no]->fd = events[n].data.fd;
         else {
           DEBUG("get_remote_socket: %d",
-                get_remote_socket(instance_no, events[n].data.fd, 0, 1));
+                get_remote_socket(instance_no, events[n].data.fd, 0, IGNORE_ERROR));
           my_shm_data[instance_no]->fd =
-              get_remote_socket(instance_no, events[n].data.fd, 1, 1);
+              get_remote_socket(instance_no, events[n].data.fd, CLOSE_FD, IGNORE_ERROR);
         }
         if (my_shm_data[instance_no]->fd > 0) {
           DEBUG("Sending close request for %d", my_shm_data[instance_no]->fd);
