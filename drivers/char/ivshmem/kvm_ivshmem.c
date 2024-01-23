@@ -302,7 +302,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
     spin_lock_irqsave(&rawhide_irq_lock, flags);
     if (local_resource_count[(unsigned long int)filp->private_data]) {
       KVM_IVSHMEM_DPRINTK(
-          "%ld poll: in: local_resource_count=%d",
+          "%ld poll: out: local_resource_count=%d",
           (unsigned long int)filp->private_data,
           local_resource_count[(unsigned long int)filp->private_data]);
 
@@ -412,7 +412,6 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
 static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   struct kvm_ivshmem_device *dev = dev_instance;
   int i;
-  unsigned int flags;
 
   if (unlikely(dev == NULL)) {
     KVM_IVSHMEM_DPRINTK("return IRQ_NONE");
@@ -427,9 +426,9 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i,
                             remote_resource_count[i]);
       }
-      spin_lock_irqsave(&rawhide_irq_lock, flags);
+      spin_lock(&rawhide_irq_lock);
       remote_resource_count[i] = 1;
-      spin_unlock_irqrestore(&rawhide_irq_lock, flags);
+      spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&remote_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
@@ -439,9 +438,9 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
                             local_resource_count[i]);
       }
-      spin_lock_irqsave(&rawhide_irq_lock, flags);
+      spin_lock(&rawhide_irq_lock);
       local_resource_count[i] = 1;
-      spin_unlock_irqrestore(&rawhide_irq_lock, flags);
+      spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }

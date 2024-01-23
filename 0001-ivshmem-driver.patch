@@ -1,6 +1,6 @@
-From 66039c43970eb5cfa30cf9c19333f5fd3e63e453 Mon Sep 17 00:00:00 2001
+From da87f71b051374a60c5c70221cc31bf471da88aa Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 23 Jan 2024 11:40:23 +0400
+Date: Tue, 23 Jan 2024 13:15:28 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 689 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 688 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 6 files changed, 721 insertions(+)
+ 6 files changed, 720 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..c1c0a7a5e
+index 000000000..5f65f0ef6
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,689 @@
+@@ -0,0 +1,688 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -365,7 +365,7 @@ index 000000000..c1c0a7a5e
 +    spin_lock_irqsave(&rawhide_irq_lock, flags);
 +    if (local_resource_count[(unsigned long int)filp->private_data]) {
 +      KVM_IVSHMEM_DPRINTK(
-+          "%ld poll: in: local_resource_count=%d",
++          "%ld poll: out: local_resource_count=%d",
 +          (unsigned long int)filp->private_data,
 +          local_resource_count[(unsigned long int)filp->private_data]);
 +
@@ -475,7 +475,6 @@ index 000000000..c1c0a7a5e
 +static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
 +  struct kvm_ivshmem_device *dev = dev_instance;
 +  int i;
-+  unsigned int flags;
 +
 +  if (unlikely(dev == NULL)) {
 +    KVM_IVSHMEM_DPRINTK("return IRQ_NONE");
@@ -490,9 +489,9 @@ index 000000000..c1c0a7a5e
 +        KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i,
 +                            remote_resource_count[i]);
 +      }
-+      spin_lock_irqsave(&rawhide_irq_lock, flags);
++      spin_lock(&rawhide_irq_lock);
 +      remote_resource_count[i] = 1;
-+      spin_unlock_irqrestore(&rawhide_irq_lock, flags);
++      spin_unlock(&rawhide_irq_lock);
 +      wake_up_interruptible(&remote_data_ready_wait_queue[i]);
 +      return IRQ_HANDLED;
 +    }
@@ -502,9 +501,9 @@ index 000000000..c1c0a7a5e
 +        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
 +                            local_resource_count[i]);
 +      }
-+      spin_lock_irqsave(&rawhide_irq_lock, flags);
++      spin_lock(&rawhide_irq_lock);
 +      local_resource_count[i] = 1;
-+      spin_unlock_irqrestore(&rawhide_irq_lock, flags);
++      spin_unlock(&rawhide_irq_lock);
 +      wake_up_interruptible(&local_data_ready_wait_queue[i]);
 +      return IRQ_HANDLED;
 +    }
@@ -752,7 +751,7 @@ index 000000000..c1c0a7a5e
 +MODULE_VERSION("1.0");
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.h b/drivers/char/ivshmem/kvm_ivshmem.h
 new file mode 100644
-index 000000000..b9f2d64ff
+index 000000000..70cb5951c
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.h
 @@ -0,0 +1,22 @@
@@ -770,7 +769,7 @@ index 000000000..b9f2d64ff
 +#define SHMEM_IOCDORBELL _IOR(SHMEM_IOC_MAGIC, 6, int)
 +#define SHMEM_IOCNOP _IOR(SHMEM_IOC_MAGIC, 7, int)
 +
-+//#define DEBUG_IOCTL
++#define DEBUG_IOCTL
 +struct ioctl_data {
 +   int peer_vm_id;
 +   unsigned int int_no;
