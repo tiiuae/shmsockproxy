@@ -473,6 +473,7 @@ void *run(void *arg) {
           rv = wait_shmem_ready(instance_no, &my_buffer_fds);
           if (rv <= 0) {
             ERROR("While creating fd#%d", conn_fd);
+            exit(9);
           }
           /* Send the connect request to the wayland peer */
           my_shm_data[instance_no]->cmd = CMD_CONNECT;
@@ -593,6 +594,7 @@ void *run(void *arg) {
           rv = wait_shmem_ready(instance_no, &my_buffer_fds);
           if (rv <= 0) {
             ERROR("While reading from fd#%d", conn_fd);
+            exit(9);
           }
 
           DEBUG("Reading from wayland/waypipe socket", "");
@@ -652,6 +654,7 @@ void *run(void *arg) {
         rv = wait_shmem_ready(instance_no, &my_buffer_fds);
         if (rv < 0) {
           ERROR("On close fd#%d", events[n].data.fd);
+          exit(9);
         }
 
         my_shm_data[instance_no]->cmd = CMD_CLOSE;
