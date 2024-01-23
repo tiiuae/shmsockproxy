@@ -1,6 +1,6 @@
-From 0c324e27a1bf8646c134b82308a5bd880d8bd5ee Mon Sep 17 00:00:00 2001
+From 4ee878a8460678e007b22534306f0ee334a46dd4 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 23 Jan 2024 10:07:09 +0400
+Date: Tue, 23 Jan 2024 11:30:29 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 684 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 689 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 6 files changed, 716 insertions(+)
+ 6 files changed, 721 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..51be2b085
+index 000000000..e5ad4474f
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,684 @@
+@@ -0,0 +1,689 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -99,7 +99,7 @@ index 000000000..51be2b085
 +#define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 +#define LOCAL_RESOURCE_READY_INT_VEC (1)
 +
-+//#define DEBUG
++#define DEBUG
 +#ifdef DEBUG
 +#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
 +  do {                                                                         \
@@ -318,7 +318,10 @@ index 000000000..51be2b085
 +    break;
 +
 +  case SHMEM_IOCNOP:
-+    printk(KERN_INFO "KVM_IVSHMEM: NOP %ld", arg);
++    KVM_IVSHMEM_DPRINTK(
++        "%ld local %d: remote:%d", (unsigned long int)filp->private_data,
++        local_resource_count[(unsigned long int)filp->private_data],
++        remote_resource_count[(unsigned long int)filp->private_data]);
 +    break;
 +
 +  default:
@@ -373,7 +376,8 @@ index 000000000..51be2b085
 +  }
 +
 +  // if (!mask) {
-+  //   printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x", req_events);
++  //   printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x",
++  //   req_events);
 +  // }
 +  return mask;
 +}
@@ -618,7 +622,8 @@ index 000000000..51be2b085
 +  }
 +
 +  if (request_msix_vectors(&kvm_ivshmem_dev, VECTORS_COUNT) != 0) {
-+    printk(KERN_ERR "KVM_IVSHMEM: Check ivshmem and qemu configured interrupts number");
++    printk(KERN_ERR
++           "KVM_IVSHMEM: Check ivshmem and qemu configured interrupts number");
 +    goto reg_release;
 +  } else {
 +    printk(KERN_INFO "KVM_IVSHMEM: MSI-X enabled");

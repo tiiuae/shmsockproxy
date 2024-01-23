@@ -36,7 +36,7 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 #define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
 #define LOCAL_RESOURCE_READY_INT_VEC (1)
 
-//#define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
   do {                                                                         \
@@ -255,7 +255,10 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     break;
 
   case SHMEM_IOCNOP:
-    printk(KERN_INFO "KVM_IVSHMEM: NOP %ld", arg);
+    KVM_IVSHMEM_DPRINTK(
+        "%ld local %d: remote:%d", (unsigned long int)filp->private_data,
+        local_resource_count[(unsigned long int)filp->private_data],
+        remote_resource_count[(unsigned long int)filp->private_data]);
     break;
 
   default:
@@ -310,7 +313,8 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
   }
 
   // if (!mask) {
-  //   printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x", req_events);
+  //   printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x",
+  //   req_events);
   // }
   return mask;
 }
@@ -555,7 +559,8 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   }
 
   if (request_msix_vectors(&kvm_ivshmem_dev, VECTORS_COUNT) != 0) {
-    printk(KERN_ERR "KVM_IVSHMEM: Check ivshmem and qemu configured interrupts number");
+    printk(KERN_ERR
+           "KVM_IVSHMEM: Check ivshmem and qemu configured interrupts number");
     goto reg_release;
   } else {
     printk(KERN_INFO "KVM_IVSHMEM: MSI-X enabled");
