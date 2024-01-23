@@ -439,6 +439,7 @@ void *run(void *arg) {
   struct epoll_event ev;
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
+  unsigned int tmp;
 
   thread_init(instance_no);
   my_buffer_fds.fd = shmem_fd[instance_no];
@@ -453,7 +454,9 @@ void *run(void *arg) {
 
     for (n = 0; n < nfds; n++) {
 
-      DEBUG("Event 0x%x on fd %d", events[n].events, events[n].data.fd)
+      ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, &tmp);
+      DEBUG("Event 0x%x on fd %d %d-%d", events[n].events, events[n].data.fd, 
+        tmp >> 16, tmp & 0xffff)
 
       /* Handle the new connection on the socket */
       if (events[n].events & EPOLLIN) {
