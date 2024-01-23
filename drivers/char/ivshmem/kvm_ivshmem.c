@@ -135,7 +135,8 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                               unsigned long arg) {
 
   int rv = 0;
-  unsigned int tmp, flags;
+  unsigned int tmp;
+  unsigned long flags;
   uint32_t msg;
   struct ioctl_data ioctl_data;
 
@@ -266,7 +267,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     }
     KVM_IVSHMEM_DPRINTK(
         "%ld %x local %d counter=%d: remote:%d counter=%d", 
-        (unsigned long int)filp->private_data, tmp;
+        (unsigned long int)filp->private_data, tmp,
         local_resource_count[(unsigned long int)filp->private_data], in_counter,
         remote_resource_count[(unsigned long int)filp->private_data], out_counter);
     
@@ -288,7 +289,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
                                  struct poll_table_struct *wait) {
   __poll_t mask = 0;
   __poll_t req_events = poll_requested_events(wait);
-  unsigned int flags;
+  unsigned long flags;
 
   if (req_events & EPOLLIN) {
     poll_wait(

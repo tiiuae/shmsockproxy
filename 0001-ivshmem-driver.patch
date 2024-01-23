@@ -1,6 +1,6 @@
-From 9381c48f24e1b8cd46f3b7ceb677a05437def15b Mon Sep 17 00:00:00 2001
+From 59c388e7790cf38335cd966359c4e36b1b6b5cb2 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 23 Jan 2024 15:08:12 +0400
+Date: Tue, 23 Jan 2024 15:24:44 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 704 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 705 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 6 files changed, 736 insertions(+)
+ 6 files changed, 737 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..bd82a6f01
+index 000000000..301caead0
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,704 @@
+@@ -0,0 +1,705 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -198,7 +198,8 @@ index 000000000..bd82a6f01
 +                              unsigned long arg) {
 +
 +  int rv = 0;
-+  unsigned int tmp, flags;
++  unsigned int tmp;
++  unsigned long flags;
 +  uint32_t msg;
 +  struct ioctl_data ioctl_data;
 +
@@ -329,7 +330,7 @@ index 000000000..bd82a6f01
 +    }
 +    KVM_IVSHMEM_DPRINTK(
 +        "%ld %x local %d counter=%d: remote:%d counter=%d", 
-+        (unsigned long int)filp->private_data, tmp;
++        (unsigned long int)filp->private_data, tmp,
 +        local_resource_count[(unsigned long int)filp->private_data], in_counter,
 +        remote_resource_count[(unsigned long int)filp->private_data], out_counter);
 +    
@@ -351,7 +352,7 @@ index 000000000..bd82a6f01
 +                                 struct poll_table_struct *wait) {
 +  __poll_t mask = 0;
 +  __poll_t req_events = poll_requested_events(wait);
-+  unsigned int flags;
++  unsigned long flags;
 +
 +  if (req_events & EPOLLIN) {
 +    poll_wait(

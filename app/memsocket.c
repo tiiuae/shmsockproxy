@@ -472,8 +472,9 @@ void *run(void *arg) {
           DEBUG(">>> shmem", "");
           rv = wait_shmem_ready(instance_no, &my_buffer_fds);
           if (rv <= 0) {
-            ERROR("While creating fd#%d", conn_fd);
-            ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, 0);
+            unsigned int tmp = 0x1111;
+            ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, &tmp);
+            ERROR("While creating fd#%d data=0x%x", conn_fd, tmp);
             exit(9);
           }
           /* Send the connect request to the wayland peer */
@@ -594,8 +595,9 @@ void *run(void *arg) {
           DEBUG(">>> shmem", "");
           rv = wait_shmem_ready(instance_no, &my_buffer_fds);
           if (rv <= 0) {
-            ERROR("While reading from fd#%d", conn_fd);
-            ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, 0);
+            unsigned int tmp = 0xdead;
+            ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, &tmp);
+            ERROR("While reading from fd#%d data=0x%x", conn_fd, tmp);
             exit(9);
           }
 
@@ -655,8 +657,10 @@ void *run(void *arg) {
         DEBUG(">>> shmem", "");
         rv = wait_shmem_ready(instance_no, &my_buffer_fds);
         if (rv < 0) {
-          ERROR("On close fd#%d", events[n].data.fd);
-          ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, 0);
+
+          unsigned int tmp = 0xdeaddead;
+          ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, &tmp);
+          ERROR("On close fd#%d data=0x%x", events[n].data.fd, tmp);
           exit(9);
         }
 
