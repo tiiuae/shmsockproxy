@@ -635,7 +635,7 @@ void *run(void *arg) {
 #ifdef DEBUG_IOCTL
             ioctl_data.cmd = my_shm_data[instance_no]->cmd;
             ioctl_data.fd = my_shm_data[instance_no]->fd;
-            ioctl_data.len = 0;
+            ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
             DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d",
                   my_shm_data[instance_no]->cmd, my_shm_data[instance_no]->fd,
