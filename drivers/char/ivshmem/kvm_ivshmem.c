@@ -309,9 +309,9 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
     spin_unlock_irqrestore(&rawhide_irq_lock, flags);
   }
 
-  if (!mask) {
-    printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x", req_events);
-  }
+  // if (!mask) {
+  //   printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x", req_events);
+  // }
   return mask;
 }
 
