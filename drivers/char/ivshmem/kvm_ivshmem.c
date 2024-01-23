@@ -115,6 +115,9 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
     .fops = &kvm_ivshmem_ops,
 };
 
+// TODO: debug
+static int in_counter = 0, out_counter = 0;
+
 MODULE_DEVICE_TABLE(pci, kvm_ivshmem_id_table);
 
 static void kvm_ivshmem_remove_device(struct pci_dev *pdev);
@@ -255,10 +258,21 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     break;
 
   case SHMEM_IOCNOP:
+    unsigned int tmp;
+    
+    if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
+      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWLOCAL: %ld invalid argument",
+             (unsigned long int)filp->private_data);
+    }
     KVM_IVSHMEM_DPRINTK(
-        "%ld local %d: remote:%d", (unsigned long int)filp->private_data,
-        local_resource_count[(unsigned long int)filp->private_data],
-        remote_resource_count[(unsigned long int)filp->private_data]);
+        "%ld %x local %d counter=%d: remote:%d counter=%d", 
+        (unsigned long int)filp->private_data, tmp;
+        local_resource_count[(unsigned long int)filp->private_data], in_counter,
+        remote_resource_count[(unsigned long int)filp->private_data], out_counter);
+    
+    tmp = ((unsigned) out_counter) << 16 | (unsigned) (in_counter & 0xffff);
+    copy_to_user(arg, &tmp, sizeof(tmp));
+    
     break;
 
   default:
@@ -421,7 +435,8 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   KVM_IVSHMEM_DPRINTK("irq %d", irq);
   for (i = 0; i < VM_COUNT; i++) {
     if (irq == irq_local_resource_ready[i]) {
-      KVM_IVSHMEM_DPRINTK("%d wake up remote_data_ready_wait_queue", i);
+      out_counter++;
+      KVM_IVSHMEM_DPRINTK("%d wake up remote_data_ready_wait_queue count=%d", i, out_counter);
       if (remote_resource_count[i]) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i,
                             remote_resource_count[i]);
@@ -433,7 +448,8 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       return IRQ_HANDLED;
     }
     if (irq == irq_remote_resource_ready[i]) {
-      KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue", i);
+      in_counter++;
+      KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue count=%d", i, in_counter);
       if (local_resource_count[i]) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
                             local_resource_count[i]);

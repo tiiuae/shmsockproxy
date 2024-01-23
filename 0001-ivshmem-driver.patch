@@ -1,6 +1,6 @@
-From 45836e3c3c2f4394960cd3c5ccd9305a5c51d7be Mon Sep 17 00:00:00 2001
+From 9381c48f24e1b8cd46f3b7ceb677a05437def15b Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 23 Jan 2024 14:11:01 +0400
+Date: Tue, 23 Jan 2024 15:08:12 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 688 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 704 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 6 files changed, 720 insertions(+)
+ 6 files changed, 736 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..5f65f0ef6
+index 000000000..bd82a6f01
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,688 @@
+@@ -0,0 +1,704 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -177,6 +177,9 @@ index 000000000..5f65f0ef6
 +    .name = "ivshmem",
 +    .fops = &kvm_ivshmem_ops,
 +};
++
++// TODO: debug
++static int in_counter = 0, out_counter = 0;
 +
 +MODULE_DEVICE_TABLE(pci, kvm_ivshmem_id_table);
 +
@@ -318,10 +321,21 @@ index 000000000..5f65f0ef6
 +    break;
 +
 +  case SHMEM_IOCNOP:
++    unsigned int tmp;
++    
++    if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
++      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWLOCAL: %ld invalid argument",
++             (unsigned long int)filp->private_data);
++    }
 +    KVM_IVSHMEM_DPRINTK(
-+        "%ld local %d: remote:%d", (unsigned long int)filp->private_data,
-+        local_resource_count[(unsigned long int)filp->private_data],
-+        remote_resource_count[(unsigned long int)filp->private_data]);
++        "%ld %x local %d counter=%d: remote:%d counter=%d", 
++        (unsigned long int)filp->private_data, tmp;
++        local_resource_count[(unsigned long int)filp->private_data], in_counter,
++        remote_resource_count[(unsigned long int)filp->private_data], out_counter);
++    
++    tmp = ((unsigned) out_counter) << 16 | (unsigned) (in_counter & 0xffff);
++    copy_to_user(arg, &tmp, sizeof(tmp));
++    
 +    break;
 +
 +  default:
@@ -484,7 +498,8 @@ index 000000000..5f65f0ef6
 +  KVM_IVSHMEM_DPRINTK("irq %d", irq);
 +  for (i = 0; i < VM_COUNT; i++) {
 +    if (irq == irq_local_resource_ready[i]) {
-+      KVM_IVSHMEM_DPRINTK("%d wake up remote_data_ready_wait_queue", i);
++      out_counter++;
++      KVM_IVSHMEM_DPRINTK("%d wake up remote_data_ready_wait_queue count=%d", i, out_counter);
 +      if (remote_resource_count[i]) {
 +        KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i,
 +                            remote_resource_count[i]);
@@ -496,7 +511,8 @@ index 000000000..5f65f0ef6
 +      return IRQ_HANDLED;
 +    }
 +    if (irq == irq_remote_resource_ready[i]) {
-+      KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue", i);
++      in_counter++;
++      KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue count=%d", i, in_counter);
 +      if (local_resource_count[i]) {
 +        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
 +                            local_resource_count[i]);
