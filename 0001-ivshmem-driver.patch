@@ -1,6 +1,6 @@
-From 5be67d79542b78366523592a820211a0139a6742 Mon Sep 17 00:00:00 2001
+From 283bded417fb9c2bd03b6552faaa99bbd3988973 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Mon, 22 Jan 2024 17:41:41 +0400
+Date: Tue, 23 Jan 2024 09:21:08 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 678 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 682 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 6 files changed, 710 insertions(+)
+ 6 files changed, 714 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..969207843
+index 000000000..4a79ab94c
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,678 @@
+@@ -0,0 +1,682 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -484,7 +484,9 @@ index 000000000..969207843
 +        KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i,
 +                            remote_resource_count[i]);
 +      }
++      spin_lock(&rawhide_irq_lock);
 +      remote_resource_count[i] = 1;
++      spin_unlock(&rawhide_irq_lock);
 +      wake_up_interruptible(&remote_data_ready_wait_queue[i]);
 +      return IRQ_HANDLED;
 +    }
@@ -494,7 +496,9 @@ index 000000000..969207843
 +        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
 +                            local_resource_count[i]);
 +      }
++      spin_lock(&rawhide_irq_lock);
 +      local_resource_count[i] = 1;
++      spin_unlock(&rawhide_irq_lock);
 +      wake_up_interruptible(&local_data_ready_wait_queue[i]);
 +      return IRQ_HANDLED;
 +    }
