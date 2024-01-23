@@ -132,7 +132,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                               unsigned long arg) {
 
   int rv = 0;
-  unsigned int tmp;
+  unsigned int tmp, flags;
   uint32_t msg;
   struct ioctl_data ioctl_data;
 
@@ -163,9 +163,9 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
         tmp);
     KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
                         (unsigned long int)filp->private_data, rv);
-    spin_lock(&rawhide_irq_lock);
+    spin_lock_irq_save(&rawhide_irq_lock, flags);
     local_resource_count[(unsigned long int)filp->private_data] = 0;
-    spin_unlock(&rawhide_irq_lock);
+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     break;
 
   case SHMEM_IOCWREMOTE:
@@ -186,9 +186,9 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
         tmp);
     KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
                         (unsigned long int)filp->private_data, rv);
-    spin_lock(&rawhide_irq_lock);
+    spin_lock_irq_save(&rawhide_irq_lock, flags);
     remote_resource_count[(unsigned long int)filp->private_data] = 0;
-    spin_unlock(&rawhide_irq_lock);
+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     break;
 
   case SHMEM_IOCIVPOSN:
@@ -218,24 +218,24 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%x on vector 0x%x",
                         (unsigned long int)filp->private_data,
                         (ioctl_data.int_no >> 16), vec);
-    spin_lock(&rawhide_irq_lock);
+    spin_lock_irq_save(&rawhide_irq_lock, flags);
     if (vec & LOCAL_RESOURCE_READY_INT_VEC) {
       local_resource_count[(unsigned long int)filp->private_data] = 0;
     } else {
       remote_resource_count[(unsigned long int)filp->private_data] = 0;
     }
-    spin_unlock(&rawhide_irq_lock);
+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     writel(ioctl_data.int_no, kvm_ivshmem_dev.regs + Doorbell);
     break;
 
   case SHMEM_IOCRESTART:
-    spin_lock(&rawhide_irq_lock);
+    spin_lock_irq_save(&rawhide_irq_lock, flags);
     local_resource_count[(unsigned long int)filp->private_data] = 1;
-    spin_unlock(&rawhide_irq_lock);
+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     break;
 
   case SHMEM_IOCSETINSTANCENO:
-    spin_lock(&rawhide_irq_lock);
+    spin_lock_irq_save(&rawhide_irq_lock, flags);
     if (arg >= VM_COUNT) {
       printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", arg);
       rv = -EINVAL;
@@ -251,7 +251,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     local_resource_count[arg] = 1;
     remote_resource_count[arg] = 0;
   unlock:
-    spin_unlock(&rawhide_irq_lock);
+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     break;
 
   case SHMEM_IOCNOP:
@@ -271,6 +271,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
                                  struct poll_table_struct *wait) {
   __poll_t mask = 0;
   __poll_t req_events = poll_requested_events(wait);
+  unsigned int flags;
 
   if (req_events & EPOLLIN) {
     poll_wait(
@@ -278,7 +279,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
         &remote_data_ready_wait_queue[(unsigned long int)filp->private_data],
         wait);
 
-    spin_lock(&rawhide_irq_lock);
+    spin_lock_irq_save(&rawhide_irq_lock, flags);
     if (remote_resource_count[(unsigned long int)filp->private_data]) {
       KVM_IVSHMEM_DPRINTK(
           "%ld poll: in: remote_resource_count=%d",
@@ -287,7 +288,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
       remote_resource_count[(unsigned long int)filp->private_data] = 0;
       mask |= (POLLIN | POLLRDNORM);
     }
-    spin_unlock(&rawhide_irq_lock);
+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
   }
 
   if (req_events & EPOLLOUT) {
@@ -295,7 +296,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
         filp,
         &local_data_ready_wait_queue[(unsigned long int)filp->private_data],
         wait);
-    spin_lock(&rawhide_irq_lock);
+    spin_lock_irq_save(&rawhide_irq_lock, flags);
     if (local_resource_count[(unsigned long int)filp->private_data]) {
       KVM_IVSHMEM_DPRINTK(
           "%ld poll: in: local_resource_count=%d",
@@ -305,7 +306,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
       local_resource_count[(unsigned long int)filp->private_data] = 0;
       mask |= (POLLOUT | POLLWRNORM);
     }
-    spin_unlock(&rawhide_irq_lock);
+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
   }
 
   if (!mask) {
@@ -407,6 +408,7 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
 static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   struct kvm_ivshmem_device *dev = dev_instance;
   int i;
+  unsigned int flags;
 
   if (unlikely(dev == NULL)) {
     KVM_IVSHMEM_DPRINTK("return IRQ_NONE");
@@ -421,9 +423,9 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i,
                             remote_resource_count[i]);
       }
-      spin_lock(&rawhide_irq_lock);
+      spin_lock_irq_save(&rawhide_irq_lock, flags);
       remote_resource_count[i] = 1;
-      spin_unlock(&rawhide_irq_lock);
+      spin_unlock_irqrestore(&rawhide_irq_lock, flags);
       wake_up_interruptible(&remote_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
@@ -433,9 +435,9 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
                             local_resource_count[i]);
       }
-      spin_lock(&rawhide_irq_lock);
+      spin_lock_irq_save(&rawhide_irq_lock, flags);
       local_resource_count[i] = 1;
-      spin_unlock(&rawhide_irq_lock);
+      spin_unlock_irqrestore(&rawhide_irq_lock, flags);
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }

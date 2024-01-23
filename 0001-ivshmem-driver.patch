@@ -1,6 +1,6 @@
-From 283bded417fb9c2bd03b6552faaa99bbd3988973 Mon Sep 17 00:00:00 2001
+From 93679bed16bb32d83334c81e5911d1260b220c8d Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 23 Jan 2024 09:21:08 +0400
+Date: Tue, 23 Jan 2024 09:50:10 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 682 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 684 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  22 +
- 6 files changed, 714 insertions(+)
+ 6 files changed, 716 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..4a79ab94c
+index 000000000..0cfb41750
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,682 @@
+@@ -0,0 +1,684 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -195,7 +195,7 @@ index 000000000..4a79ab94c
 +                              unsigned long arg) {
 +
 +  int rv = 0;
-+  unsigned int tmp;
++  unsigned int tmp, flags;
 +  uint32_t msg;
 +  struct ioctl_data ioctl_data;
 +
@@ -226,9 +226,9 @@ index 000000000..4a79ab94c
 +        tmp);
 +    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
 +                        (unsigned long int)filp->private_data, rv);
-+    spin_lock(&rawhide_irq_lock);
++    spin_lock_irq_save(&rawhide_irq_lock, flags);
 +    local_resource_count[(unsigned long int)filp->private_data] = 0;
-+    spin_unlock(&rawhide_irq_lock);
++    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +    break;
 +
 +  case SHMEM_IOCWREMOTE:
@@ -249,9 +249,9 @@ index 000000000..4a79ab94c
 +        tmp);
 +    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
 +                        (unsigned long int)filp->private_data, rv);
-+    spin_lock(&rawhide_irq_lock);
++    spin_lock_irq_save(&rawhide_irq_lock, flags);
 +    remote_resource_count[(unsigned long int)filp->private_data] = 0;
-+    spin_unlock(&rawhide_irq_lock);
++    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +    break;
 +
 +  case SHMEM_IOCIVPOSN:
@@ -281,24 +281,24 @@ index 000000000..4a79ab94c
 +    KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%x on vector 0x%x",
 +                        (unsigned long int)filp->private_data,
 +                        (ioctl_data.int_no >> 16), vec);
-+    spin_lock(&rawhide_irq_lock);
++    spin_lock_irq_save(&rawhide_irq_lock, flags);
 +    if (vec & LOCAL_RESOURCE_READY_INT_VEC) {
 +      local_resource_count[(unsigned long int)filp->private_data] = 0;
 +    } else {
 +      remote_resource_count[(unsigned long int)filp->private_data] = 0;
 +    }
-+    spin_unlock(&rawhide_irq_lock);
++    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +    writel(ioctl_data.int_no, kvm_ivshmem_dev.regs + Doorbell);
 +    break;
 +
 +  case SHMEM_IOCRESTART:
-+    spin_lock(&rawhide_irq_lock);
++    spin_lock_irq_save(&rawhide_irq_lock, flags);
 +    local_resource_count[(unsigned long int)filp->private_data] = 1;
-+    spin_unlock(&rawhide_irq_lock);
++    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +    break;
 +
 +  case SHMEM_IOCSETINSTANCENO:
-+    spin_lock(&rawhide_irq_lock);
++    spin_lock_irq_save(&rawhide_irq_lock, flags);
 +    if (arg >= VM_COUNT) {
 +      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", arg);
 +      rv = -EINVAL;
@@ -314,7 +314,7 @@ index 000000000..4a79ab94c
 +    local_resource_count[arg] = 1;
 +    remote_resource_count[arg] = 0;
 +  unlock:
-+    spin_unlock(&rawhide_irq_lock);
++    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +    break;
 +
 +  case SHMEM_IOCNOP:
@@ -334,6 +334,7 @@ index 000000000..4a79ab94c
 +                                 struct poll_table_struct *wait) {
 +  __poll_t mask = 0;
 +  __poll_t req_events = poll_requested_events(wait);
++  unsigned int flags;
 +
 +  if (req_events & EPOLLIN) {
 +    poll_wait(
@@ -341,7 +342,7 @@ index 000000000..4a79ab94c
 +        &remote_data_ready_wait_queue[(unsigned long int)filp->private_data],
 +        wait);
 +
-+    spin_lock(&rawhide_irq_lock);
++    spin_lock_irq_save(&rawhide_irq_lock, flags);
 +    if (remote_resource_count[(unsigned long int)filp->private_data]) {
 +      KVM_IVSHMEM_DPRINTK(
 +          "%ld poll: in: remote_resource_count=%d",
@@ -350,7 +351,7 @@ index 000000000..4a79ab94c
 +      remote_resource_count[(unsigned long int)filp->private_data] = 0;
 +      mask |= (POLLIN | POLLRDNORM);
 +    }
-+    spin_unlock(&rawhide_irq_lock);
++    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +  }
 +
 +  if (req_events & EPOLLOUT) {
@@ -358,7 +359,7 @@ index 000000000..4a79ab94c
 +        filp,
 +        &local_data_ready_wait_queue[(unsigned long int)filp->private_data],
 +        wait);
-+    spin_lock(&rawhide_irq_lock);
++    spin_lock_irq_save(&rawhide_irq_lock, flags);
 +    if (local_resource_count[(unsigned long int)filp->private_data]) {
 +      KVM_IVSHMEM_DPRINTK(
 +          "%ld poll: in: local_resource_count=%d",
@@ -368,7 +369,7 @@ index 000000000..4a79ab94c
 +      local_resource_count[(unsigned long int)filp->private_data] = 0;
 +      mask |= (POLLOUT | POLLWRNORM);
 +    }
-+    spin_unlock(&rawhide_irq_lock);
++    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +  }
 +
 +  if (!mask) {
@@ -470,6 +471,7 @@ index 000000000..4a79ab94c
 +static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
 +  struct kvm_ivshmem_device *dev = dev_instance;
 +  int i;
++  unsigned int flags;
 +
 +  if (unlikely(dev == NULL)) {
 +    KVM_IVSHMEM_DPRINTK("return IRQ_NONE");
@@ -484,9 +486,9 @@ index 000000000..4a79ab94c
 +        KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i,
 +                            remote_resource_count[i]);
 +      }
-+      spin_lock(&rawhide_irq_lock);
++      spin_lock_irq_save(&rawhide_irq_lock, flags);
 +      remote_resource_count[i] = 1;
-+      spin_unlock(&rawhide_irq_lock);
++      spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +      wake_up_interruptible(&remote_data_ready_wait_queue[i]);
 +      return IRQ_HANDLED;
 +    }
@@ -496,9 +498,9 @@ index 000000000..4a79ab94c
 +        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
 +                            local_resource_count[i]);
 +      }
-+      spin_lock(&rawhide_irq_lock);
++      spin_lock_irq_save(&rawhide_irq_lock, flags);
 +      local_resource_count[i] = 1;
-+      spin_unlock(&rawhide_irq_lock);
++      spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +      wake_up_interruptible(&local_data_ready_wait_queue[i]);
 +      return IRQ_HANDLED;
 +    }
