@@ -1,6 +1,6 @@
-From 4ee878a8460678e007b22534306f0ee334a46dd4 Mon Sep 17 00:00:00 2001
+From 66039c43970eb5cfa30cf9c19333f5fd3e63e453 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 23 Jan 2024 11:30:29 +0400
+Date: Tue, 23 Jan 2024 11:40:23 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..e5ad4474f
+index 000000000..c1c0a7a5e
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,689 @@
@@ -226,7 +226,7 @@ index 000000000..e5ad4474f
 +        tmp);
 +    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
 +                        (unsigned long int)filp->private_data, rv);
-+    spin_lock_irq_save(&rawhide_irq_lock, flags);
++    spin_lock_irqsave(&rawhide_irq_lock, flags);
 +    local_resource_count[(unsigned long int)filp->private_data] = 0;
 +    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +    break;
@@ -249,7 +249,7 @@ index 000000000..e5ad4474f
 +        tmp);
 +    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
 +                        (unsigned long int)filp->private_data, rv);
-+    spin_lock_irq_save(&rawhide_irq_lock, flags);
++    spin_lock_irqsave(&rawhide_irq_lock, flags);
 +    remote_resource_count[(unsigned long int)filp->private_data] = 0;
 +    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +    break;
@@ -281,7 +281,7 @@ index 000000000..e5ad4474f
 +    KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%x on vector 0x%x",
 +                        (unsigned long int)filp->private_data,
 +                        (ioctl_data.int_no >> 16), vec);
-+    spin_lock_irq_save(&rawhide_irq_lock, flags);
++    spin_lock_irqsave(&rawhide_irq_lock, flags);
 +    if (vec & LOCAL_RESOURCE_READY_INT_VEC) {
 +      local_resource_count[(unsigned long int)filp->private_data] = 0;
 +    } else {
@@ -292,13 +292,13 @@ index 000000000..e5ad4474f
 +    break;
 +
 +  case SHMEM_IOCRESTART:
-+    spin_lock_irq_save(&rawhide_irq_lock, flags);
++    spin_lock_irqsave(&rawhide_irq_lock, flags);
 +    local_resource_count[(unsigned long int)filp->private_data] = 1;
 +    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +    break;
 +
 +  case SHMEM_IOCSETINSTANCENO:
-+    spin_lock_irq_save(&rawhide_irq_lock, flags);
++    spin_lock_irqsave(&rawhide_irq_lock, flags);
 +    if (arg >= VM_COUNT) {
 +      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", arg);
 +      rv = -EINVAL;
@@ -345,7 +345,7 @@ index 000000000..e5ad4474f
 +        &remote_data_ready_wait_queue[(unsigned long int)filp->private_data],
 +        wait);
 +
-+    spin_lock_irq_save(&rawhide_irq_lock, flags);
++    spin_lock_irqsave(&rawhide_irq_lock, flags);
 +    if (remote_resource_count[(unsigned long int)filp->private_data]) {
 +      KVM_IVSHMEM_DPRINTK(
 +          "%ld poll: in: remote_resource_count=%d",
@@ -362,7 +362,7 @@ index 000000000..e5ad4474f
 +        filp,
 +        &local_data_ready_wait_queue[(unsigned long int)filp->private_data],
 +        wait);
-+    spin_lock_irq_save(&rawhide_irq_lock, flags);
++    spin_lock_irqsave(&rawhide_irq_lock, flags);
 +    if (local_resource_count[(unsigned long int)filp->private_data]) {
 +      KVM_IVSHMEM_DPRINTK(
 +          "%ld poll: in: local_resource_count=%d",
@@ -490,7 +490,7 @@ index 000000000..e5ad4474f
 +        KVM_IVSHMEM_DPRINTK("%d WARNING: remote_resource_count>0!: %d", i,
 +                            remote_resource_count[i]);
 +      }
-+      spin_lock_irq_save(&rawhide_irq_lock, flags);
++      spin_lock_irqsave(&rawhide_irq_lock, flags);
 +      remote_resource_count[i] = 1;
 +      spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +      wake_up_interruptible(&remote_data_ready_wait_queue[i]);
@@ -502,7 +502,7 @@ index 000000000..e5ad4474f
 +        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
 +                            local_resource_count[i]);
 +      }
-+      spin_lock_irq_save(&rawhide_irq_lock, flags);
++      spin_lock_irqsave(&rawhide_irq_lock, flags);
 +      local_resource_count[i] = 1;
 +      spin_unlock_irqrestore(&rawhide_irq_lock, flags);
 +      wake_up_interruptible(&local_data_ready_wait_queue[i]);
