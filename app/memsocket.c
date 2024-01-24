@@ -486,7 +486,7 @@ void *run(void *arg) {
         tmp & 0xffff, tmp >> 16);
 #endif
       if (events[n].events & EPOLLOUT && events[n].data.fd == shmem_fd[instance_no] ) {
-        DEBUG("Remote ACK", "");
+        DEBUG("Remote ACK");
         epollfd = epollfd_full[instance_no];
         break;
       }
@@ -648,7 +648,7 @@ void *run(void *arg) {
             ERROR("read from wayland/waypipe socket failed fd=%d",
                   events[n].data.fd);
             /* Release output buffer */
-            DEBUG("<<< shmem", "");
+            DEBUG("<<< shmem");
             ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
 
           } else { /* read_count > 0 */
@@ -695,7 +695,7 @@ void *run(void *arg) {
 #if 0
         // Inform the peer that the closed is being closed
         /* Lock output buffer */
-        DEBUG(">>> shmem", "");
+        DEBUG(">>> shmem");
         rv = wait_shmem_ready(instance_no, &my_buffer_fds);
         if (rv < 0) {
 
