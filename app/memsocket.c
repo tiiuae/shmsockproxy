@@ -455,8 +455,8 @@ void *run(void *arg) {
     for (n = 0; n < nfds; n++) {
 
       ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, &tmp);
-      DEBUG("Event 0x%x on fd %d %d-%d", events[n].events, events[n].data.fd, 
-        tmp >> 16, tmp & 0xffff);
+      DEBUG("Event index=%d 0x%x on fd %d inout=%d-%d", n, events[n].events, events[n].data.fd, 
+        tmp & 0xffff, tmp >> 16);
 
       /* Handle the new connection on the socket */
       if (events[n].events & EPOLLIN) {
