@@ -639,7 +639,7 @@ void *run(void *arg) {
             exit(9);
           }
 #endif
-          DEBUG("Reading from wayland/waypipe socket", "");
+          DEBUG("Reading from wayland/waypipe socket");
           read_count =
               read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
                    sizeof(my_shm_data[instance_no]->data));
