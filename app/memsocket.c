@@ -429,6 +429,14 @@ int wait_shmem_ready(int instance_no, struct pollfd *my_buffer_fds) {
   return rv;
 }
 
+int cksum(unsigned char *buf, int len)
+{
+  int i, res = 0;
+  for(i = 0; i < len; i++)
+    res += buf[i];
+  return res;
+}
+
 void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
@@ -526,8 +534,10 @@ void *run(void *arg) {
                           ? peer_shm_data[instance_no]->fd
                           : map_peer_fd(instance_no,
                                         peer_shm_data[instance_no]->fd, 0);
-            DEBUG("shmem: received %d bytes for %d",
-                  peer_shm_data[instance_no]->len, conn_fd);
+            DEBUG("shmem: received %d bytes for %d cksum=0x%x",
+                  peer_shm_data[instance_no]->len, conn_fd, 
+                  cksum((unsigned char*)peer_shm_data[instance_no]->data,
+                  peer_shm_data[instance_no]->len));
             rv = write(conn_fd, (void *)peer_shm_data[instance_no]->data,
                        peer_shm_data[instance_no]->len);
             if (rv != peer_shm_data[instance_no]->len) {
@@ -618,7 +628,9 @@ void *run(void *arg) {
 
           } else { /* read_count > 0 */
             DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
-                  events[n].data.fd, conn_fd);
+                  events[n].data.fd, conn_fd,
+                  cksum((unsigned char*)my_shm_data[instance_no]->data,
+                  read_count));
 
             if (events[n].events & EPOLLHUP) {
               my_shm_data[instance_no]->cmd = CMD_DATA_CLOSE;
