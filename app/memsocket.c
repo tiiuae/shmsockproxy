@@ -464,7 +464,6 @@ void *run(void *arg) {
   my_buffer_fds.fd = shmem_fd[instance_no];
   epollfd = epollfd_full[instance_no];
 
-  DEBUG("Listening for events", "");
   while (1) {
 #ifdef DEBUG_ON
     if (epollfd == epollfd_full[instance_no]) {
@@ -513,11 +512,11 @@ void *run(void *arg) {
             ERROR("While creating fd#%d data=0x%x", conn_fd, tmp);
             exit(9);
           }
+#endif
           /* Send the connect request to the wayland peer */
           my_shm_data[instance_no]->cmd = CMD_CONNECT;
           my_shm_data[instance_no]->fd = conn_fd;
           my_shm_data[instance_no]->len = 0;
-#endif
           ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
           ioctl_data.cmd = my_shm_data[instance_no]->cmd;
