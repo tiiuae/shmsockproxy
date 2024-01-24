@@ -464,14 +464,14 @@ void *run(void *arg) {
   my_buffer_fds.fd = shmem_fd[instance_no];
   epollfd = epollfd_full[instance_no];
 
-  DEBUG("Listening for events");
+  DEBUG("Listening for events", "");
   while (1) {
 #ifdef DEBUG_ON
     if (epollfd == epollfd_full[instance_no]) {
-      DEBUG("Waiting for all events");
+      DEBUG("Waiting for all events", "");
     }
     else {
-      DEBUG("Waiting for ACK");
+      DEBUG("Waiting for ACK", "");
     }
 #endif
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -486,7 +486,7 @@ void *run(void *arg) {
         tmp & 0xffff, tmp >> 16);
 #endif
       if (events[n].events & EPOLLOUT && events[n].data.fd == shmem_fd[instance_no] ) {
-        DEBUG("Remote ACK");
+        DEBUG("Remote ACK", "");
         epollfd = epollfd_full[instance_no];
         break;
       }
@@ -639,7 +639,7 @@ void *run(void *arg) {
             exit(9);
           }
 #endif
-          DEBUG("Reading from wayland/waypipe socket");
+          DEBUG("Reading from wayland/waypipe socket", "");
           read_count =
               read(events[n].data.fd, (void *)my_shm_data[instance_no]->data,
                    sizeof(my_shm_data[instance_no]->data));
@@ -694,7 +694,7 @@ void *run(void *arg) {
 #if 0
         // Inform the peer that the closed is being closed
         /* Lock output buffer */
-        DEBUG(">>> shmem");
+        DEBUG(">>> shmem", "");
         rv = wait_shmem_ready(instance_no, &my_buffer_fds);
         if (rv < 0) {
 
