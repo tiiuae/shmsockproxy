@@ -464,14 +464,14 @@ void *run(void *arg) {
   my_buffer_fds.fd = shmem_fd[instance_no];
   epollfd = epollfd_full[instance_no];
 
-  DEBUG("Listening for events", "");
+  DEBUG("Listening for events");
   while (1) {
 #ifdef DEBUG_ON
     if (epollfd == epollfd_full[instance_no]) {
-      DEBUG("Wainting for all events");
+      DEBUG("Waiting for all events");
     }
     else {
-      DEBUG("Wainting for ACK");
+      DEBUG("Waiting for ACK");
     }
 #endif
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
