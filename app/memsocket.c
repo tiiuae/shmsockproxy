@@ -627,7 +627,7 @@ void *run(void *arg) {
             ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
 
           } else { /* read_count > 0 */
-            DEBUG("Read & sent %d bytes on fd#%d sent to %d", read_count,
+            DEBUG("Read & sent %d bytes on fd#%d sent to %d checksum=0x%x", read_count,
                   events[n].data.fd, conn_fd,
                   cksum((unsigned char*)my_shm_data[instance_no]->data,
                   read_count));
