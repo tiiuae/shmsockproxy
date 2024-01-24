@@ -648,7 +648,7 @@ void *run(void *arg) {
             ERROR("read from wayland/waypipe socket failed fd=%d",
                   events[n].data.fd);
             /* Release output buffer */
-            DEBUG("<<< shmem");
+            DEBUG("<<< shmem", "");
             ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
 
           } else { /* read_count > 0 */
