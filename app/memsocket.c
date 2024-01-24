@@ -466,7 +466,14 @@ void *run(void *arg) {
 
   DEBUG("Listening for events", "");
   while (1) {
-
+#ifdef DEBUG_ON
+    if (epollfd == epollfd_full[instance_no]) {
+      DEBUG("Wainting for all events");
+    }
+    else {
+      DEBUG("Wainting for ACK");
+    }
+#endif
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
     if (nfds == -1) {
       FATAL("epoll_wait");
@@ -497,7 +504,7 @@ void *run(void *arg) {
               -1) {
             FATAL("epoll_ctl: conn_fd");
           }
-
+#if 0
           DEBUG(">>> shmem", "");
           rv = wait_shmem_ready(instance_no, &my_buffer_fds);
           if (rv <= 0) {
@@ -510,14 +517,14 @@ void *run(void *arg) {
           my_shm_data[instance_no]->cmd = CMD_CONNECT;
           my_shm_data[instance_no]->fd = conn_fd;
           my_shm_data[instance_no]->len = 0;
-
+#endif
           ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
           ioctl_data.cmd = my_shm_data[instance_no]->cmd;
           ioctl_data.fd = my_shm_data[instance_no]->fd;
           ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
-          DEBUG("<<< shmem", "");
+          epollfd = epollfd_limited[instance_no];
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
           DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
         }
@@ -677,6 +684,7 @@ void *run(void *arg) {
                   my_shm_data[instance_no]->len);
             epollfd = epollfd_limited[instance_no];
             ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
+            break;
           }
         } /* received data from Wayland/waypipe server */
       }   /* events[n].events & EPOLLIN */
@@ -717,8 +725,8 @@ void *run(void *arg) {
           ioctl_data.fd = my_shm_data[instance_no]->fd;
           ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
-          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
           epollfd = epollfd_limited[instance_no];
+          ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
 
         } else { /* unlock output buffer */
           ERROR("Attempt to close invalid fd %d", events[n].data.fd);
@@ -730,6 +738,8 @@ void *run(void *arg) {
           ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", events[n].data.fd);
         }
         close(events[n].data.fd);
+        if (epollfd == epollfd_limited[instance_no])
+          break;
       } /* Handling connection close */
     }
   } /* while(1) */
