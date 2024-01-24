@@ -487,7 +487,6 @@ void *run(void *arg) {
       if (events[n].events & EPOLLOUT && events[n].data.fd == shmem_fd[instance_no] ) {
         DEBUG("Remote ACK", "");
         epollfd = epollfd_full[instance_no];
-        break;
       }
 
       /* Handle the new connection on the socket */
