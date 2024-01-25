@@ -476,7 +476,7 @@ void *run(void *arg) {
 
     for (n = 0; n < nfds; n++) {
 #ifdef DEBUG_ON
-      ioctl(shmem_fd[instance_no], SHMEM_IOC, &tmp);
+      ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, &tmp);
       DEBUG("Event index=%d 0x%x on fd %d inout=%d-%d", n, events[n].events,
             events[n].data.fd, tmp & 0xffff, tmp >> 16);
 #endif

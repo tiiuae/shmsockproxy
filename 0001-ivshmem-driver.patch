@@ -1,6 +1,6 @@
-From fd4e4e45bfc3886eebbfd0e413e0de7ec22a6ed9 Mon Sep 17 00:00:00 2001
+From 18a9ea118854cd3cd8914df4cab35230ddd55725 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Thu, 25 Jan 2024 11:33:44 +0400
+Date: Thu, 25 Jan 2024 11:53:25 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..6ca9ad509
+index 000000000..8f152ece6
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,704 @@
@@ -339,7 +339,7 @@ index 000000000..6ca9ad509
 +        out_counter);
 +
 +    tmp = ((unsigned)out_counter) << 16 | (unsigned)(in_counter & 0xffff);
-+    copy_to_user(arg, &tmp, sizeof(tmp));
++    copy_to_user((void __user *a)rg, &tmp, sizeof(tmp));
 +
 +    break;
 +
@@ -767,7 +767,7 @@ index 000000000..6ca9ad509
 +MODULE_VERSION("1.0");
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.h b/drivers/char/ivshmem/kvm_ivshmem.h
 new file mode 100644
-index 000000000..8b46d017b
+index 000000000..aacd7f73e
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.h
 @@ -0,0 +1,25 @@
@@ -775,13 +775,13 @@ index 000000000..8b46d017b
 +   SPDX-License-Identifier: Apache-2.0
 +*/
 +
-+#define REMOTE_RESOURCE_CONSUMED_INT_VEC (0)
++#define PEER_RESOURCE_CONSUMED_INT_VEC (0)
 +#define LOCAL_RESOURCE_READY_INT_VEC (1)
 +
 +#define SHMEM_IOC_MAGIC 's'
 +
 +#define SHMEM_IOCWLOCAL _IOR(SHMEM_IOC_MAGIC, 1, int)
-+#define SHMEM_IOCWREMOTE _IOR(SHMEM_IOC_MAGIC, 2, int)
++#define SHMEM_IOCWPEER _IOR(SHMEM_IOC_MAGIC, 2, int)
 +#define SHMEM_IOCIVPOSN _IOW(SHMEM_IOC_MAGIC, 3, int)
 +#define SHMEM_IOCSETINSTANCENO _IOR(SHMEM_IOC_MAGIC, 4, int)
 +#define SHMEM_IOCSET _IOR(SHMEM_IOC_MAGIC, 5, int)
