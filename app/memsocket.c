@@ -481,11 +481,11 @@ void *run(void *arg) {
     }
 
     for (n = 0; n < nfds; n++) {
-// #ifdef DEBUG_ON
+#ifdef DEBUG_ON
       ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, &tmp);
       DBG("Event index=%d 0x%x on fd %d inout=%d-%d", n, events[n].events,
             events[n].data.fd, tmp & 0xffff, tmp >> 16);
-// #endif
+#endif
       if (events[n].events & EPOLLOUT &&
           events[n].data.fd == shmem_fd[instance_no]) {
         DEBUG("Remote ACK", "");
