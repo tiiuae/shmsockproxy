@@ -36,11 +36,8 @@
 #define UNKNOWN_PEER (-1)
 #define CLOSE_FD (1)
 #define IGNORE_ERROR (1)
-#ifndef DEBUG_ON
-#define DEBUG(fmt, ...)                                                        \
-  {}
-#else
-#define DEBUG(fmt, ...)                                                        \
+
+#define DBG(fmt, ...)                                                        \
   {                                                                            \
     char tmp1[256], tmp2[256];                                                 \
     sprintf(tmp2, fmt, __VA_ARGS__);                                           \
@@ -49,6 +46,12 @@
     errno = 0;                                                                 \
     report(tmp1, 0);                                                           \
   }
+
+#ifndef DEBUG_ON
+#define DEBUG(fmt, ...)                                                        \
+  {}
+#else
+#define DEBUG DBG
 #endif
 
 #ifndef DEBUG_ON
@@ -475,11 +478,11 @@ void *run(void *arg) {
     }
 
     for (n = 0; n < nfds; n++) {
-#ifdef DEBUG_ON
+// #ifdef DEBUG_ON
       ioctl(shmem_fd[instance_no], SHMEM_IOCNOP, &tmp);
-      DEBUG("Event index=%d 0x%x on fd %d inout=%d-%d", n, events[n].events,
+      DBG("Event index=%d 0x%x on fd %d inout=%d-%d", n, events[n].events,
             events[n].data.fd, tmp & 0xffff, tmp >> 16);
-#endif
+// #endif
       if (events[n].events & EPOLLOUT &&
           events[n].data.fd == shmem_fd[instance_no]) {
         DEBUG("Remote ACK", "");
