@@ -325,10 +325,13 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
     }
   }
 
+#ifdef DEBUG
   if (!mask) {
     printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x",
            req_events);
   }
+#endif
+
   return mask;
 }
 

@@ -771,7 +771,6 @@ int main(int argc, char **argv) {
   }
 
   return 0;
-
 wrong_args:
   print_usage_and_exit();
   return 1;
