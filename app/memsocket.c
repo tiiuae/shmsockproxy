@@ -384,7 +384,7 @@ void thread_init(int instance_no) {
                                    LOCAL_RESOURCE_READY_INT_VEC;
     remote_rc_int_no[instance_no] = vm_control->client_vmid |
                                     (instance_no << 1) |
-                                    REMOTE_RESOURCE_CONSUMED_INT_VEC;
+                                    PEER_RESOURCE_CONSUMED_INT_VEC;
     /*
      * Send LOGIN cmd to the client. Supply my_vmid
      */
@@ -538,7 +538,7 @@ void *run(void *arg) {
                                            LOCAL_RESOURCE_READY_INT_VEC;
             remote_rc_int_no[instance_no] = peer_shm_data[instance_no]->fd |
                                             (instance_no << 1) |
-                                            REMOTE_RESOURCE_CONSUMED_INT_VEC;
+                                            PEER_RESOURCE_CONSUMED_INT_VEC;
 
             peer_shm_data[instance_no]->fd = -1;
             break;
