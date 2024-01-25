@@ -163,7 +163,7 @@ void fd_map_clear(int instance_no) {
 void server_init(int instance_no) {
 
   struct sockaddr_un socket_name;
-  static struct epoll_event ev;
+  struct epoll_event ev;
 
   /* Remove socket file if exists */
   if (access(socket_path, F_OK) == 0) {
@@ -201,7 +201,7 @@ void server_init(int instance_no) {
 int wayland_connect(int instance_no) {
 
   struct sockaddr_un socket_name;
-  static struct epoll_event ev;
+  struct epoll_event ev;
   int wayland_fd;
 
   wayland_fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -283,7 +283,7 @@ int get_remote_socket(int instance_no, int my_fd, int close_fd,
 void shmem_init(int instance_no) {
 
   int res = -1, vm_id;
-  static struct epoll_event ev, ev_full;
+  struct epoll_event ev, ev_full;
   long int shmem_size;
 
   /* Open shared memory */
