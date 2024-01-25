@@ -163,7 +163,7 @@ void fd_map_clear(int instance_no) {
 void server_init(int instance_no) {
 
   struct sockaddr_un socket_name;
-  struct epoll_event ev;
+  static struct epoll_event ev;
 
   /* Remove socket file if exists */
   if (access(socket_path, F_OK) == 0) {
@@ -201,7 +201,7 @@ void server_init(int instance_no) {
 int wayland_connect(int instance_no) {
 
   struct sockaddr_un socket_name;
-  struct epoll_event ev;
+  static struct epoll_event ev;
   int wayland_fd;
 
   wayland_fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -283,7 +283,7 @@ int get_remote_socket(int instance_no, int my_fd, int close_fd,
 void shmem_init(int instance_no) {
 
   int res = -1, vm_id;
-  struct epoll_event ev;
+  static struct epoll_event ev, ev_full;
   long int shmem_size;
 
   /* Open shared memory */
@@ -340,10 +340,10 @@ void shmem_init(int instance_no) {
     INFO("client", "");
   }
 
-  ev.events = EPOLLIN | EPOLLOUT;
-  ev.data.fd = shmem_fd[instance_no];
+  ev_full.events = EPOLLIN | EPOLLOUT;
+  ev_full.data.fd = shmem_fd[instance_no];
   if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, shmem_fd[instance_no],
-                &ev) == -1) {
+                &ev_full) == -1) {
     FATAL("epoll_ctl: -1");
   }
   ev.events = EPOLLIN | EPOLLOUT;
@@ -352,8 +352,8 @@ void shmem_init(int instance_no) {
                 &ev) == -1) {
     FATAL("epoll_ctl: -1");
   }
-  /* Force releasing output buffer */
-  ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
+  /* Set output buffer it's available */
+  ioctl(shmem_fd[instance_no], SHMEM_IOCSET, (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
 
   INFO("shared memory initialized", "");
 }
@@ -486,6 +486,8 @@ void *run(void *arg) {
 #endif
       if (events[n].events & EPOLLOUT && events[n].data.fd == shmem_fd[instance_no] ) {
         DEBUG("Remote ACK", "");
+        /* Set the local buffer is consumed and ready for use */
+        ioctl(shmem_fd[instance_no], SHMEM_IOCSET, (LOCAL_RESOURCE_READY_INT_VEC << 8) + 0);
         epollfd = epollfd_full[instance_no];
       }
 
@@ -527,7 +529,7 @@ void *run(void *arg) {
           DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
         }
 
-        /* Both sides: Received data from the peer via shared memory*/
+        /* Both sides: Received data from the peer via shared memory - EPOLLIN */
         else if (events[n].data.fd == shmem_fd[instance_no]) {
           DEBUG(
               "shmem_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote len: %d",
@@ -611,7 +613,6 @@ void *run(void *arg) {
           ioctl_data.fd = 0;
           ioctl_data.len = 0;
 #endif
-          DEBUG("<<< shmem", "");
           ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
         } /* End of "data arrived from the peer via shared memory" */
 
@@ -646,7 +647,7 @@ void *run(void *arg) {
             ERROR("read from wayland/waypipe socket failed fd=%d",
                   events[n].data.fd);
             /* Release output buffer */
-            ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
+            ioctl(shmem_fd[instance_no], SHMEM_IOCSET, (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
 
           } else { /* read_count > 0 */
             DEBUG("Read & sent %d bytes on fd#%d sent to %d checksum=0x%x", read_count,
@@ -727,7 +728,7 @@ void *run(void *arg) {
 
         } else { /* unlock output buffer */
           ERROR("Attempt to close invalid fd %d", events[n].data.fd);
-          ioctl(shmem_fd[instance_no], SHMEM_IOCRESTART, 0);
+          ioctl(shmem_fd[instance_no], SHMEM_IOCSET, (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
         }
         if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL, events[n].data.fd,
                       NULL) == -1) {
