@@ -276,7 +276,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
         out_counter);
 
     tmp = ((unsigned)out_counter) << 16 | (unsigned)(in_counter & 0xffff);
-    copy_to_user((void __user *a)rg, &tmp, sizeof(tmp));
+    copy_to_user((void __user *)arg, &tmp, sizeof(tmp));
 
     break;
 

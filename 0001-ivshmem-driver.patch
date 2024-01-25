@@ -1,6 +1,6 @@
-From 18a9ea118854cd3cd8914df4cab35230ddd55725 Mon Sep 17 00:00:00 2001
+From 7b9f61ed4e5371a18f560e46910614f98341dc52 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Thu, 25 Jan 2024 11:53:25 +0400
+Date: Thu, 25 Jan 2024 12:03:22 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..8f152ece6
+index 000000000..08a3a958a
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,704 @@
@@ -339,7 +339,7 @@ index 000000000..8f152ece6
 +        out_counter);
 +
 +    tmp = ((unsigned)out_counter) << 16 | (unsigned)(in_counter & 0xffff);
-+    copy_to_user((void __user *a)rg, &tmp, sizeof(tmp));
++    copy_to_user((void __user *)arg, &tmp, sizeof(tmp));
 +
 +    break;
 +
