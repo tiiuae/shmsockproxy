@@ -146,51 +146,6 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     return -EINVAL;
   }
   switch (cmd) {
-  case SHMEM_IOCWLOCAL:
-    KVM_IVSHMEM_DPRINTK("%ld sleeping on local resource (cmd = 0x%08x)",
-                        (unsigned long int)filp->private_data, cmd);
-    if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
-      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWLOCAL: %ld invalid argument",
-             (unsigned long int)filp->private_data);
-      return -EINVAL;
-    }
-
-    tmp = HZ / 1000 * tmp;
-    KVM_IVSHMEM_DPRINTK("%ld timeout: %d ms",
-                        (unsigned long int)filp->private_data, tmp);
-    rv = wait_event_interruptible_timeout(
-        local_data_ready_wait_queue[(unsigned long int)filp->private_data],
-        (local_resource_count[(unsigned long int)filp->private_data] == 1),
-        tmp);
-    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
-                        (unsigned long int)filp->private_data, rv);
-    spin_lock_irqsave(&rawhide_irq_lock, flags);
-    local_resource_count[(unsigned long int)filp->private_data] = 0;
-    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
-    break;
-
-  case SHMEM_IOCWPEER:
-    KVM_IVSHMEM_DPRINTK("%ld sleeping on peer resource (cmd = 0x%08x)",
-                        (unsigned long int)filp->private_data, cmd);
-    if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
-      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWPEER: invalid argument rv=%d",
-             rv);
-      return -EINVAL;
-    }
-
-    tmp = HZ / 1000 * tmp;
-    KVM_IVSHMEM_DPRINTK("%ld timeout: %d ms",
-                        (unsigned long int)filp->private_data, tmp);
-    rv = wait_event_interruptible_timeout(
-        peer_data_ready_wait_queue[(unsigned long int)filp->private_data],
-        (peer_resource_count[(unsigned long int)filp->private_data] == 1), tmp);
-    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
-                        (unsigned long int)filp->private_data, rv);
-    spin_lock_irqsave(&rawhide_irq_lock, flags);
-    peer_resource_count[(unsigned long int)filp->private_data] = 0;
-    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
-    break;
-
   case SHMEM_IOCIVPOSN:
     msg = readl(kvm_ivshmem_dev.regs + IVPosition);
     KVM_IVSHMEM_DPRINTK("%ld my vmid is 0x%08x",
@@ -277,7 +232,6 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
     tmp = ((unsigned)out_counter) << 16 | (unsigned)(in_counter & 0xffff);
     copy_to_user((void __user *)arg, &tmp, sizeof(tmp));
-
     break;
 
   default:
@@ -331,7 +285,6 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
            req_events);
   }
 #endif
-
   return mask;
 }
 
@@ -447,8 +400,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       spin_lock(&rawhide_irq_lock);
       peer_resource_count[i] = 1;
       spin_unlock(&rawhide_irq_lock);
-      // TODO: test
-      // wake_up_interruptible(&peer_data_ready_wait_queue[i]);
+      wake_up_interruptible(&peer_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
     if (irq == irq_ack[i]) {
@@ -462,8 +414,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       spin_lock(&rawhide_irq_lock);
       local_resource_count[i] = 1;
       spin_unlock(&rawhide_irq_lock);
-      // TODO: test
-      // wake_up_interruptible(&local_data_ready_wait_queue[i]);
+      wake_up_interruptible(&local_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
   }
@@ -516,7 +467,7 @@ static int request_msix_vectors(struct kvm_ivshmem_device *ivs_info,
       irq_incoming_data[i >> 1] = n;
       KVM_IVSHMEM_DPRINTK("Using interrupt #%d for incoming data for vm %d", n,
                           i >> 1);
-      // vector 0 is used for for sending acknowledgments
+    // vector 0 is used for for sending acknowledgments
     } else {
       irq_ack[i >> 1] = n;
       KVM_IVSHMEM_DPRINTK("Using interrupt #%d for ACKs for vm %d", n, i >> 1);

@@ -1,6 +1,6 @@
-From 46f422f04d81ceeeac99ad23fed1ac7f0d8fa17d Mon Sep 17 00:00:00 2001
+From b76340a7ecfd73ff3fde5875036c837f7ca76146 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Fri, 26 Jan 2024 11:26:18 +0400
+Date: Fri, 26 Jan 2024 12:01:00 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 709 +++++++++++++++++++++++++++++
- drivers/char/ivshmem/kvm_ivshmem.h |  25 +
- 6 files changed, 744 insertions(+)
+ drivers/char/ivshmem/kvm_ivshmem.c | 660 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.h |  25 ++
+ 6 files changed, 695 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..6940d2779
+index 000000000..f045e15a4
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,709 @@
+@@ -0,0 +1,660 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -209,51 +209,6 @@ index 000000000..6940d2779
 +    return -EINVAL;
 +  }
 +  switch (cmd) {
-+  case SHMEM_IOCWLOCAL:
-+    KVM_IVSHMEM_DPRINTK("%ld sleeping on local resource (cmd = 0x%08x)",
-+                        (unsigned long int)filp->private_data, cmd);
-+    if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
-+      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWLOCAL: %ld invalid argument",
-+             (unsigned long int)filp->private_data);
-+      return -EINVAL;
-+    }
-+
-+    tmp = HZ / 1000 * tmp;
-+    KVM_IVSHMEM_DPRINTK("%ld timeout: %d ms",
-+                        (unsigned long int)filp->private_data, tmp);
-+    rv = wait_event_interruptible_timeout(
-+        local_data_ready_wait_queue[(unsigned long int)filp->private_data],
-+        (local_resource_count[(unsigned long int)filp->private_data] == 1),
-+        tmp);
-+    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
-+                        (unsigned long int)filp->private_data, rv);
-+    spin_lock_irqsave(&rawhide_irq_lock, flags);
-+    local_resource_count[(unsigned long int)filp->private_data] = 0;
-+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
-+    break;
-+
-+  case SHMEM_IOCWPEER:
-+    KVM_IVSHMEM_DPRINTK("%ld sleeping on peer resource (cmd = 0x%08x)",
-+                        (unsigned long int)filp->private_data, cmd);
-+    if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
-+      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWPEER: invalid argument rv=%d",
-+             rv);
-+      return -EINVAL;
-+    }
-+
-+    tmp = HZ / 1000 * tmp;
-+    KVM_IVSHMEM_DPRINTK("%ld timeout: %d ms",
-+                        (unsigned long int)filp->private_data, tmp);
-+    rv = wait_event_interruptible_timeout(
-+        peer_data_ready_wait_queue[(unsigned long int)filp->private_data],
-+        (peer_resource_count[(unsigned long int)filp->private_data] == 1), tmp);
-+    KVM_IVSHMEM_DPRINTK("%ld waking up rv:%d",
-+                        (unsigned long int)filp->private_data, rv);
-+    spin_lock_irqsave(&rawhide_irq_lock, flags);
-+    peer_resource_count[(unsigned long int)filp->private_data] = 0;
-+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
-+    break;
-+
 +  case SHMEM_IOCIVPOSN:
 +    msg = readl(kvm_ivshmem_dev.regs + IVPosition);
 +    KVM_IVSHMEM_DPRINTK("%ld my vmid is 0x%08x",
@@ -340,7 +295,6 @@ index 000000000..6940d2779
 +
 +    tmp = ((unsigned)out_counter) << 16 | (unsigned)(in_counter & 0xffff);
 +    copy_to_user((void __user *)arg, &tmp, sizeof(tmp));
-+
 +    break;
 +
 +  default:
@@ -394,7 +348,6 @@ index 000000000..6940d2779
 +           req_events);
 +  }
 +#endif
-+
 +  return mask;
 +}
 +
@@ -510,8 +463,7 @@ index 000000000..6940d2779
 +      spin_lock(&rawhide_irq_lock);
 +      peer_resource_count[i] = 1;
 +      spin_unlock(&rawhide_irq_lock);
-+      // TODO: test
-+      // wake_up_interruptible(&peer_data_ready_wait_queue[i]);
++      wake_up_interruptible(&peer_data_ready_wait_queue[i]);
 +      return IRQ_HANDLED;
 +    }
 +    if (irq == irq_ack[i]) {
@@ -525,8 +477,7 @@ index 000000000..6940d2779
 +      spin_lock(&rawhide_irq_lock);
 +      local_resource_count[i] = 1;
 +      spin_unlock(&rawhide_irq_lock);
-+      // TODO: test
-+      // wake_up_interruptible(&local_data_ready_wait_queue[i]);
++      wake_up_interruptible(&local_data_ready_wait_queue[i]);
 +      return IRQ_HANDLED;
 +    }
 +  }
@@ -579,7 +530,7 @@ index 000000000..6940d2779
 +      irq_incoming_data[i >> 1] = n;
 +      KVM_IVSHMEM_DPRINTK("Using interrupt #%d for incoming data for vm %d", n,
 +                          i >> 1);
-+      // vector 0 is used for for sending acknowledgments
++    // vector 0 is used for for sending acknowledgments
 +    } else {
 +      irq_ack[i >> 1] = n;
 +      KVM_IVSHMEM_DPRINTK("Using interrupt #%d for ACKs for vm %d", n, i >> 1);
