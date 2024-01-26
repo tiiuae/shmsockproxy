@@ -447,7 +447,8 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       spin_lock(&rawhide_irq_lock);
       peer_resource_count[i] = 1;
       spin_unlock(&rawhide_irq_lock);
-      wake_up_interruptible(&peer_data_ready_wait_queue[i]);
+      // TODO: test
+      // wake_up_interruptible(&peer_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
     if (irq == irq_ack[i]) {
@@ -461,12 +462,13 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       spin_lock(&rawhide_irq_lock);
       local_resource_count[i] = 1;
       spin_unlock(&rawhide_irq_lock);
-      wake_up_interruptible(&local_data_ready_wait_queue[i]);
+      // TODO: test
+      // wake_up_interruptible(&local_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
   }
 
-  printk(KERN_ERR "KVM_IVSHMEM: invalid irq number %d", irq);
+  printk(KERN_ERR "KVM_IVSHMEM: irq %d not handled", irq);
   return IRQ_NONE;
 }
 
