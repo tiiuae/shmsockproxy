@@ -1,6 +1,6 @@
-From b76340a7ecfd73ff3fde5875036c837f7ca76146 Mon Sep 17 00:00:00 2001
+From e9cc60dbdd3591c637149e4c28da631469c6289a Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Fri, 26 Jan 2024 12:01:00 +0400
+Date: Wed, 31 Jan 2024 09:18:27 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 660 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 662 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  25 ++
- 6 files changed, 695 insertions(+)
+ 6 files changed, 697 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..f045e15a4
+index 000000000..2391a692b
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,660 @@
+@@ -0,0 +1,662 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -462,6 +462,7 @@ index 000000000..f045e15a4
 +      }
 +      spin_lock(&rawhide_irq_lock);
 +      peer_resource_count[i] = 1;
++      smp_mb();
 +      spin_unlock(&rawhide_irq_lock);
 +      wake_up_interruptible(&peer_data_ready_wait_queue[i]);
 +      return IRQ_HANDLED;
@@ -476,6 +477,7 @@ index 000000000..f045e15a4
 +      }
 +      spin_lock(&rawhide_irq_lock);
 +      local_resource_count[i] = 1;
++      smp_mb();
 +      spin_unlock(&rawhide_irq_lock);
 +      wake_up_interruptible(&local_data_ready_wait_queue[i]);
 +      return IRQ_HANDLED;
