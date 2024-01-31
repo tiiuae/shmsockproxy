@@ -559,10 +559,10 @@ void *run(void *arg) {
                   peer_shm_data[instance_no]->len, conn_fd,
                   cksum((unsigned char *)peer_shm_data[instance_no]->data,
                         peer_shm_data[instance_no]->len));
-            rv = write(conn_fd, (void *)peer_shm_data[instance_no]->data,
-                       peer_shm_data[instance_no]->len);
+            rv = send(conn_fd, (void *)peer_shm_data[instance_no]->data,
+                       peer_shm_data[instance_no]->len, 0);
             if (rv != peer_shm_data[instance_no]->len) {
-              ERROR("Wrote %d out of %d bytes on fd#%d", rv,
+              ERROR("Sent %d out of %d bytes on fd#%d", rv,
                     peer_shm_data[instance_no]->len, conn_fd);
             }
             DEBUG("Received data has been sent", "");
