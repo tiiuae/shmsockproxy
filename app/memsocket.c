@@ -458,6 +458,8 @@ void *run(void *arg) {
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
   unsigned int tmp;
+  // TODO: remove
+  int count = 0, data_sent = 0;
   int epollfd;
 
   thread_init(instance_no);
@@ -555,8 +557,14 @@ void *run(void *arg) {
                   peer_shm_data[instance_no]->len, conn_fd,
                   cksum((unsigned char *)peer_shm_data[instance_no]->data,
                         peer_shm_data[instance_no]->len));
-            rv = write(conn_fd, (void *)peer_shm_data[instance_no]->data,
-                       peer_shm_data[instance_no]->len);
+            rv = send(conn_fd, (void *)peer_shm_data[instance_no]->data,
+                      peer_shm_data[instance_no]->len, 0);
+            // TODO: test
+            data_sent += peer_shm_data[instance_no]->len;
+            count++;
+            fprintf(stderr, "Sent %d bytes count=%d total=%d\n",
+                    peer_shm_data[instance_no]->len, count, data_sent);
+            // if (! ++count %100),  = 0;
             if (rv != peer_shm_data[instance_no]->len) {
               ERROR("Sent %d out of %d bytes on fd#%d", rv,
                     peer_shm_data[instance_no]->len, conn_fd);
@@ -613,7 +621,7 @@ void *run(void *arg) {
         else {
           if (!run_as_server) {
             conn_fd = get_remote_socket(instance_no, events[n].data.fd, 0,
-            IGNORE_ERROR);
+                                        IGNORE_ERROR);
             DEBUG("get_remote_socket: %d", conn_fd);
           } else {
             conn_fd = events[n].data.fd;
@@ -643,7 +651,7 @@ void *run(void *arg) {
               /* unmap local fd */
               if (!run_as_server)
                 get_remote_socket(instance_no, events[n].data.fd, CLOSE_FD,
-              IGNORE_ERROR);
+                                  IGNORE_ERROR);
               /* close local fd*/
               close(events[n].data.fd);
             } else
@@ -679,7 +687,7 @@ void *run(void *arg) {
                 get_remote_socket(instance_no, events[n].data.fd, 0,
                                   IGNORE_ERROR));
           my_shm_data[instance_no]->fd = get_remote_socket(
-          instance_no, events[n].data.fd, CLOSE_FD, IGNORE_ERROR);
+              instance_no, events[n].data.fd, CLOSE_FD, IGNORE_ERROR);
         }
         if (my_shm_data[instance_no]->fd > 0) {
           DEBUG("ioctl ending close request for %d",
