@@ -24,6 +24,7 @@
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
 #include <linux/uio.h>
+#include <linux/version.h>
 
 #ifndef CONFIG_KVM_IVSHMEM_VM_COUNT
 #warning CONFIG_KVM_IVSHMEM_VM_COUNT not defined. Assuming 5.
