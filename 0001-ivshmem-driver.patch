@@ -1,6 +1,6 @@
-From e9cc60dbdd3591c637149e4c28da631469c6289a Mon Sep 17 00:00:00 2001
+From d17110a7888ffa2f14cf95c905c24d735bc5f441 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Wed, 31 Jan 2024 09:18:27 +0400
+Date: Fri, 2 Feb 2024 11:53:37 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 662 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 665 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  25 ++
- 6 files changed, 697 insertions(+)
+ 6 files changed, 700 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..2391a692b
+index 000000000..54a66b59e
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,662 @@
+@@ -0,0 +1,665 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -195,7 +195,6 @@ index 000000000..2391a692b
 +                              unsigned long arg) {
 +
 +  int rv = 0;
-+  unsigned int tmp;
 +  unsigned long flags;
 +  uint32_t msg;
 +  struct ioctl_data ioctl_data;
@@ -294,7 +293,7 @@ index 000000000..2391a692b
 +        out_counter);
 +
 +    tmp = ((unsigned)out_counter) << 16 | (unsigned)(in_counter & 0xffff);
-+    copy_to_user((void __user *)arg, &tmp, sizeof(tmp));
++    rv = copy_to_user((void __user *)arg, &tmp, sizeof(tmp));
 +    break;
 +
 +  default:
@@ -704,7 +703,11 @@ index 000000000..2391a692b
 +
 +  off += start;
 +  vma->vm_pgoff = off >> PAGE_SHIFT;
++  #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,3,0)
++  vm_flags_mod(vma, VM_SHARED, 0);
++  #else
 +  vma->vm_flags |= VM_SHARED;
++  #endif
 +
 +  if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
 +                         vma->vm_end - vma->vm_start, vma->vm_page_prot)) {

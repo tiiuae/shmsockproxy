@@ -132,7 +132,6 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                               unsigned long arg) {
 
   int rv = 0;
-  unsigned int tmp;
   unsigned long flags;
   uint32_t msg;
   struct ioctl_data ioctl_data;
@@ -231,7 +230,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
         out_counter);
 
     tmp = ((unsigned)out_counter) << 16 | (unsigned)(in_counter & 0xffff);
-    copy_to_user((void __user *)arg, &tmp, sizeof(tmp));
+    rv = copy_to_user((void __user *)arg, &tmp, sizeof(tmp));
     break;
 
   default:
@@ -641,7 +640,11 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   off += start;
   vma->vm_pgoff = off >> PAGE_SHIFT;
+  #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,3,0)
+  vm_flags_mod(vma, VM_SHARED, 0);
+  #else
   vma->vm_flags |= VM_SHARED;
+  #endif
 
   if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
                          vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
