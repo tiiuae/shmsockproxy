@@ -1,6 +1,6 @@
-From d17110a7888ffa2f14cf95c905c24d735bc5f441 Mon Sep 17 00:00:00 2001
+From e638dafc60ab67ab2131df032ec4846c7ee95371 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Fri, 2 Feb 2024 11:53:37 +0400
+Date: Fri, 2 Feb 2024 12:18:20 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 665 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 666 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  25 ++
- 6 files changed, 700 insertions(+)
+ 6 files changed, 701 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..ecd1ca180
 +obj-m += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..54a66b59e
+index 000000000..c5090f4f5
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,665 @@
+@@ -0,0 +1,666 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -193,6 +193,7 @@ index 000000000..54a66b59e
 +
 +static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 +                              unsigned long arg) {
++
 +
 +  int rv = 0;
 +  unsigned long flags;
