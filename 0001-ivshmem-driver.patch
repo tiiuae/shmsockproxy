@@ -1,6 +1,6 @@
-From 90555c1eb8b0d44af949d4db369f1fc707c68fa2 Mon Sep 17 00:00:00 2001
+From 6cdf07d72f498a5f12016162e51d5895196d7d68 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Fri, 2 Feb 2024 12:27:17 +0400
+Date: Fri, 2 Feb 2024 14:06:07 +0400
 Subject: ivshmem driver
 
 ---
@@ -50,11 +50,11 @@ index 000000000..f0f75200c
 +	default 5
 diff --git a/drivers/char/ivshmem/Makefile b/drivers/char/ivshmem/Makefile
 new file mode 100644
-index 000000000..ecd1ca180
+index 000000000..0a850b05e
 --- /dev/null
 +++ b/drivers/char/ivshmem/Makefile
 @@ -0,0 +1 @@
-+obj-m += kvm_ivshmem.o
++obj-y += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
 index 000000000..03bb5732b
