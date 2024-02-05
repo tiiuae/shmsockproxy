@@ -459,8 +459,9 @@ void *run(void *arg) {
   struct ioctl_data ioctl_data;
   unsigned int tmp;
   int epollfd;
-  vm_data *peer_shm = peer_shm_data[instance_no];
+  vm_data *peer_shm;
   
+  peer_shm = peer_shm_data[instance_no];
   thread_init(instance_no);
   my_buffer_fds.fd = shmem_fd[instance_no];
   epollfd = epollfd_full[instance_no];
