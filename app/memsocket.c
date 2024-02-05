@@ -458,8 +458,6 @@ void *run(void *arg) {
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
   unsigned int tmp;
-  // TODO: remove
-  int count = 0, data_sent = 0;
   int epollfd;
 
   thread_init(instance_no);
@@ -559,12 +557,6 @@ void *run(void *arg) {
                         peer_shm_data[instance_no]->len));
             rv = send(conn_fd, (void *)peer_shm_data[instance_no]->data,
                       peer_shm_data[instance_no]->len, 0);
-            // TODO: test
-            data_sent += peer_shm_data[instance_no]->len;
-            count++;
-            fprintf(stderr, "Sent %d bytes count=%d total=%d\n",
-                    peer_shm_data[instance_no]->len, count, data_sent);
-            // if (! ++count %100),  = 0;
             if (rv != peer_shm_data[instance_no]->len) {
               ERROR("Sent %d out of %d bytes on fd#%d", rv,
                     peer_shm_data[instance_no]->len, conn_fd);
