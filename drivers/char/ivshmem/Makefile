@@ -1,1 +1,1 @@
-obj-m += kvm_ivshmem.o
+obj-y += kvm_ivshmem.o
