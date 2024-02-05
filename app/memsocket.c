@@ -454,7 +454,7 @@ void *run(void *arg) {
   struct sockaddr_un caddr;      /* client address */
   socklen_t len = sizeof(caddr); /* address length could change */
   struct pollfd my_buffer_fds = {.events = POLLOUT};
-  struct epoll_event ev;
+  struct epoll_event ev, *current_event;
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
   unsigned int tmp;
@@ -481,13 +481,14 @@ void *run(void *arg) {
     }
 
     for (n = 0; n < nfds; n++) {
+      current_event = &events[n];
 #ifdef DEBUG_ON
       ioctl(my_buffer_fds.fd, SHMEM_IOCNOP, &tmp);
       DBG("Event index=%d 0x%x on fd %d inout=%d-%d", n, events[n].events,
           events[n].data.fd, tmp & 0xffff, tmp >> 16);
 #endif
-      if (events[n].events & EPOLLOUT &&
-          events[n].data.fd == my_buffer_fds.fd) {
+      if (current_event->events & EPOLLOUT &&
+          current_event->data.fd == my_buffer_fds.fd) {
         DEBUG("Remote ACK", "");
         /* Set the local buffer is consumed and ready for use */
         ioctl(my_buffer_fds.fd, SHMEM_IOCSET,
@@ -496,7 +497,7 @@ void *run(void *arg) {
       }
 
       /* Handle the new connection on the socket */
-      if (events[n].events & EPOLLIN) {
+      if (current_event->events & EPOLLIN) {
         if (run_as_server && events[n].data.fd == server_socket) {
           conn_fd = accept(server_socket, (struct sockaddr *)&caddr, &len);
           if (conn_fd == -1) {
@@ -525,10 +526,10 @@ void *run(void *arg) {
 
         /* Both sides: Received data from the peer via shared memory - EPOLLIN
          */
-        else if (events[n].data.fd == my_buffer_fds.fd) {
+        else if (current_event->data.fd == my_buffer_fds.fd) {
           DEBUG(
               "shmem_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote len: %d",
-              my_buffer_fds.fd, events[n].events,
+              my_buffer_fds.fd, current_event->events,
               peer_shm->cmd, peer_shm->fd,
               peer_shm->len);
 
@@ -615,40 +616,40 @@ void *run(void *arg) {
           be sent to the peer */
         else {
           if (!run_as_server) {
-            conn_fd = get_remote_socket(instance_no, events[n].data.fd, 0,
+            conn_fd = get_remote_socket(instance_no, current_event->data.fd, 0,
                                         IGNORE_ERROR);
             DEBUG("get_remote_socket: %d", conn_fd);
           } else {
-            conn_fd = events[n].data.fd;
+            conn_fd = current_event->data.fd;
           }
           DEBUG("Reading from wayland/waypipe socket", "");
           read_count =
-              read(events[n].data.fd, (void *)my_shm->data,
+              read(current_event->data.fd, (void *)my_shm->data,
                    sizeof(my_shm->data));
 
           if (read_count <= 0) {
             ERROR("read from wayland/waypipe socket failed fd=%d",
-                  events[n].data.fd);
+                  current_event->data.fd);
             /* Release output buffer */
             ioctl(my_buffer_fds.fd, SHMEM_IOCSET,
                   (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
 
           } else { /* read_count > 0 */
             DEBUG("Read & sent %d bytes on fd#%d sent to %d checksum=0x%x",
-                  read_count, events[n].data.fd, conn_fd,
+                  read_count, current_event->data.fd, conn_fd,
                   cksum((unsigned char *)my_shm->data,
                         read_count));
 
-            if (events[n].events & EPOLLHUP) {
+            if (current_event->events & EPOLLHUP) {
               my_shm->cmd = CMD_DATA_CLOSE;
-              events[n].events &= ~EPOLLHUP;
+              current_event->events &= ~EPOLLHUP;
 
               /* unmap local fd */
               if (!run_as_server)
-                get_remote_socket(instance_no, events[n].data.fd, CLOSE_FD,
+                get_remote_socket(instance_no, current_event->data.fd, CLOSE_FD,
                                   IGNORE_ERROR);
               /* close local fd*/
-              close(events[n].data.fd);
+              close(current_event->data.fd);
             } else
               my_shm->cmd = CMD_DATA;
 
@@ -669,20 +670,20 @@ void *run(void *arg) {
             break;
           }
         } /* received data from Wayland/waypipe server */
-      }   /* events[n].events & EPOLLIN */
+      }   /* current_event->events & EPOLLIN */
 
       /* Handling connection close */
-      if (events[n].events & (EPOLLHUP | EPOLLERR)) {
-        DEBUG("Closing fd#%d", events[n].data.fd);
+      if (current_event->events & (EPOLLHUP | EPOLLERR)) {
+        DEBUG("Closing fd#%d", current_event->data.fd);
         my_shm->cmd = CMD_CLOSE;
         if (run_as_server)
-          my_shm->fd = events[n].data.fd;
+          my_shm->fd = current_event->data.fd;
         else {
           DEBUG("get_remote_socket: %d",
-                get_remote_socket(instance_no, events[n].data.fd, 0,
+                get_remote_socket(instance_no, current_event->data.fd, 0,
                                   IGNORE_ERROR));
           my_shm->fd = get_remote_socket(
-              instance_no, events[n].data.fd, CLOSE_FD, IGNORE_ERROR);
+              instance_no, current_event->data.fd, CLOSE_FD, IGNORE_ERROR);
         }
         if (my_shm->fd > 0) {
           DEBUG("ioctl ending close request for %d",
@@ -700,15 +701,15 @@ void *run(void *arg) {
           ioctl(my_buffer_fds.fd, SHMEM_IOCDORBELL, &ioctl_data);
 
         } else { /* unlock output buffer */
-          ERROR("Attempt to close invalid fd %d", events[n].data.fd);
+          ERROR("Attempt to close invalid fd %d", current_event->data.fd);
           ioctl(my_buffer_fds.fd, SHMEM_IOCSET,
                 (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
         }
         if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL,
-                      events[n].data.fd, NULL) == -1) {
-          ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", events[n].data.fd);
+                      current_event->data.fd, NULL) == -1) {
+          ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", current_event->data.fd);
         }
-        close(events[n].data.fd);
+        close(current_event->data.fd);
         /* If the buffer is busy, don't proceed any further events */
         if (epollfd == epollfd_limited[instance_no])
           break;
