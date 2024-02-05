@@ -484,8 +484,8 @@ void *run(void *arg) {
       current_event = &events[n];
 #ifdef DEBUG_ON
       ioctl(my_buffer_fds.fd, SHMEM_IOCNOP, &tmp);
-      DBG("Event index=%d 0x%x on fd %d inout=%d-%d", n, events[n].events,
-          events[n].data.fd, tmp & 0xffff, tmp >> 16);
+      DBG("Event index=%d 0x%x on fd %d inout=%d-%d", n, current_event->events,
+          current_event->data.fd, tmp & 0xffff, tmp >> 16);
 #endif
       if (current_event->events & EPOLLOUT &&
           current_event->data.fd == my_buffer_fds.fd) {
@@ -498,7 +498,7 @@ void *run(void *arg) {
 
       /* Handle the new connection on the socket */
       if (current_event->events & EPOLLIN) {
-        if (run_as_server && events[n].data.fd == server_socket) {
+        if (run_as_server && current_event->data.fd == server_socket) {
           conn_fd = accept(server_socket, (struct sockaddr *)&caddr, &len);
           if (conn_fd == -1) {
             FATAL("accept");
