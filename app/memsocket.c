@@ -459,7 +459,8 @@ void *run(void *arg) {
   struct ioctl_data ioctl_data;
   unsigned int tmp;
   int epollfd;
-
+  vm_data *peer_shm = peer_shm_data[instance_no];
+  
   thread_init(instance_no);
   my_buffer_fds.fd = shmem_fd[instance_no];
   epollfd = epollfd_full[instance_no];
@@ -526,56 +527,56 @@ void *run(void *arg) {
           DEBUG(
               "shmem_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote len: %d",
               shmem_fd[instance_no], events[n].events,
-              peer_shm_data[instance_no]->cmd, peer_shm_data[instance_no]->fd,
-              peer_shm_data[instance_no]->len);
+              peer_shm->cmd, peer_shm->fd,
+              peer_shm->len);
 
-          switch (peer_shm_data[instance_no]->cmd) {
+          switch (peer_shm->cmd) {
           case CMD_LOGIN:
             DEBUG("Received login request from 0x%x",
-                  peer_shm_data[instance_no]->fd);
+                  peer_shm->fd);
             /* If the peer VM starts again, close all opened file handles */
             close_peer_vm(instance_no);
 
-            local_rr_int_no[instance_no] = peer_shm_data[instance_no]->fd |
+            local_rr_int_no[instance_no] = peer_shm->fd |
                                            (instance_no << 1) |
                                            LOCAL_RESOURCE_READY_INT_VEC;
-            remote_rc_int_no[instance_no] = peer_shm_data[instance_no]->fd |
+            remote_rc_int_no[instance_no] = peer_shm->fd |
                                             (instance_no << 1) |
                                             PEER_RESOURCE_CONSUMED_INT_VEC;
 
-            peer_shm_data[instance_no]->fd = -1;
+            peer_shm->fd = -1;
             break;
           case CMD_DATA:
           case CMD_DATA_CLOSE:
             conn_fd = run_as_server
-                          ? peer_shm_data[instance_no]->fd
+                          ? peer_shm->fd
                           : map_peer_fd(instance_no,
-                                        peer_shm_data[instance_no]->fd, 0);
+                                        peer_shm->fd, 0);
             DEBUG("shmem: received %d bytes for %d cksum=0x%x",
-                  peer_shm_data[instance_no]->len, conn_fd,
-                  cksum((unsigned char *)peer_shm_data[instance_no]->data,
-                        peer_shm_data[instance_no]->len));
-            rv = send(conn_fd, (void *)peer_shm_data[instance_no]->data,
-                      peer_shm_data[instance_no]->len, 0);
-            if (rv != peer_shm_data[instance_no]->len) {
+                  peer_shm->len, conn_fd,
+                  cksum((unsigned char *)peer_shm->data,
+                        peer_shm->len));
+            rv = send(conn_fd, (void *)peer_shm->data,
+                      peer_shm->len, 0);
+            if (rv != peer_shm->len) {
               ERROR("Sent %d out of %d bytes on fd#%d", rv,
-                    peer_shm_data[instance_no]->len, conn_fd);
+                    peer_shm->len, conn_fd);
             }
             DEBUG("Received data has been sent", "");
 
-            if (peer_shm_data[instance_no]->cmd == CMD_DATA) {
+            if (peer_shm->cmd == CMD_DATA) {
               break;
             }
             /* no break if we need to the the fd */
           case CMD_CLOSE:
             if (run_as_server) {
-              conn_fd = peer_shm_data[instance_no]->fd;
+              conn_fd = peer_shm->fd;
               DEBUG("Closing %d", conn_fd);
             } else {
               conn_fd =
-                  map_peer_fd(instance_no, peer_shm_data[instance_no]->fd, 1);
+                  map_peer_fd(instance_no, peer_shm->fd, 1);
               DEBUG("Closing %d peer fd=%d", conn_fd,
-                    peer_shm_data[instance_no]->fd);
+                    peer_shm->fd);
             }
             if (conn_fd > 0) {
               if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL, conn_fd,
@@ -587,17 +588,17 @@ void *run(void *arg) {
             break;
           case CMD_CONNECT:
             make_wayland_connection(instance_no,
-                                    peer_shm_data[instance_no]->fd);
+                                    peer_shm->fd);
             break;
           default:
             ERROR("Invalid CMD 0x%x from peer!",
-                  peer_shm_data[instance_no]->cmd);
+                  peer_shm->cmd);
             break;
-          } /* switch peer_shm_data[instance_no]->cmd */
+          } /* switch peer_shm->cmd */
 
           /* Signal the other side that its buffer has been processed */
           DEBUG("Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC", "");
-          peer_shm_data[instance_no]->cmd = -1;
+          peer_shm->cmd = -1;
 
           ioctl_data.int_no = remote_rc_int_no[instance_no];
 #ifdef DEBUG_IOCTL
