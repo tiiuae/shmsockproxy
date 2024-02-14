@@ -306,7 +306,7 @@ void shmem_init(int instance_no) {
     FATAL("Exiting");
   }
   vm_control = mmap(NULL, shmem_size, PROT_READ | PROT_WRITE,
-                    MAP_SHARED | MAP_NORESERVE | MAP_HUGETLB, shmem_fd[instance_no], 0);
+                    MAP_SHARED | MAP_NORESERVE | MAP_HUGETLB | MAP_ANONYMOUS, shmem_fd[instance_no], 0);
   if (!vm_control) {
     FATAL("Got NULL pointer from mmap");
   }
