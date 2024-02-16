@@ -561,7 +561,14 @@ void *run(void *arg) {
                   peer_shm->len, conn_fd,
                   cksum((unsigned char *)peer_shm->data,
                         peer_shm->len));
-            memcpy(buffer, (void*) peer_shm->data, peer_shm->len);
+
+            rv = lseek(my_buffer_fds.fd,
+              (unsigned long int) peer_shm->data -
+              (unsigned long int) vm_control, SEEK_SET);
+            if (rv < 0) {
+                ERROR("lseek: %d", rv);
+            }
+            read(my_buffer_fds.fd, buffer, peer_shm->len);
             rv = send(conn_fd, buffer, //(void *)peer_shm->data,
                       peer_shm->len, 0);
             if (rv != peer_shm->len) {
