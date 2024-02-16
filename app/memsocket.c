@@ -97,6 +97,8 @@
 
 enum { CMD_LOGIN, CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_DATA_CLOSE };
 #define FD_MAP_COUNT (sizeof(fd_map) / sizeof(fd_map[0]))
+
+unsigned char buffer[BUFFER_SIZE];
 struct {
   int my_fd;
   int remote_fd;
@@ -107,7 +109,7 @@ typedef struct {
   volatile int cmd;
   volatile int fd;
   volatile int len;
-  volatile unsigned char data[SHMEM_BUFFER_SIZE];
+  unsigned char data[SHMEM_BUFFER_SIZE];
 } vm_data;
 
 int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
@@ -306,7 +308,7 @@ void shmem_init(int instance_no) {
     FATAL("Exiting");
   }
   vm_control = mmap(NULL, shmem_size, PROT_READ | PROT_WRITE,
-                    MAP_SHARED | MAP_NORESERVE | MAP_HUGETLB | MAP_ANONYMOUS, shmem_fd[instance_no], 0);
+                    MAP_SHARED | MAP_NORESERVE, shmem_fd[instance_no], 0);
   if (!vm_control) {
     FATAL("Got NULL pointer from mmap");
   }
@@ -559,7 +561,8 @@ void *run(void *arg) {
                   peer_shm->len, conn_fd,
                   cksum((unsigned char *)peer_shm->data,
                         peer_shm->len));
-            rv = send(conn_fd, (void *)peer_shm->data,
+            memcpy(buffer, (void*) peer_shm->data, peer_shm->len);
+            rv = send(conn_fd, buffer, //(void *)peer_shm->data,
                       peer_shm->len, 0);
             if (rv != peer_shm->len) {
               ERROR("Sent %d out of %d bytes on fd#%d", rv,
