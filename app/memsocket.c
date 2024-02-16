@@ -126,6 +126,8 @@ struct {
   vm_data server_data[VM_COUNT];
 } *vm_control;
 
+void* vm_areas[VM_COUNT];
+
 static const char usage_string[] = "Usage: memsocket [-c|-s] socket_path "
                                    "{instance number (server mode only)}\n";
 
@@ -309,6 +311,7 @@ void shmem_init(int instance_no) {
   }
   vm_control = mmap(NULL, shmem_size, PROT_READ | PROT_WRITE,
                     MAP_SHARED | MAP_NORESERVE, shmem_fd[instance_no], 0);
+  vm_areas[instance_no] = vm_control;
   if (!vm_control) {
     FATAL("Got NULL pointer from mmap");
   }
@@ -564,7 +567,12 @@ void *run(void *arg) {
 
             rv = lseek(my_buffer_fds.fd,
               (unsigned long int) peer_shm->data -
-              (unsigned long int) vm_control, SEEK_SET);
+              (unsigned long int) vm_areas[instance_no], SEEK_SET);
+            printf("delta=0x%lx=0x%lx - 0x%lx\n", 
+              (unsigned long int) peer_shm->data -
+              (unsigned long int) vm_areas[instance_no], 
+              (unsigned long int) peer_shm->data,
+              (unsigned long int) vm_areas[instance_no]);
             if (rv < 0) {
                 ERROR("lseek: %d", rv);
             }
