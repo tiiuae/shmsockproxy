@@ -39,7 +39,7 @@
 
 #define DBG(fmt, ...)                                                          \
   {                                                                            \
-    char tmp1[256], tmp2[256];                                                 \
+    char tmp1[512], tmp2[256];                                                 \
     sprintf(tmp2, fmt, __VA_ARGS__);                                           \
     sprintf(tmp1, "[%d] %s:%d: %s\n", instance_no, __FUNCTION__, __LINE__,     \
             tmp2);                                                             \
@@ -60,7 +60,7 @@
 #else
 #define INFO(fmt, ...)                                                         \
   {                                                                            \
-    char tmp1[256], tmp2[256];                                                 \
+    char tmp1[512], tmp2[256];                                                 \
     sprintf(tmp2, fmt, __VA_ARGS__);                                           \
     sprintf(tmp1, "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,    \
             tmp2);                                                             \
@@ -71,7 +71,7 @@
 
 #define ERROR0(msg)                                                            \
   {                                                                            \
-    char tmp[256];                                                             \
+    char tmp[512];                                                             \
     sprintf(tmp, "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,     \
             msg);                                                              \
     report(tmp, 0);                                                            \
@@ -79,7 +79,7 @@
 
 #define ERROR(fmt, ...)                                                        \
   {                                                                            \
-    char tmp1[256], tmp2[256];                                                 \
+    char tmp1[512], tmp2[256];                                                 \
     sprintf(tmp2, fmt, __VA_ARGS__);                                           \
     sprintf(tmp1, "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,    \
             tmp2);                                                             \
@@ -88,7 +88,7 @@
 
 #define FATAL(msg)                                                             \
   {                                                                            \
-    char tmp1[256], tmp2[256];                                                 \
+    char tmp1[512], tmp2[256];                                                 \
     sprintf(tmp2, msg);                                                        \
     sprintf(tmp1, "[%d] [%s:%d]: %s\n", instance_no, __FUNCTION__, __LINE__,   \
             tmp2);                                                             \
