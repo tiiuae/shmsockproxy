@@ -97,8 +97,6 @@
 
 enum { CMD_LOGIN, CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_DATA_CLOSE };
 #define FD_MAP_COUNT (sizeof(fd_map) / sizeof(fd_map[0]))
-
-unsigned char buffer[BUFFER_SIZE];
 struct {
   int my_fd;
   int remote_fd;
@@ -109,7 +107,7 @@ typedef struct {
   volatile int cmd;
   volatile int fd;
   volatile int len;
-  unsigned char data[SHMEM_BUFFER_SIZE];
+  volatile unsigned char data[SHMEM_BUFFER_SIZE];
 } vm_data;
 
 int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
@@ -125,8 +123,6 @@ struct {
   vm_data client_data[VM_COUNT];
   vm_data server_data[VM_COUNT];
 } *vm_control;
-
-void* vm_areas[VM_COUNT];
 
 static const char usage_string[] = "Usage: memsocket [-c|-s] socket_path "
                                    "{instance number (server mode only)}\n";
@@ -311,7 +307,6 @@ void shmem_init(int instance_no) {
   }
   vm_control = mmap(NULL, shmem_size, PROT_READ | PROT_WRITE,
                     MAP_SHARED | MAP_NORESERVE, shmem_fd[instance_no], 0);
-  vm_areas[instance_no] = vm_control;
   if (!vm_control) {
     FATAL("Got NULL pointer from mmap");
   }
@@ -564,20 +559,7 @@ void *run(void *arg) {
                   peer_shm->len, conn_fd,
                   cksum((unsigned char *)peer_shm->data,
                         peer_shm->len));
-
-            rv = lseek(my_buffer_fds.fd,
-              (unsigned long int) peer_shm->data -
-              (unsigned long int) vm_areas[instance_no], SEEK_SET);
-            printf("delta=0x%lx=0x%lx - 0x%lx\n", 
-              (unsigned long int) peer_shm->data -
-              (unsigned long int) vm_areas[instance_no], 
-              (unsigned long int) peer_shm->data,
-              (unsigned long int) vm_areas[instance_no]);
-            if (rv < 0) {
-                ERROR("lseek: %d", rv);
-            }
-            read(my_buffer_fds.fd, buffer, peer_shm->len);
-            rv = send(conn_fd, buffer, //(void *)peer_shm->data,
+            rv = send(conn_fd, (void *)peer_shm->data,
                       peer_shm->len, 0);
             if (rv != peer_shm->len) {
               ERROR("Sent %d out of %d bytes on fd#%d", rv,
