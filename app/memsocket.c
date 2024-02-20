@@ -730,6 +730,8 @@ int main(int argc, char **argv) {
   int instance_no = 0;
   pthread_t threads[VM_COUNT];
 
+  if (argc <= 3)
+    goto wrong_args;
   if (strcmp(argv[1], "-c") == 0) {
     run_as_server = 0;
   } else if (strcmp(argv[1], "-s") == 0) {
