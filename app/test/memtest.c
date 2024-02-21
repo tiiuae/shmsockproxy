@@ -60,7 +60,7 @@ void time_report(struct tms *start, struct tms *end, clock_t c_start, clock_t c_
     double u_time = (double)(end->tms_utime - start->tms_utime) / sysconf(_SC_CLK_TCK);
     double s_time = (double)(end->tms_stime - start->tms_stime) / sysconf(_SC_CLK_TCK);
     
-    printf("Sent/received %ld bytes %.0f Mbytes/sec\n", sent_bytes, bytes_per_sec/1024);
+    printf("Sent/received %ld bytes %.0f Mbytes/sec\n", sent_bytes, bytes_per_sec/1024/1024);
     printf("real %.3fs\nuser %.3fs\nsys  %.3fs\n", real_time, u_time, s_time);
 }
 
