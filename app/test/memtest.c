@@ -180,9 +180,13 @@ void send_file(char *socket_path, char *input_file, int size, int error) {
 }
 
 void usage(char *cmd) {
-  printf("Usage: '%s socket_path' for receiving.' %s socket_path input_file "
-         "size for sending\n",
-         cmd, cmd);
+  printf("Usage: '%s socket_path' for receiving.' %s socket_path input_file [size CRC_error]"
+         " for sending\nBefore using stop memsocket service: 'systemctl stop --user memservice.socket'.\n"
+         "For receiving run e.g. 'memsocket -c ./test.sock &; %s ./test.sock'.\n"
+         "To send a file run on other VM: 'memsocket -s ./test.sock 3 &; %s ./test.sock /dev/random 10M.'\n"
+         "To force wrong CRC on sending: '%s ./test.sock /dev/random 10M xxx\n'"
+         ,
+         cmd, cmd, cmd, cmd, cmd);
   exit(0);
 }
 
