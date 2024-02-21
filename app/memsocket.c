@@ -628,8 +628,9 @@ void *run(void *arg) {
                    sizeof(my_shm->data));
 
           if (read_count <= 0) {
-            ERROR("read from wayland/waypipe socket failed fd=%d",
-                  current_event->data.fd);
+            if (read_count < 0)
+              ERROR("read from wayland/waypipe socket failed fd=%d",
+                    current_event->data.fd);
             /* Release output buffer */
             ioctl(my_buffer_fds.fd, SHMEM_IOCSET,
                   (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
