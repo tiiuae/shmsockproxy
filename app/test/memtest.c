@@ -124,7 +124,7 @@ void receive_file(char *socket_path) {
   }
 }
 
-void send_file(char *socket_path, char *input_file, int size) {
+void send_file(char *socket_path, char *input_file, int size, int error) {
   int in_fd, out_fd;
   struct sockaddr_un socket_name;
   long int sent_bytes = 0, rv, wv;
@@ -169,6 +169,8 @@ void send_file(char *socket_path, char *input_file, int size) {
       break;
   };
   buff[0] = crc & 0xff;
+  if (error) 
+    buff[0]--;
   wv = write(out_fd, buff, 1);
 
   r_time_end = times(&time_end);
@@ -199,7 +201,7 @@ int main(int argc, char **argv) {
     receive_file(socket_path);
   } else {
     strcpy(file_path, argv[2]);
-    if (argc == 4) {
+    if (argc >= 4) {
       c = toupper(argv[3][strlen(argv[3]) - 1]);
       if (c == 'K')
         m = 1024;
@@ -212,6 +214,6 @@ int main(int argc, char **argv) {
     }
 
     // printf(">>%d\n", __LINE__);
-    send_file(socket_path, file_path, size);
+    send_file(socket_path, file_path, size, argc ==5 );
   }
 }
