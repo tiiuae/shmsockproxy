@@ -401,10 +401,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: peer_resource_count>0!: %d", i,
                             peer_resource_count[i]);
       }
-      spin_lock(&rawhide_irq_lock);
       peer_resource_count[i] = 1;
-      smp_mb();
-      spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&peer_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
@@ -416,9 +413,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
                             local_resource_count[i]);
       }
-      spin_lock(&rawhide_irq_lock);
       local_resource_count[i] = 1;
-      smp_mb();
       spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
