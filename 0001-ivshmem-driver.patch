@@ -1,6 +1,6 @@
-From f19dc0b947f63b7133b8b19cdeb58b4d4be94496 Mon Sep 17 00:00:00 2001
+From d086451ac9dcfe350792158c54a39fd0d170fe2c Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Mon, 5 Feb 2024 10:53:35 +0400
+Date: Mon, 26 Feb 2024 15:57:57 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 667 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 670 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  25 ++
- 6 files changed, 702 insertions(+)
+ 6 files changed, 705 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..0a850b05e
 +obj-y += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..03bb5732b
+index 000000000..5428cad30
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,667 @@
+@@ -0,0 +1,670 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -94,7 +94,6 @@ index 000000000..03bb5732b
 +#define CONFIG_KVM_IVSHMEM_VM_COUNT (5)
 +#endif
 +
-+DEFINE_SPINLOCK(rawhide_irq_lock);
 +#define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 +#define VECTORS_COUNT (2 * VM_COUNT)
 +
@@ -200,6 +199,8 @@ index 000000000..03bb5732b
 +  unsigned long flags;
 +  uint32_t msg;
 +  struct ioctl_data ioctl_data;
++  DEFINE_SPINLOCK(irq_lock);
++
 +
 +  KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx",
 +                      (unsigned long int)filp->private_data, cmd, arg);
@@ -237,18 +238,18 @@ index 000000000..03bb5732b
 +    KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%x on vector 0x%x",
 +                        (unsigned long int)filp->private_data,
 +                        (ioctl_data.int_no >> 16), vec);
-+    spin_lock_irqsave(&rawhide_irq_lock, flags);
++    spin_lock_irqsave(&irq_lock, flags);
 +    if (vec & LOCAL_RESOURCE_READY_INT_VEC) {
 +      local_resource_count[(unsigned long int)filp->private_data] = 0;
 +    } else {
 +      peer_resource_count[(unsigned long int)filp->private_data] = 0;
 +    }
-+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
++    spin_unlock_irqrestore(&irq_lock, flags);
 +    writel(ioctl_data.int_no, kvm_ivshmem_dev.regs + Doorbell);
 +    break;
 +
 +  case SHMEM_IOCSET:
-+    spin_lock_irqsave(&rawhide_irq_lock, flags);
++    spin_lock_irqsave(&irq_lock, flags);
 +    if ((arg >> 8) == LOCAL_RESOURCE_READY_INT_VEC)
 +      local_resource_count[(unsigned long int)filp->private_data] = arg & 0xff;
 +    else if ((arg >> 8) == PEER_RESOURCE_CONSUMED_INT_VEC)
@@ -257,11 +258,11 @@ index 000000000..03bb5732b
 +      rv = -EINVAL;
 +      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSET: invalid arg %ld", arg);
 +    }
-+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
++    spin_unlock_irqrestore(&irq_lock, flags);
 +    break;
 +
 +  case SHMEM_IOCSETINSTANCENO:
-+    spin_lock_irqsave(&rawhide_irq_lock, flags);
++    spin_lock_irqsave(&irq_lock, flags);
 +    if (arg >= VM_COUNT) {
 +      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", arg);
 +      rv = -EINVAL;
@@ -277,7 +278,7 @@ index 000000000..03bb5732b
 +    local_resource_count[arg] = 1;
 +    peer_resource_count[arg] = 0;
 +  unlock:
-+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
++    spin_unlock_irqrestore(&irq_lock, flags);
 +    break;
 +
 +  case SHMEM_IOCNOP:
@@ -445,6 +446,8 @@ index 000000000..03bb5732b
 +static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
 +  struct kvm_ivshmem_device *dev = dev_instance;
 +  int i;
++  DEFINE_SPINLOCK(rawhide_irq_lock);
++
 +
 +  if (unlikely(dev == NULL)) {
 +    KVM_IVSHMEM_DPRINTK("return IRQ_NONE");
@@ -760,5 +763,5 @@ index 000000000..aacd7f73e
 +  int len;
 +};
 -- 
-2.43.0
+2.43.2
 
