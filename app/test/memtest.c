@@ -118,7 +118,7 @@ void receive_file(char *socket_path) {
     if (crc == CRC8_RESIDUE) 
       printf(" CRC OK\n");
     else
-      printf(" TRAMISSION ERROR!\n");
+      printf(" BAD CRC!\n");
     if (close(cfd) == -1)
       handle_error("close");
   }
