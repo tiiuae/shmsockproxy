@@ -31,6 +31,7 @@
 #define CONFIG_KVM_IVSHMEM_VM_COUNT (5)
 #endif
 
+DEFINE_SPINLOCK(rawhide_irq_lock);
 #define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 #define VECTORS_COUNT (2 * VM_COUNT)
 
@@ -136,8 +137,6 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   unsigned long flags;
   uint32_t msg;
   struct ioctl_data ioctl_data;
-  DEFINE_SPINLOCK(irq_lock);
-
 
   KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx",
                       (unsigned long int)filp->private_data, cmd, arg);
@@ -175,18 +174,18 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     KVM_IVSHMEM_DPRINTK("%ld ringing doorbell id=0x%x on vector 0x%x",
                         (unsigned long int)filp->private_data,
                         (ioctl_data.int_no >> 16), vec);
-    spin_lock_irqsave(&irq_lock, flags);
+    spin_lock_irqsave(&rawhide_irq_lock, flags);
     if (vec & LOCAL_RESOURCE_READY_INT_VEC) {
       local_resource_count[(unsigned long int)filp->private_data] = 0;
     } else {
       peer_resource_count[(unsigned long int)filp->private_data] = 0;
     }
-    spin_unlock_irqrestore(&irq_lock, flags);
+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     writel(ioctl_data.int_no, kvm_ivshmem_dev.regs + Doorbell);
     break;
 
   case SHMEM_IOCSET:
-    spin_lock_irqsave(&irq_lock, flags);
+    spin_lock_irqsave(&rawhide_irq_lock, flags);
     if ((arg >> 8) == LOCAL_RESOURCE_READY_INT_VEC)
       local_resource_count[(unsigned long int)filp->private_data] = arg & 0xff;
     else if ((arg >> 8) == PEER_RESOURCE_CONSUMED_INT_VEC)
@@ -195,11 +194,11 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       rv = -EINVAL;
       printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSET: invalid arg %ld", arg);
     }
-    spin_unlock_irqrestore(&irq_lock, flags);
+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     break;
 
   case SHMEM_IOCSETINSTANCENO:
-    spin_lock_irqsave(&irq_lock, flags);
+    spin_lock_irqsave(&rawhide_irq_lock, flags);
     if (arg >= VM_COUNT) {
       printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", arg);
       rv = -EINVAL;
@@ -215,7 +214,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     local_resource_count[arg] = 1;
     peer_resource_count[arg] = 0;
   unlock:
-    spin_unlock_irqrestore(&irq_lock, flags);
+    spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     break;
 
   case SHMEM_IOCNOP:
@@ -383,8 +382,6 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
 static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   struct kvm_ivshmem_device *dev = dev_instance;
   int i;
-  DEFINE_SPINLOCK(rawhide_irq_lock);
-
 
   if (unlikely(dev == NULL)) {
     KVM_IVSHMEM_DPRINTK("return IRQ_NONE");
@@ -401,7 +398,10 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: peer_resource_count>0!: %d", i,
                             peer_resource_count[i]);
       }
+      spin_lock(&rawhide_irq_lock);
       peer_resource_count[i] = 1;
+      smp_mb();
+      spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&peer_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
@@ -413,7 +413,9 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
                             local_resource_count[i]);
       }
+      spin_lock(&rawhide_irq_lock);
       local_resource_count[i] = 1;
+      smp_mb();
       spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
