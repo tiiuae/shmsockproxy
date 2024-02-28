@@ -643,12 +643,12 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
   off += start;
   vma->vm_pgoff = off >> PAGE_SHIFT;
   #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,3,0)
-  vm_flags_mod(vma, VM_SHARED, 0);
+  // vm_flags_mod(vma, VM_SHARED, 0);
   #else
-  vma->vm_flags |= VM_SHARED;
+  // vma->vm_flags |= VM_SHARED;
   #endif
 
-  if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
+  if (io_remap_pfn_range(vma, 0xa00000000/*vma->vm_start*/, off >> PAGE_SHIFT,
                          vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
     KVM_IVSHMEM_DPRINTK("%ld mmap failed",
                         (unsigned long int)filp->private_data);

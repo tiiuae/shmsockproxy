@@ -1,6 +1,6 @@
-From 32c280a2f43d48369a306ab83c556cdaa8e4297b Mon Sep 17 00:00:00 2001
+From 1a2b14951d940e9144830aa5e8300dab3971a7d4 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 27 Feb 2024 12:46:52 +0400
+Date: Wed, 28 Feb 2024 14:11:00 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..0a850b05e
 +obj-y += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..03bb5732b
+index 000000000..0f31fb7f2
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,667 @@
@@ -706,12 +706,12 @@ index 000000000..03bb5732b
 +  off += start;
 +  vma->vm_pgoff = off >> PAGE_SHIFT;
 +  #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,3,0)
-+  vm_flags_mod(vma, VM_SHARED, 0);
++  // vm_flags_mod(vma, VM_SHARED, 0);
 +  #else
-+  vma->vm_flags |= VM_SHARED;
++  // vma->vm_flags |= VM_SHARED;
 +  #endif
 +
-+  if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
++  if (io_remap_pfn_range(vma, 0xa00000000/*vma->vm_start*/, off >> PAGE_SHIFT,
 +                         vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
 +    KVM_IVSHMEM_DPRINTK("%ld mmap failed",
 +                        (unsigned long int)filp->private_data);
