@@ -1,6 +1,6 @@
-From 32c280a2f43d48369a306ab83c556cdaa8e4297b Mon Sep 17 00:00:00 2001
+From 1502a613fd7cc599c436321ad03d2e05e447211d Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 27 Feb 2024 12:46:52 +0400
+Date: Fri, 8 Mar 2024 12:42:28 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 667 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 668 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  25 ++
- 6 files changed, 702 insertions(+)
+ 6 files changed, 703 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..0a850b05e
 +obj-y += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..03bb5732b
+index 000000000..264b6ee8e
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,667 @@
+@@ -0,0 +1,668 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -372,7 +372,7 @@ index 000000000..03bb5732b
 +  if (len == 0)
 +    return 0;
 +
-+  bytes_read = copy_to_user(buffer, kvm_ivshmem_dev.base_addr + offset, len);
++  bytes_read = copy_to_user(buffer, (void*) 0x920000000ULL /*kvm_ivshmem_dev.base_addr*/ + offset, len);
 +  if (bytes_read > 0) {
 +    return -EFAULT;
 +  }
@@ -430,7 +430,7 @@ index 000000000..03bb5732b
 +    return 0;
 +
 +  bytes_written =
-+      copy_from_user(kvm_ivshmem_dev.base_addr + offset, buffer, len);
++      copy_from_user((void*) 0x920000000 /*kvm_ivshmem_dev.base_addr */ + offset, buffer, len);
 +  if (bytes_written > 0) {
 +    return -EFAULT;
 +  }
@@ -687,7 +687,8 @@ index 000000000..03bb5732b
 +  unsigned long start;
 +
 +  off = vma->vm_pgoff << PAGE_SHIFT;
-+  start = kvm_ivshmem_dev.ioaddr;
++  /* The same value must be set in qemu's ivshmem-flat.c file!!! */
++  start = 0x920000000ULL; /* kvm_ivshmem_dev.ioaddr; */
 +
 +  len = PAGE_ALIGN((start & ~PAGE_MASK) + kvm_ivshmem_dev.ioaddr_size);
 +  start &= PAGE_MASK;
@@ -760,5 +761,5 @@ index 000000000..aacd7f73e
 +  int len;
 +};
 -- 
-2.43.2
+2.44.0
 
