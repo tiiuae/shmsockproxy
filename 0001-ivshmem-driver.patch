@@ -1,6 +1,6 @@
-From 1502a613fd7cc599c436321ad03d2e05e447211d Mon Sep 17 00:00:00 2001
+From 782f8e0338744acb36e089fff016f3db86f07178 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Fri, 8 Mar 2024 12:42:28 +0400
+Date: Mon, 11 Mar 2024 12:21:16 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 668 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 670 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  25 ++
- 6 files changed, 703 insertions(+)
+ 6 files changed, 705 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..0a850b05e
 +obj-y += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..264b6ee8e
+index 000000000..a03b1bd5d
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,668 @@
+@@ -0,0 +1,670 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -108,6 +108,8 @@ index 000000000..264b6ee8e
 +#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
 +  {}
 +#endif
++
++#define FLAT_ADDR (0x920000000ULL)
 +
 +enum {
 +  /* KVM Inter-VM shared memory device register offsets */
@@ -372,7 +374,7 @@ index 000000000..264b6ee8e
 +  if (len == 0)
 +    return 0;
 +
-+  bytes_read = copy_to_user(buffer, (void*) 0x920000000ULL /*kvm_ivshmem_dev.base_addr*/ + offset, len);
++  bytes_read = copy_to_user(buffer, (void*) FLAT_ADDR /*kvm_ivshmem_dev.base_addr*/ + offset, len);
 +  if (bytes_read > 0) {
 +    return -EFAULT;
 +  }
@@ -430,7 +432,7 @@ index 000000000..264b6ee8e
 +    return 0;
 +
 +  bytes_written =
-+      copy_from_user((void*) 0x920000000 /*kvm_ivshmem_dev.base_addr */ + offset, buffer, len);
++      copy_from_user((void*) FLAT_ADDR /*kvm_ivshmem_dev.base_addr */ + offset, buffer, len);
 +  if (bytes_written > 0) {
 +    return -EFAULT;
 +  }
@@ -671,7 +673,7 @@ index 000000000..264b6ee8e
 +}
 +
 +static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
-+  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device");
++  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device. Using flat memory @ 0x%llx", FLAT_ADDR);
 +  filp->private_data = (void *)(unsigned long)-1;
 +  return 0;
 +}
@@ -688,7 +690,7 @@ index 000000000..264b6ee8e
 +
 +  off = vma->vm_pgoff << PAGE_SHIFT;
 +  /* The same value must be set in qemu's ivshmem-flat.c file!!! */
-+  start = 0x920000000ULL; /* kvm_ivshmem_dev.ioaddr; */
++  start = FLAT_ADDR; /* kvm_ivshmem_dev.ioaddr; */
 +
 +  len = PAGE_ALIGN((start & ~PAGE_MASK) + kvm_ivshmem_dev.ioaddr_size);
 +  start &= PAGE_MASK;
