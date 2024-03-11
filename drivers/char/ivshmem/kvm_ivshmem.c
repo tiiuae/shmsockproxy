@@ -610,7 +610,7 @@ error:
 }
 
 static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
-  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device");
+  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device. Using flat memory @ 0x%llx", FLAT_ADDR);
   filp->private_data = (void *)(unsigned long)-1;
   return 0;
 }
