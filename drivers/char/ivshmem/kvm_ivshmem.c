@@ -46,6 +46,8 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
   {}
 #endif
 
+#define FLAT_ADDR (0x920000000ULL)
+
 enum {
   /* KVM Inter-VM shared memory device register offsets */
   IntrMask = 0x00,   /* Interrupt Mask */
@@ -309,7 +311,7 @@ static ssize_t kvm_ivshmem_read(struct file *filp, char *buffer, size_t len,
   if (len == 0)
     return 0;
 
-  bytes_read = copy_to_user(buffer, (void*) 0x920000000ULL /*kvm_ivshmem_dev.base_addr*/ + offset, len);
+  bytes_read = copy_to_user(buffer, (void*) FLAT_ADDR /*kvm_ivshmem_dev.base_addr*/ + offset, len);
   if (bytes_read > 0) {
     return -EFAULT;
   }
@@ -367,7 +369,7 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
     return 0;
 
   bytes_written =
-      copy_from_user((void*) 0x920000000 /*kvm_ivshmem_dev.base_addr */ + offset, buffer, len);
+      copy_from_user((void*) FLAT_ADDR /*kvm_ivshmem_dev.base_addr */ + offset, buffer, len);
   if (bytes_written > 0) {
     return -EFAULT;
   }
@@ -625,7 +627,7 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   off = vma->vm_pgoff << PAGE_SHIFT;
   /* The same value must be set in qemu's ivshmem-flat.c file!!! */
-  start = 0x920000000ULL; /* kvm_ivshmem_dev.ioaddr; */
+  start = FLAT_ADDR; /* kvm_ivshmem_dev.ioaddr; */
 
   len = PAGE_ALIGN((start & ~PAGE_MASK) + kvm_ivshmem_dev.ioaddr_size);
   start &= PAGE_MASK;
