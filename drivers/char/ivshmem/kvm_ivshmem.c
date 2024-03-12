@@ -395,6 +395,7 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
   return len;
 }
 
+#define DEBUG
 static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   struct kvm_ivshmem_device *dev = dev_instance;
   int i;
@@ -416,7 +417,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       }
       spin_lock(&rawhide_irq_lock);
       peer_resource_count[i] = 1;
-      smp_mb();
+      // smp_mb();
       spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&peer_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
@@ -431,12 +432,13 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       }
       spin_lock(&rawhide_irq_lock);
       local_resource_count[i] = 1;
-      smp_mb();
+      // smp_mb();
       spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
   }
+#undef DEBUG
 
   printk(KERN_ERR "KVM_IVSHMEM: irq %d not handled", irq);
   return IRQ_NONE;
