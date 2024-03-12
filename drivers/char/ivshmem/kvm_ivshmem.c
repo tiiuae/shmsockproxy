@@ -396,6 +396,17 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
 }
 
 #define DEBUG
+#undef KVM_IVSHMEM_DPRINTK
+#ifdef DEBUG
+#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
+  do {                                                                         \
+    printk(KERN_INFO "KVM_IVSHMEM: " fmt "\n", ##__VA_ARGS__);                 \
+  } while (0)
+#else
+#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
+  {}
+#endif
+
 static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   struct kvm_ivshmem_device *dev = dev_instance;
   int i;
@@ -438,11 +449,22 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       return IRQ_HANDLED;
     }
   }
-#undef DEBUG
 
   printk(KERN_ERR "KVM_IVSHMEM: irq %d not handled", irq);
   return IRQ_NONE;
 }
+
+#undef DEBUG
+#undef KVM_IVSHMEM_DPRINTK
+#ifdef DEBUG
+#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
+  do {                                                                         \
+    printk(KERN_INFO "KVM_IVSHMEM: " fmt "\n", ##__VA_ARGS__);                 \
+  } while (0)
+#else
+#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
+  {}
+#endif
 
 static int request_msix_vectors(struct kvm_ivshmem_device *ivs_info,
                                 int nvectors) {
