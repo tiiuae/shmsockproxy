@@ -47,6 +47,7 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 #endif
 
 #define FLAT_ADDR (0x920000000ULL)
+#define FLAT_SIZE (16*1024*1024)
 
 enum {
   /* KVM Inter-VM shared memory device register offsets */
@@ -67,6 +68,8 @@ typedef struct kvm_ivshmem_device {
   unsigned int ioaddr;
   unsigned int ioaddr_size;
   unsigned int irq;
+
+  void *flat_ioaddr;
 
   struct pci_dev *dev;
   char (*msix_names)[256];
@@ -303,6 +306,10 @@ static ssize_t kvm_ivshmem_read(struct file *filp, char *buffer, size_t len,
     printk(KERN_ERR "KVM_IVSHMEM: cannot read from ioaddr (NULL)");
     return 0;
   }
+  if (!kvm_ivshmem_dev.flat_ioaddr) {
+    printk(KERN_ERR "KVM_IVSHMEM: cannot read from flat addr (NULL)");
+    return 0;
+  }
 
   if (len > kvm_ivshmem_dev.ioaddr_size - offset) {
     len = kvm_ivshmem_dev.ioaddr_size - offset;
@@ -311,7 +318,8 @@ static ssize_t kvm_ivshmem_read(struct file *filp, char *buffer, size_t len,
   if (len == 0)
     return 0;
 
-  bytes_read = copy_to_user(buffer, (void*) FLAT_ADDR /*kvm_ivshmem_dev.base_addr*/ + offset, len);
+//  bytes_read = copy_to_user(buffer, (void*)  kvm_ivshmem_dev.base_addr + offset, len);
+  bytes_read = copy_to_user(buffer, (void*)  kvm_ivshmem_dev.flat_ioaddr + offset, len);
   if (bytes_read > 0) {
     return -EFAULT;
   }
@@ -358,6 +366,11 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
            (unsigned long int)filp->private_data);
     return 0;
   }
+  if (!kvm_ivshmem_dev.flat_ioaddr) {
+    printk(KERN_ERR "KVM_IVSHMEM: %ld cannot write to flat addr (NULL)",
+           (unsigned long int)filp->private_data);
+    return 0;
+  }
 
   if (len > kvm_ivshmem_dev.ioaddr_size - offset) {
     len = kvm_ivshmem_dev.ioaddr_size - offset;
@@ -369,7 +382,8 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
     return 0;
 
   bytes_written =
-      copy_from_user((void*) FLAT_ADDR /*kvm_ivshmem_dev.base_addr */ + offset, buffer, len);
+      // copy_from_user((void*)  kvm_ivshmem_dev.base_addr + offset, buffer, len);
+      copy_from_user((void*)  kvm_ivshmem_dev.flat_ioaddr + offset, buffer, len);
   if (bytes_written > 0) {
     return -EFAULT;
   }
@@ -509,15 +523,22 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
 
   kvm_ivshmem_dev.base_addr = pci_iomap(pdev, 2, 0);
   printk(KERN_INFO "KVM_IVSHMEM: iomap base = 0x%p", kvm_ivshmem_dev.base_addr);
+  kvm_ivshmem_dev.flat_ioaddr = memremap(FLAT_ADDR, FLAT_SIZE, MEMREMAP_WB);
+  printk(KERN_INFO "KVM_IVSHMEM: flat base = 0x%p", kvm_ivshmem_dev.flat_ioaddr);
 
   if (!kvm_ivshmem_dev.base_addr) {
     printk(KERN_ERR "KVM_IVSHMEM: cannot iomap region of size %d",
            kvm_ivshmem_dev.ioaddr_size);
     goto pci_release;
   }
+  if (!kvm_ivshmem_dev.flat_ioaddr) {
+    printk(KERN_ERR "KVM_IVSHMEM: cannot flat region of size %d",
+           kvm_ivshmem_dev.ioaddr_size);
+    goto pci_release;
+  }
 
-  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%x ioaddr_size = 0x%x",
-         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size);
+  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%x ioaddr_size = 0x%x base_addr = 0x%p flat_addr = 0x%p" ,
+         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, kvm_ivshmem_dev.flat_ioaddr);
 
   /* Clear the the shared memory*/
   memset_io(kvm_ivshmem_dev.base_addr, kvm_ivshmem_dev.ioaddr_size, 0);
@@ -551,6 +572,7 @@ reg_release:
   pci_iounmap(pdev, kvm_ivshmem_dev.base_addr);
 pci_release:
   pci_release_regions(pdev);
+  memunmap(kvm_ivshmem_dev.flat_ioaddr);
 pci_disable:
   pci_disable_device(pdev);
   return -EBUSY;
