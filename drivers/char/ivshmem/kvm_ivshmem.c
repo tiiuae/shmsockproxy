@@ -395,7 +395,8 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
   return len;
 }
 
-#define DEBUG
+//#define DEBUG
+#undef DEBUG
 #undef KVM_IVSHMEM_DPRINTK
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
