@@ -30,9 +30,8 @@
 
 #define MAX_EVENTS (1024)
 #define MAX_CLIENTS (10)
-#define BUFFER_SIZE (1024000)
 #define SHMEM_POLL_TIMEOUT (3000)
-#define SHMEM_BUFFER_SIZE (1024000)
+#define SHMEM_BUFFER_SIZE (512*1024)
 #define UNKNOWN_PEER (-1)
 #define CLOSE_FD (1)
 #define IGNORE_ERROR (1)
@@ -104,11 +103,11 @@ struct {
 } fd_map[VM_COUNT][MAX_CLIENTS];
 
 typedef struct {
+  volatile __attribute__ ((aligned (64))) unsigned char data[SHMEM_BUFFER_SIZE];
   volatile int server_vmid;
   volatile int cmd;
   volatile int fd;
   volatile int len;
-  volatile unsigned char data[SHMEM_BUFFER_SIZE];
 } vm_data;
 
 int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
@@ -121,8 +120,8 @@ int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
 pthread_t server_threads[VM_COUNT];
 struct {
   volatile int client_vmid;
-  vm_data client_data[VM_COUNT];
-  vm_data server_data[VM_COUNT];
+  vm_data __attribute__ ((aligned (64))) client_data[VM_COUNT];
+  vm_data __attribute__ ((aligned (64))) server_data[VM_COUNT];
 } *vm_control;
 
 static const char usage_string[] = "Usage: memsocket [-c|-s] socket_path "
