@@ -319,7 +319,8 @@ void shmem_init(int instance_no) {
     my_shm_data[instance_no] = &vm_control->client_data[instance_no];
     peer_shm_data[instance_no] = &vm_control->server_data[instance_no];
   }
-
+  printf("vm_control=0x%p my_shm_data=0x%p peer_shm_data=0x%p\n", vm_control, my_shm_data[instance_no], peer_shm_data[instance_no]);
+  printf("                my_shm_data=0x%lx peer_shm_data=0x%lx\n", (void *)my_shm_data[instance_no] - (void*)vm_control, (void*)peer_shm_data[instance_no] - (void*)vm_control);
   /* get my VM Id */
   res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &vm_id);
   if (res < 0) {
