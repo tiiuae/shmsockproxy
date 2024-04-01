@@ -540,7 +540,6 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
     kvm_ivshmem_dev.base_addr = pci_iomap(pdev, 2, 0);
     printk(KERN_INFO "KVM_IVSHMEM: PCI iomap base = 0x%p", kvm_ivshmem_dev.base_addr);
   }
-  printk(KERN_INFO "KVM_IVSHMEM: flat base = %p", kvm_ivshmem_dev.flat_ioaddr);
 
   if (!kvm_ivshmem_dev.base_addr) {
     printk(KERN_ERR "KVM_IVSHMEM: cannot map region size %d",
