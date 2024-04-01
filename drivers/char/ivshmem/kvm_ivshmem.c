@@ -114,7 +114,7 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
 };
 
 static uint64_t flat_addr = 0;
-module_param(flat_addr, uint64_t, S_IRUGO);
+module_param(flat_addr, ulong, S_IRUGO);
 
 // TODO: debug
 static int in_counter = 0, out_counter = 0;
