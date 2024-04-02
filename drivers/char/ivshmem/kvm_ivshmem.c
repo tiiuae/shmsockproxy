@@ -549,7 +549,6 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
 
   printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr = %p ivshmem_flataddr = 0x%llx",
          kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, ivshmem_flataddr);
-         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, ivshmem_flataddr);
 
   /* Clear the the shared memory*/
   memset_io(kvm_ivshmem_dev.base_addr, kvm_ivshmem_dev.ioaddr_size, 0);
