@@ -59,10 +59,10 @@ typedef struct kvm_ivshmem_device {
 
   void *base_addr;
 
-  unsigned int regaddr;
+  uint64_t regaddr;
   unsigned int reg_size;
 
-  unsigned int ioaddr;
+  uint64_t ioaddr;
   unsigned int ioaddr_size;
   unsigned int irq;
 
@@ -113,8 +113,8 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
     .fops = &kvm_ivshmem_ops,
 };
 
-ulong ivshmem_flataddr = 0;
-module_param(ivshmem_flataddr, ulong, S_IRUGO);
+static uint64_t ivshmem_flataddr = 11;
+module_param(ivshmem_flataddr, ullong, S_IRUGO);
 
 // TODO: debug
 static int in_counter = 0, out_counter = 0;
@@ -533,12 +533,12 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
 
   if (ivshmem_flataddr) {
     kvm_ivshmem_dev.base_addr = memremap(ivshmem_flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
-    printk(KERN_ERR "base_addrSHMEM: using flat memory 0x%lx mapped to %p", ivshmem_flataddr,
-      kvm_ivshmem_dev.base_addr);
+    printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p", ivshmem_flataddr,
+       kvm_ivshmem_dev.base_addr);
   }
   else {
     kvm_ivshmem_dev.base_addr = pci_iomap(pdev, 2, 0);
-    printk(KERN_INFO "KVM_IVSHMEM: PCI iomap base = 0x%p", kvm_ivshmem_dev.base_addr);
+    printk(KERN_INFO "KVM_IVSHMEM: using PCI iomap base = 0x%p", kvm_ivshmem_dev.base_addr);
   }
 
   if (!kvm_ivshmem_dev.base_addr) {
@@ -547,7 +547,8 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
     goto pci_release;
   }
 
-  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%x ioaddr_size = 0x%x base_addr = %p ivshmem_flataddr = 0x%" ,
+  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr = %p ivshmem_flataddr = 0x%llx",
+         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, ivshmem_flataddr);
          kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, ivshmem_flataddr);
 
   /* Clear the the shared memory*/
@@ -657,10 +658,10 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   unsigned long len;
   unsigned long off;
-  unsigned long start;
+  uint64_t start;
 
   off = vma->vm_pgoff << PAGE_SHIFT;
-  start = ivshmem_flataddr? ivshmem_flataddr:kvm_ivshmem_dev.ioaddr;
+  start = ivshmem_flataddr? ivshmem_flataddr:(uint64_t)kvm_ivshmem_dev.ioaddr;
 
   len = PAGE_ALIGN((start & ~PAGE_MASK) + kvm_ivshmem_dev.ioaddr_size);
   start &= PAGE_MASK;
