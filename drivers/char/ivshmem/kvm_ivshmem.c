@@ -533,7 +533,7 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
 
   if (flat_addr) {
     kvm_ivshmem_dev.base_addr = memremap(flat_addr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
-    printk(KERN_ERR "base_addrSHMEM: using flat memory %p mapped to %p", flat_addr,
+    printk(KERN_ERR "base_addrSHMEM: using flat memory 0x%lx mapped to %p", flat_addr,
       kvm_ivshmem_dev.base_addr);
   }
   else {
@@ -547,7 +547,7 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
     goto pci_release;
   }
 
-  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%x ioaddr_size = 0x%x base_addr = %p flat_addr = %p" ,
+  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%x ioaddr_size = 0x%x base_addr = %p flat_addr = 0x%lx" ,
          kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, flat_addr);
 
   /* Clear the the shared memory*/

@@ -1,6 +1,6 @@
-From a44d348421b851447c938a3d4d1e1a264025893b Mon Sep 17 00:00:00 2001
+From 518464660ae6d76dfc294d2d91f31da1861c798c Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Mon, 1 Apr 2024 15:28:12 +0400
+Date: Tue, 2 Apr 2024 09:07:26 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 704 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 703 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  25 +
- 6 files changed, 739 insertions(+)
+ 6 files changed, 738 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..0a850b05e
 +obj-y += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..c525e55da
+index 000000000..ac7b5568b
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,704 @@
+@@ -0,0 +1,703 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -596,14 +596,13 @@ index 000000000..c525e55da
 +
 +  if (flat_addr) {
 +    kvm_ivshmem_dev.base_addr = memremap(flat_addr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
-+    printk(KERN_ERR "base_addrSHMEM: using flat memory %p mapped to %p", flat_addr,
++    printk(KERN_ERR "base_addrSHMEM: using flat memory 0x%lx mapped to %p", flat_addr,
 +      kvm_ivshmem_dev.base_addr);
 +  }
 +  else {
 +    kvm_ivshmem_dev.base_addr = pci_iomap(pdev, 2, 0);
 +    printk(KERN_INFO "KVM_IVSHMEM: PCI iomap base = 0x%p", kvm_ivshmem_dev.base_addr);
 +  }
-+  printk(KERN_INFO "KVM_IVSHMEM: flat base = %p", kvm_ivshmem_dev.flat_ioaddr);
 +
 +  if (!kvm_ivshmem_dev.base_addr) {
 +    printk(KERN_ERR "KVM_IVSHMEM: cannot map region size %d",
@@ -611,7 +610,7 @@ index 000000000..c525e55da
 +    goto pci_release;
 +  }
 +
-+  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%x ioaddr_size = 0x%x base_addr = %p flat_addr = %p" ,
++  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%x ioaddr_size = 0x%x base_addr = %p flat_addr = 0x%lx" ,
 +         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, flat_addr);
 +
 +  /* Clear the the shared memory*/
