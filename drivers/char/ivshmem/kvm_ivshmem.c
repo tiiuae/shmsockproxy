@@ -113,8 +113,8 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
     .fops = &kvm_ivshmem_ops,
 };
 
-static uint64_t ivshmem_flataddr = 11;
-module_param(ivshmem_flataddr, ullong, S_IRUGO);
+static uint64_t flataddr = 0x920000000;
+module_param_named(flataddr, flataddr, ullong, S_IRUGO);
 
 // TODO: debug
 static int in_counter = 0, out_counter = 0;
@@ -531,9 +531,9 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   kvm_ivshmem_dev.ioaddr = pci_resource_start(pdev, 2);
   kvm_ivshmem_dev.ioaddr_size = pci_resource_len(pdev, 2);
 
-  if (ivshmem_flataddr) {
-    kvm_ivshmem_dev.base_addr = memremap(ivshmem_flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
-    printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p", ivshmem_flataddr,
+  if (flataddr) {
+    kvm_ivshmem_dev.base_addr = memremap(flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
+    printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p", flataddr,
        kvm_ivshmem_dev.base_addr);
   }
   else {
@@ -547,8 +547,8 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
     goto pci_release;
   }
 
-  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr = %p ivshmem_flataddr = 0x%llx",
-         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, ivshmem_flataddr);
+  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr = %p flataddr = 0x%llx",
+         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, flataddr);
 
   /* Clear the the shared memory*/
   memset_io(kvm_ivshmem_dev.base_addr, kvm_ivshmem_dev.ioaddr_size, 0);
@@ -579,11 +579,11 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   return 0;
 
 reg_release:
-if (!ivshmem_flataddr)
+if (!flataddr)
   pci_iounmap(pdev, kvm_ivshmem_dev.base_addr);
 pci_release:
   pci_release_regions(pdev);
-  if (ivshmem_flataddr)
+  if (flataddr)
     memunmap(kvm_ivshmem_dev.base_addr);
 pci_disable:
   pci_disable_device(pdev);
@@ -660,7 +660,7 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
   uint64_t start;
 
   off = vma->vm_pgoff << PAGE_SHIFT;
-  start = ivshmem_flataddr? ivshmem_flataddr:(uint64_t)kvm_ivshmem_dev.ioaddr;
+  start = flataddr? flataddr:(uint64_t)kvm_ivshmem_dev.ioaddr;
 
   len = PAGE_ALIGN((start & ~PAGE_MASK) + kvm_ivshmem_dev.ioaddr_size);
   start &= PAGE_MASK;
