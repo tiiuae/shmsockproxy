@@ -113,7 +113,7 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
     .fops = &kvm_ivshmem_ops,
 };
 
-static uint64_t flataddr = 0x930000000;
+static uint64_t flataddr = 0x0;
 module_param_named(flataddr, flataddr, ullong, S_IRUGO);
 
 // TODO: debug

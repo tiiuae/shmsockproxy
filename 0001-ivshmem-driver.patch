@@ -1,6 +1,6 @@
-From ea0f24dc9a497a9d09c9a78ee36567964c935df5 Mon Sep 17 00:00:00 2001
+From 9e52d46b43c3215846a843976791b1c394493bb7 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Tue, 2 Apr 2024 14:43:05 +0400
+Date: Wed, 3 Apr 2024 10:03:47 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..0a850b05e
 +obj-y += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..f4c5ae626
+index 000000000..456879434
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,703 @@
@@ -176,7 +176,7 @@ index 000000000..f4c5ae626
 +    .fops = &kvm_ivshmem_ops,
 +};
 +
-+static uint64_t flataddr = 0x930000000;
++static uint64_t flataddr = 0x0;
 +module_param_named(flataddr, flataddr, ullong, S_IRUGO);
 +
 +// TODO: debug
