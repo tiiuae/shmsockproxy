@@ -536,6 +536,7 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
     printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p", flataddr,
        kvm_ivshmem_dev.base_addr);
   }
+  #error rrr
   else {
     kvm_ivshmem_dev.base_addr = pci_iomap(pdev, 2, 0);
     printk(KERN_INFO "KVM_IVSHMEM: using PCI iomap base = 0x%p", kvm_ivshmem_dev.base_addr);
