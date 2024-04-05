@@ -30,9 +30,8 @@
 
 #define MAX_EVENTS (1024)
 #define MAX_CLIENTS (10)
-#define BUFFER_SIZE (1024000)
 #define SHMEM_POLL_TIMEOUT (3000)
-#define SHMEM_BUFFER_SIZE (1024000)
+#define SHMEM_BUFFER_SIZE (512*1024)
 #define UNKNOWN_PEER (-1)
 #define CLOSE_FD (1)
 #define IGNORE_ERROR (1)
@@ -104,11 +103,11 @@ struct {
 } fd_map[VM_COUNT][MAX_CLIENTS];
 
 typedef struct {
+  volatile __attribute__ ((aligned (64))) unsigned char data[SHMEM_BUFFER_SIZE];
   volatile int server_vmid;
   volatile int cmd;
   volatile int fd;
   volatile int len;
-  volatile unsigned char data[SHMEM_BUFFER_SIZE];
 } vm_data;
 
 int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
@@ -121,8 +120,8 @@ int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
 pthread_t server_threads[VM_COUNT];
 struct {
   volatile int client_vmid;
-  vm_data client_data[VM_COUNT];
-  vm_data server_data[VM_COUNT];
+  vm_data __attribute__ ((aligned (64))) client_data[VM_COUNT];
+  vm_data __attribute__ ((aligned (64))) server_data[VM_COUNT];
 } *vm_control;
 
 static const char usage_string[] = "Usage: memsocket [-c|-s] socket_path "
@@ -320,7 +319,8 @@ void shmem_init(int instance_no) {
     my_shm_data[instance_no] = &vm_control->client_data[instance_no];
     peer_shm_data[instance_no] = &vm_control->server_data[instance_no];
   }
-
+  DEBUG("[%d] vm_control=0x%p my_shm_data=0x%p peer_shm_data=0x%p\n", instance_no, vm_control, my_shm_data[instance_no], peer_shm_data[instance_no]);
+  DEBUG("[%d]                 my_shm_data=0x%lx peer_shm_data=0x%lx\n", instance_no, (void *)my_shm_data[instance_no] - (void*)vm_control, (void*)peer_shm_data[instance_no] - (void*)vm_control);
   /* get my VM Id */
   res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &vm_id);
   if (res < 0) {
