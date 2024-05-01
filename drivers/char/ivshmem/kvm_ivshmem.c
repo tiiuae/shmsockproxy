@@ -59,9 +59,6 @@ typedef struct kvm_ivshmem_device {
 
   void *base_addr;
 
-  uint64_t regaddr;
-  unsigned int reg_size;
-
   uint64_t ioaddr;
   unsigned int ioaddr_size;
   unsigned int irq;
@@ -553,15 +550,10 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   /* Clear the the shared memory*/
   memset_io(kvm_ivshmem_dev.base_addr, kvm_ivshmem_dev.ioaddr_size, 0);
 
-  kvm_ivshmem_dev.regaddr = pci_resource_start(pdev, 0);
-  kvm_ivshmem_dev.reg_size = pci_resource_len(pdev, 0);
   kvm_ivshmem_dev.regs = pci_iomap(pdev, 0, 0x100);
-
   kvm_ivshmem_dev.dev = pdev;
 
   if (!kvm_ivshmem_dev.regs) {
-    printk(KERN_ERR "KVM_IVSHMEM: cannot ioremap registers of size %d",
-           kvm_ivshmem_dev.reg_size);
     goto reg_release;
   }
 
