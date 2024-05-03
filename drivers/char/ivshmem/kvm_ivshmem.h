@@ -13,7 +13,15 @@
 #define SHMEM_IOCSETINSTANCENO _IOR(SHMEM_IOC_MAGIC, 4, int)
 #define SHMEM_IOCSET _IOR(SHMEM_IOC_MAGIC, 5, int)
 #define SHMEM_IOCDORBELL _IOR(SHMEM_IOC_MAGIC, 6, int)
-#define SHMEM_IOCNOP _IOR(SHMEM_IOC_MAGIC, 7, int)
+#define SHMEM_IOCTINI _IOR(SHMEM_IOC_MAGIC, 7, int)
+#define SHMEM_IOCTSEND _IOR(SHMEM_IOC_MAGIC, 8, int)
+#define SHMEM_IOCTRCV _IOR(SHMEM_IOC_MAGIC, 9, int)
+#define SHMEM_IOCTACK _IOR(SHMEM_IOC_MAGIC, 10, int)
+#define SHMEM_IOCNOP _IOR(SHMEM_IOC_MAGIC, 11, int)
+
+#define PROTOCOLS_COUNT (3)
+
+typedef unsigned char transport_type;
 
 // #define DEBUG_IOCTL
 struct ioctl_data {
@@ -22,4 +30,9 @@ struct ioctl_data {
   int fd;
   int cmd;
   int len;
+};
+
+struct ioctl_transport_data {
+  int peer_vm_id;
+  transport_type type;
 };

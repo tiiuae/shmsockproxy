@@ -12,6 +12,7 @@
 */
 
 #include "kvm_ivshmem.h"
+#include <linux/completion.h>
 #include <linux/fcntl.h>
 #include <linux/file.h>
 #include <linux/init.h>
@@ -34,8 +35,9 @@
 DEFINE_SPINLOCK(rawhide_irq_lock);
 #define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 #define VECTORS_COUNT (2 * VM_COUNT)
+#define SHMEM_BUFFER_SIZE (512*1024)
 
-// #define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
   do {                                                                         \
@@ -54,6 +56,12 @@ enum {
   Doorbell = 0x0c,   /* Doorbell */
 };
 
+static struct {
+  /* Table of physical vm addresses indexed by logical vm_id */
+  int vm_ids[VM_COUNT];
+
+} *kvm_ivshmem_shared_mem;
+
 typedef struct kvm_ivshmem_device {
   void __iomem *regs;
 
@@ -67,7 +75,18 @@ typedef struct kvm_ivshmem_device {
   char (*msix_names)[256];
   struct msix_entry *msix_entries;
   int nvectors;
+  int my_vmid;
 } kvm_ivshmem_device;
+
+struct kvm_vm_data {
+  volatile __attribute__ ((aligned (64))) unsigned char local[SHMEM_BUFFER_SIZE];
+  volatile __attribute__ ((aligned (64))) unsigned char remote[SHMEM_BUFFER_SIZE];
+  transport_type type;
+};
+
+struct kvm_vm_transport_block {
+
+};
 
 static int irq_incoming_data[VM_COUNT];
 static int irq_ack[VM_COUNT];
@@ -75,6 +94,8 @@ static int local_resource_count[VM_COUNT];
 static int peer_resource_count[VM_COUNT];
 static wait_queue_head_t local_data_ready_wait_queue[VM_COUNT];
 static wait_queue_head_t peer_data_ready_wait_queue[VM_COUNT];
+struct completion local_transport_data_ready[VM_COUNT][PROTOCOLS_COUNT];
+struct completion remote_transport_data_ready[VM_COUNT][PROTOCOLS_COUNT];
 
 static kvm_ivshmem_device kvm_ivshmem_dev;
 
@@ -87,6 +108,11 @@ static ssize_t kvm_ivshmem_write(struct file *, const char *, size_t, loff_t *);
 static loff_t kvm_ivshmem_lseek(struct file *filp, loff_t offset, int origin);
 static unsigned kvm_ivshmem_poll(struct file *filp,
                                  struct poll_table_struct *wait);
+static int kvm_transport_init(struct file *filp, unsigned long arg);
+static int kvm_transport_send(struct file *filp, unsigned long arg);
+static int kvm_transport_receive(struct file *filp, unsigned long arg);
+static int kvm_transport_ack(struct file *filp, unsigned long arg);
+
 static const struct file_operations kvm_ivshmem_ops = {
     .owner = THIS_MODULE,
     .open = kvm_ivshmem_open,
@@ -111,7 +137,9 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
 };
 
 static uint64_t flataddr = 0x0;
+unsigned int vm_id = 3;
 module_param_named(flataddr, flataddr, ullong, S_IRUGO);
+module_param_named(vm_id, vm_id, int, S_IRUGO);
 
 // TODO: debug
 static int in_counter = 0, out_counter = 0;
@@ -129,9 +157,74 @@ static struct pci_driver kvm_ivshmem_pci_driver = {
     .remove = kvm_ivshmem_remove_device,
 };
 
+static int kvm_transport_init(struct file *filp, unsigned long arg) {
+  int i, n;
+
+  printk(KERN_ERR "KVM_IVSHMEM: My vm_id=%d", vm_id);
+  if (vm_id >= VM_COUNT) {
+    printk(KERN_ERR "KVM_IVSHMEM: vm_id (%d) exceeds VM_COUNT (%d)", vm_id,
+           VM_COUNT);
+    return -EINVAL;
+  }
+
+  kvm_ivshmem_shared_mem = kvm_ivshmem_dev.base_addr;
+  kvm_ivshmem_shared_mem->vm_ids[vm_id] = kvm_ivshmem_dev.my_vmid;
+
+  printk(KERN_ERR "KVM_IVSHMEM: physical vm_id=%d",
+         kvm_ivshmem_shared_mem->vm_ids[vm_id]);
+
+  for (i = 0; i < VM_COUNT; i++)
+    for (n = 0; n < PROTOCOLS_COUNT; n++) {
+      init_completion(&local_transport_data_ready[i][n]);
+      local_transport_data_ready[i][n].done = 1;
+      init_completion(&remote_transport_data_ready[i][n]);
+    }
+  return 0;
+}
+
+static int kvm_transport_send(struct file *filp, unsigned long arg) {
+  struct ioctl_transport_data ioctl_data;
+
+  KVM_IVSHMEM_DPRINTK("Waiting for local_transport_data_ready");
+  if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
+    printk(KERN_ERR
+            "KVM_IVSHMEM: SHMEM_IOCSEND: invalid argument 0x%lx", arg);
+    return -EINVAL;
+  }
+  wait_for_completion_interruptible(&local_transport_data_ready[ioctl_data.peer_vm_id][0]);
+
+  /* Send interrupt */
+  writel(ioctl_data.peer_vm_id << 16 | (kvm_ivshmem_dev.my_vmid >> 1) | LOCAL_RESOURCE_READY_INT_VEC, kvm_ivshmem_dev.regs + Doorbell);
+
+  // Put data into common area
+  /*
+    target vm id, data type, port|index
+      - find
+      - wait for buffer to be free?
+      - fill data - data type, port|index?, data
+      - send DATA interrupt
+      - wait for ack?
+    data type
+    data addr
+  */
+  return 0;
+}
+
+static int kvm_transport_ack(struct file *filp, unsigned long arg) {
+  return 0;
+}
+
+static int kvm_transport_receive(struct file *filp, unsigned long arg) {
+  /*
+    interrupt number -> vm id
+    data type -> find waiting queue
+
+  */
+  return 0;
+}
+
 static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                               unsigned long arg) {
-
 
   int rv = 0;
   unsigned long flags;
@@ -148,7 +241,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   }
   switch (cmd) {
   case SHMEM_IOCIVPOSN:
-    msg = readl(kvm_ivshmem_dev.regs + IVPosition);
+    msg = kvm_ivshmem_dev.my_vmid;
     KVM_IVSHMEM_DPRINTK("%ld my vmid is 0x%08x",
                         (unsigned long int)filp->private_data, msg);
     rv = copy_to_user((void __user *)arg, &msg, sizeof(msg));
@@ -215,6 +308,22 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     peer_resource_count[arg] = 0;
   unlock:
     spin_unlock_irqrestore(&rawhide_irq_lock, flags);
+    break;
+
+  case SHMEM_IOCTINI:
+    rv = kvm_transport_init(filp, arg);
+    break;
+
+  case SHMEM_IOCTSEND:
+    rv = kvm_transport_send(filp, arg);
+    break;
+
+  case SHMEM_IOCTRCV:
+    rv = kvm_transport_receive(filp, arg);
+    break;
+
+  case SHMEM_IOCTACK:
+    rv = kvm_transport_ack(filp, arg);
     break;
 
   case SHMEM_IOCNOP:
@@ -309,7 +418,8 @@ static ssize_t kvm_ivshmem_read(struct file *filp, char *buffer, size_t len,
   if (len == 0)
     return 0;
 
-  bytes_read = copy_to_user(buffer, (void*)  kvm_ivshmem_dev.base_addr + offset, len);
+  bytes_read =
+      copy_to_user(buffer, (void *)kvm_ivshmem_dev.base_addr + offset, len);
   if (bytes_read > 0) {
     return -EFAULT;
   }
@@ -367,7 +477,7 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
     return 0;
 
   bytes_written =
-      copy_from_user((void*)  kvm_ivshmem_dev.base_addr + offset, buffer, len);
+      copy_from_user((void *)kvm_ivshmem_dev.base_addr + offset, buffer, len);
   if (bytes_written > 0) {
     return -EFAULT;
   }
@@ -379,7 +489,7 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
   return len;
 }
 
-//#define DEBUG
+// #define DEBUG
 #undef DEBUG
 #undef KVM_IVSHMEM_DPRINTK
 #ifdef DEBUG
@@ -415,6 +525,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       peer_resource_count[i] = 1;
       spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&peer_data_ready_wait_queue[i]);
+      complete(&remote_transport_data_ready[i][0]);
       return IRQ_HANDLED;
     }
     if (irq == irq_ack[i]) {
@@ -429,6 +540,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       local_resource_count[i] = 1;
       spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
+      complete(&local_transport_data_ready[i][0]);
       return IRQ_HANDLED;
     }
   }
@@ -493,7 +605,7 @@ static int request_msix_vectors(struct kvm_ivshmem_device *ivs_info,
       irq_incoming_data[i >> 1] = n;
       KVM_IVSHMEM_DPRINTK("Using interrupt #%d for incoming data for vm %d", n,
                           i >> 1);
-    // vector 0 is used for for sending acknowledgments
+      // vector 0 is used for for sending acknowledgments
     } else {
       irq_ack[i >> 1] = n;
       KVM_IVSHMEM_DPRINTK("Using interrupt #%d for ACKs for vm %d", n, i >> 1);
@@ -529,13 +641,14 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   kvm_ivshmem_dev.ioaddr_size = pci_resource_len(pdev, 2);
 
   if (flataddr) {
-    kvm_ivshmem_dev.base_addr = memremap(flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
-    printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p", flataddr,
-       kvm_ivshmem_dev.base_addr);
-  }
-  else {
+    kvm_ivshmem_dev.base_addr =
+        memremap(flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
+    printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p",
+           flataddr, kvm_ivshmem_dev.base_addr);
+  } else {
     kvm_ivshmem_dev.base_addr = pci_iomap(pdev, 2, 0);
-    printk(KERN_INFO "KVM_IVSHMEM: using PCI iomap base = 0x%p", kvm_ivshmem_dev.base_addr);
+    printk(KERN_INFO "KVM_IVSHMEM: using PCI iomap base = 0x%p",
+           kvm_ivshmem_dev.base_addr);
   }
 
   if (!kvm_ivshmem_dev.base_addr) {
@@ -544,11 +657,13 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
     goto pci_release;
   }
 
-  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr = %p flataddr = 0x%llx",
-         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, flataddr);
+  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr "
+                   "= %p flataddr = 0x%llx",
+         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size,
+         kvm_ivshmem_dev.base_addr, flataddr);
 
-  /* Clear the the shared memory*/
-  memset_io(kvm_ivshmem_dev.base_addr, kvm_ivshmem_dev.ioaddr_size, 0);
+  /* Clear the the shared memory is it really needed? */
+  // memset_io(kvm_ivshmem_dev.base_addr, kvm_ivshmem_dev.ioaddr_size, 0);
 
   kvm_ivshmem_dev.regs = pci_iomap(pdev, 0, 0x100);
   kvm_ivshmem_dev.dev = pdev;
@@ -567,12 +682,13 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
 
   /* set all masks to on */
   writel(0xffffffff, kvm_ivshmem_dev.regs + IntrMask);
+  kvm_ivshmem_dev.my_vmid = readl(kvm_ivshmem_dev.regs + IVPosition);
 
   return 0;
 
 reg_release:
-if (!flataddr)
-  pci_iounmap(pdev, kvm_ivshmem_dev.base_addr);
+  if (!flataddr)
+    pci_iounmap(pdev, kvm_ivshmem_dev.base_addr);
 pci_release:
   pci_release_regions(pdev);
   if (flataddr)
@@ -636,7 +752,8 @@ error:
 }
 
 static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
-  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device. Using memory @ %p", kvm_ivshmem_dev.base_addr);
+  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device. Using memory @ %p",
+         kvm_ivshmem_dev.base_addr);
   filp->private_data = (void *)(unsigned long)-1;
   return 0;
 }
@@ -652,7 +769,7 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
   uint64_t start;
 
   off = vma->vm_pgoff << PAGE_SHIFT;
-  start = flataddr? flataddr:(uint64_t)kvm_ivshmem_dev.ioaddr;
+  start = flataddr ? flataddr : (uint64_t)kvm_ivshmem_dev.ioaddr;
 
   len = PAGE_ALIGN((start & ~PAGE_MASK) + kvm_ivshmem_dev.ioaddr_size);
   start &= PAGE_MASK;
@@ -670,11 +787,11 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   off += start;
   vma->vm_pgoff = off >> PAGE_SHIFT;
-  #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,3,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
   vm_flags_mod(vma, VM_SHARED, 0);
-  #else
+#else
   vma->vm_flags |= VM_SHARED;
-  #endif
+#endif
 
   if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
                          vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
