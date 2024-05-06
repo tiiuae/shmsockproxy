@@ -33,6 +33,6 @@ struct ioctl_data {
 };
 
 struct ioctl_transport_data {
-  int peer_vm_id;
+  unsigned int peer_vm_id;
   transport_type type;
 };
