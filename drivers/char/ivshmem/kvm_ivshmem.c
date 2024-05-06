@@ -139,7 +139,8 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
 static uint64_t flataddr = 0x0;
 unsigned int vm_id = 3;
 module_param_named(flataddr, flataddr, ullong, S_IRUGO);
-module_param_named(vm_id, vm_id, int, S_IRUGO);
+// module_param_named(vm_id, vm_id, int, S_IRUGO);
+module_param(vm_id, int, S_IRUGO);
 
 // TODO: debug
 static int in_counter = 0, out_counter = 0;
@@ -170,20 +171,22 @@ static int kvm_transport_init(struct file *filp, unsigned long arg) {
   kvm_ivshmem_shared_mem = kvm_ivshmem_dev.base_addr;
   kvm_ivshmem_shared_mem->vm_ids[vm_id] = kvm_ivshmem_dev.my_vmid;
 
-  printk(KERN_ERR "KVM_IVSHMEM: physical vm_id=%d",
-         kvm_ivshmem_shared_mem->vm_ids[vm_id]);
+  printk(KERN_ERR "KVM_IVSHMEM: logical vm_id=%d physical vm_id=%d",
+         vm_id, kvm_ivshmem_shared_mem->vm_ids[vm_id]);
 
   for (i = 0; i < VM_COUNT; i++)
     for (n = 0; n < PROTOCOLS_COUNT; n++) {
       init_completion(&local_transport_data_ready[i][n]);
-      local_transport_data_ready[i][n].done = 1;
       init_completion(&remote_transport_data_ready[i][n]);
+      local_transport_data_ready[i][n].done = 1;
     }
   return 0;
 }
 
 static int kvm_transport_send(struct file *filp, unsigned long arg) {
+
   struct ioctl_transport_data ioctl_data;
+  unsigned int interrupt;
 
   KVM_IVSHMEM_DPRINTK("Waiting for local_transport_data_ready");
   if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
@@ -191,10 +194,19 @@ static int kvm_transport_send(struct file *filp, unsigned long arg) {
             "KVM_IVSHMEM: SHMEM_IOCSEND: invalid argument 0x%lx", arg);
     return -EINVAL;
   }
+  if (ioctl_data.peer_vm_id >= VM_COUNT) {
+        printk(KERN_ERR
+            "KVM_IVSHMEM: SHMEM_IOCSEND: invalid vm_id %d ", ioctl_data.peer_vm_id);
+    return -EINVAL;
+  }
   wait_for_completion_interruptible(&local_transport_data_ready[ioctl_data.peer_vm_id][0]);
 
   /* Send interrupt */
-  writel(ioctl_data.peer_vm_id << 16 | (kvm_ivshmem_dev.my_vmid >> 1) | LOCAL_RESOURCE_READY_INT_VEC, kvm_ivshmem_dev.regs + Doorbell);
+  interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 | 
+                (vm_id << 1 | LOCAL_RESOURCE_READY_INT_VEC);
+  printk(KERN_ERR
+            "KVM_IVSHMEM: raising interrupt 0x%x", interrupt);
+  writel(interrupt, kvm_ivshmem_dev.regs + Doorbell);
 
   // Put data into common area
   /*
@@ -215,6 +227,17 @@ static int kvm_transport_ack(struct file *filp, unsigned long arg) {
 }
 
 static int kvm_transport_receive(struct file *filp, unsigned long arg) {
+
+  struct ioctl_transport_data ioctl_data;
+
+  if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
+    printk(KERN_ERR
+            "KVM_IVSHMEM: SHMEM_IOCTRCV: invalid argument 0x%lx", arg);
+    return -EINVAL;
+  }
+  KVM_IVSHMEM_DPRINTK("Waiting for remote_transport_data_ready. peer_vm_id=%d", ioctl_data.peer_vm_id);
+  wait_for_completion_interruptible(&remote_transport_data_ready[ioctl_data.peer_vm_id][0]);
+  KVM_IVSHMEM_DPRINTK("Waiting finished");
   /*
     interrupt number -> vm id
     data type -> find waiting queue
@@ -488,9 +511,10 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
   *poffset += len;
   return len;
 }
-
+// TODO: temporary debug
 // #define DEBUG
 #undef DEBUG
+#define DEBUG
 #undef KVM_IVSHMEM_DPRINTK
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
@@ -525,7 +549,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       peer_resource_count[i] = 1;
       spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&peer_data_ready_wait_queue[i]);
-      complete(&remote_transport_data_ready[i][0]);
+      complete(&remote_transport_data_ready[i][0]); // TODO: change 0 into protocol number
       return IRQ_HANDLED;
     }
     if (irq == irq_ack[i]) {
@@ -540,7 +564,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       local_resource_count[i] = 1;
       spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
-      complete(&local_transport_data_ready[i][0]);
+      complete(&local_transport_data_ready[i][0]); // TODO: change 0 into protocol number
       return IRQ_HANDLED;
     }
   }

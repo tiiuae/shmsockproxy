@@ -313,16 +313,16 @@ void shmem_init(int instance_no, int server) {
 
   if (!server) {
     INFO("Sending...", "");
-    data.peer_vm_id = 0xc;
+    data.peer_vm_id = 0x4;
     data.type = 0x1;
-    ioctl(shmem_fd[instance_no], SHMEM_IOCTSEND, data);
+    ioctl(shmem_fd[instance_no], SHMEM_IOCTSEND, &data);
 
     INFO("Sent", "");
   } else {
     INFO("Receving...", "");
-    data.peer_vm_id = 1;
+    data.peer_vm_id = 2;
     data.type = 0x1;
-    ioctl(shmem_fd[instance_no], SHMEM_IOCTRCV, data);
+    ioctl(shmem_fd[instance_no], SHMEM_IOCTRCV, &data);
     INFO("Received", "");
   }
 }
