@@ -35,7 +35,7 @@
 DEFINE_SPINLOCK(rawhide_irq_lock);
 #define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 #define VECTORS_COUNT (2 * VM_COUNT)
-#define SHMEM_BUFFER_SIZE (512*1024)
+#define SHMEM_BUFFER_SIZE (512 * 1024)
 
 #define DEBUG
 #ifdef DEBUG
@@ -60,8 +60,10 @@ static struct {
   /* Table of physical vm addresses indexed by logical vm_id */
   int vm_ids[VM_COUNT];
   struct {
-    volatile __attribute__ ((aligned (64))) unsigned char local[SHMEM_BUFFER_SIZE];
-    volatile __attribute__ ((aligned (64))) unsigned char remote[SHMEM_BUFFER_SIZE];
+    volatile
+        __attribute__((aligned(64))) unsigned char local[SHMEM_BUFFER_SIZE];
+    volatile
+        __attribute__((aligned(64))) unsigned char remote[SHMEM_BUFFER_SIZE];
     transport_type type;
   } buffer[VM_COUNT];
 } *kvm_ivshmem_shared_mem;
@@ -106,6 +108,10 @@ static int kvm_transport_init(struct file *filp, unsigned long arg);
 static int kvm_transport_send(struct file *filp, unsigned long arg);
 static int kvm_transport_receive(struct file *filp, unsigned long arg);
 static int kvm_transport_ack(struct file *filp, unsigned long arg);
+static void kvm_ivshmem_remove_device(struct pci_dev *pdev);
+static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
+                                    const struct pci_device_id *ent);
+static int copy_ioctl_data(struct ioctl_transport_data *ioctl_data, unsigned long arg);
 
 static const struct file_operations kvm_ivshmem_ops = {
     .owner = THIS_MODULE,
@@ -143,10 +149,6 @@ static int in_counter = 0, out_counter = 0;
 
 MODULE_DEVICE_TABLE(pci, kvm_ivshmem_id_table);
 
-static void kvm_ivshmem_remove_device(struct pci_dev *pdev);
-static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
-                                    const struct pci_device_id *ent);
-
 static struct pci_driver kvm_ivshmem_pci_driver = {
     .name = "kvm-shmem",
     .id_table = kvm_ivshmem_id_table,
@@ -157,7 +159,7 @@ static struct pci_driver kvm_ivshmem_pci_driver = {
 static int kvm_transport_init(struct file *filp, unsigned long arg) {
   int i, n;
 
-  printk(KERN_ERR "KVM_IVSHMEM: My vm_id=%d", vm_id);
+  KVM_IVSHMEM_DPRINTK(KERN_ERR "KVM_IVSHMEM: My vm_id=%d", vm_id);
   if (vm_id >= VM_COUNT) {
     printk(KERN_ERR "KVM_IVSHMEM: vm_id (%d) exceeds VM_COUNT (%d)", vm_id,
            VM_COUNT);
@@ -167,8 +169,8 @@ static int kvm_transport_init(struct file *filp, unsigned long arg) {
   kvm_ivshmem_shared_mem = kvm_ivshmem_dev.base_addr;
   kvm_ivshmem_shared_mem->vm_ids[vm_id] = kvm_ivshmem_dev.my_vmid;
 
-  printk(KERN_ERR "KVM_IVSHMEM: logical vm_id=%d physical vm_id=%d",
-         vm_id, kvm_ivshmem_shared_mem->vm_ids[vm_id]);
+  KVM_IVSHMEM_DPRINTK(KERN_ERR "KVM_IVSHMEM: logical vm_id=%d physical vm_id=%d", vm_id,
+         kvm_ivshmem_shared_mem->vm_ids[vm_id]);
 
   for (i = 0; i < VM_COUNT; i++)
     for (n = 0; n < PROTOCOLS_COUNT; n++) {
@@ -179,47 +181,59 @@ static int kvm_transport_init(struct file *filp, unsigned long arg) {
   return 0;
 }
 
+static int copy_ioctl_data(struct ioctl_transport_data *ioctl_data, unsigned long arg)
+{
+  if (copy_from_user(ioctl_data, (void __user *)arg, sizeof(*ioctl_data)))
+    return -EINVAL;
+
+  if (ioctl_data->peer_vm_id >= VM_COUNT) {
+    printk(KERN_ERR "KVM_IVSHMEM: invalid vm_id %d ",
+           ioctl_data->peer_vm_id);
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 static int kvm_transport_send(struct file *filp, unsigned long arg) {
 
   struct ioctl_transport_data ioctl_data;
   unsigned int interrupt;
   int ret;
 
+  if (copy_ioctl_data(&ioctl_data, arg)) {
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSEND: invalid argument 0x%lx", arg);
+    return -EINVAL;
+  }
+
   KVM_IVSHMEM_DPRINTK("Waiting for local_transport_data_ready");
-  if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
-    printk(KERN_ERR
-            "KVM_IVSHMEM: SHMEM_IOCSEND: invalid argument 0x%lx", arg);
-    return -EINVAL;
-  }
-  if (ioctl_data.peer_vm_id >= VM_COUNT) {
-        printk(KERN_ERR
-            "KVM_IVSHMEM: SHMEM_IOCSEND: invalid vm_id %d ", ioctl_data.peer_vm_id);
-    return -EINVAL;
-  }
-
-  ret = wait_for_completion_interruptible(&local_transport_data_ready[ioctl_data.peer_vm_id][0]);
-  if (ret) {
+  ret = wait_for_completion_interruptible(
+      &local_transport_data_ready[ioctl_data.peer_vm_id][0]); // TODO protocol number
+  if (ret)
     return -EINTR;
-  } else {
-    /* Send interrupt */
-    interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 | 
-                  (vm_id << 1 | LOCAL_RESOURCE_READY_INT_VEC);
-    printk(KERN_ERR
-              "KVM_IVSHMEM: raising interrupt 0x%x", interrupt);
-    writel(interrupt, kvm_ivshmem_dev.regs + Doorbell);
-  }
+  
+  /* Wait for the main buffer to be free and lock it */
+  // while (!local_resource_count[ioctl_data.peer_vm_id]) {
+  ret = wait_event_interruptible(local_data_ready_wait_queue[ioctl_data.peer_vm_id],
+        local_resource_count[ioctl_data.peer_vm_id]);
+  if (ret)
+    return -EINTR;
+  
+  spin_lock(&rawhide_irq_lock);
+  local_resource_count[ioctl_data.peer_vm_id] = 0;
+  spin_unlock(&rawhide_irq_lock);
 
-  // Put data into common area
+  // TODO Put data into common area
   /*
     target vm id, data type, port|index
-      - find
-      - wait for buffer to be free?
-      - fill data - data type, port|index?, data
-      - send DATA interrupt
       - wait for ack?
-    data type
-    data addr
   */
+  /* Send interrupt */
+  interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 |
+              (vm_id << 1 | LOCAL_RESOURCE_READY_INT_VEC);
+  KVM_IVSHMEM_DPRINTK(KERN_ERR "KVM_IVSHMEM: raising interrupt 0x%x", interrupt);
+  writel(interrupt, kvm_ivshmem_dev.regs + Doorbell);
+  
   return 0;
 }
 
@@ -227,40 +241,52 @@ static int kvm_transport_ack(struct file *filp, unsigned long arg) {
 
   struct ioctl_transport_data ioctl_data;
   int interrupt;
-  
-  if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
-    printk(KERN_ERR
-            "KVM_IVSHMEM: SHMEM_IOCACK: invalid argument 0x%lx", arg);
+
+  if (copy_ioctl_data(&ioctl_data, arg)) {
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCACK: invalid argument 0x%lx", arg);
     return -EINVAL;
   }
-  if (ioctl_data.peer_vm_id >= VM_COUNT) {
-        printk(KERN_ERR
-            "KVM_IVSHMEM: SHMEM_IOCACK: invalid vm_id %d ", ioctl_data.peer_vm_id);
-    return -EINVAL;
-  }
+
   /* Send interrupt */
-  interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 | 
-                (vm_id << 1 | PEER_RESOURCE_CONSUMED_INT_VEC);
-  printk(KERN_ERR
-            "KVM_IVSHMEM: raising interrupt 0x%x", interrupt);
+  interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 |
+              (vm_id << 1 | PEER_RESOURCE_CONSUMED_INT_VEC);
+  KVM_IVSHMEM_DPRINTK(KERN_ERR "KVM_IVSHMEM: raising interrupt 0x%x", interrupt);
   writel(interrupt, kvm_ivshmem_dev.regs + Doorbell);
-  
+
   return 0;
 }
 
 static int kvm_transport_receive(struct file *filp, unsigned long arg) {
 
   struct ioctl_transport_data ioctl_data;
+  int ret;
 
-  if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
-    printk(KERN_ERR
-            "KVM_IVSHMEM: SHMEM_IOCTRCV: invalid argument 0x%lx", arg);
+  if (copy_ioctl_data(&ioctl_data, arg)) {
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCTRCV: invalid argument 0x%lx", arg);
     return -EINVAL;
   }
-  KVM_IVSHMEM_DPRINTK("Waiting for remote_transport_data_ready. peer_vm_id=%d", ioctl_data.peer_vm_id);
-  wait_for_completion_interruptible(&remote_transport_data_ready[ioctl_data.peer_vm_id][0]);
+
+  /* Wait for the main buffer to be received */
+  ret = wait_event_interruptible(peer_data_ready_wait_queue[ioctl_data.peer_vm_id],
+        peer_resource_count[ioctl_data.peer_vm_id]);
+  if (ret)
+    return -EINTR;
+
+  spin_lock(&rawhide_irq_lock);
+  peer_resource_count[ioctl_data.peer_vm_id] = 0;
+  spin_unlock(&rawhide_irq_lock);
+
+  KVM_IVSHMEM_DPRINTK("Waiting for remote_transport_data_ready. peer_vm_id=%d",
+                      ioctl_data.peer_vm_id);
+  ret = wait_for_completion_interruptible(
+      &remote_transport_data_ready[ioctl_data.peer_vm_id][0]); // TODO protocol number
+  if (ret)
+    return -EINTR;
+
   KVM_IVSHMEM_DPRINTK("Waiting finished");
   /*
+    copy data to user
+    send main buffer ACK
     interrupt number -> vm id
     data type -> find waiting queue
 
@@ -343,7 +369,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       goto unlock;
     }
     filp->private_data = (void *)arg;
-    printk(KERN_INFO
+    KVM_IVSHMEM_DPRINTK(KERN_INFO
            "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
            arg);
 
@@ -571,7 +597,8 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       peer_resource_count[i] = 1;
       spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&peer_data_ready_wait_queue[i]);
-      complete(&remote_transport_data_ready[i][0]); // TODO: change 0 into protocol number
+      complete(&remote_transport_data_ready[i][0]); // TODO: change 0 into
+                                                    // protocol number
       return IRQ_HANDLED;
     }
     if (irq == irq_ack[i]) {
@@ -586,7 +613,8 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       local_resource_count[i] = 1;
       spin_unlock(&rawhide_irq_lock);
       wake_up_interruptible(&local_data_ready_wait_queue[i]);
-      complete(&local_transport_data_ready[i][0]); // TODO: change 0 into protocol number
+      complete(&local_transport_data_ready[i][0]); // TODO: change 0 into
+                                                   // protocol number
       return IRQ_HANDLED;
     }
   }
