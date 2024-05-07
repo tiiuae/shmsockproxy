@@ -315,8 +315,10 @@ void shmem_init(int instance_no, int server) {
     while(1) {
       INFO("Sending1...", "");
       data.peer_vm_id = 0x4;
-      data.type = 0x1;
+      data.type = 0x2;
       ioctl(shmem_fd[instance_no], SHMEM_IOCTSEND, &data);
+      data.peer_vm_id = 0x4;
+      data.type = 0x2;
       INFO("Sending2...", "");
       ioctl(shmem_fd[instance_no], SHMEM_IOCTSEND, &data);
     }
@@ -324,10 +326,12 @@ void shmem_init(int instance_no, int server) {
     while(1) {
       INFO("Receving...", "");
       data.peer_vm_id = 2;
-      data.type = 0x1;
+      data.type = 0x2;
       ioctl(shmem_fd[instance_no], SHMEM_IOCTRCV, &data);
       INFO("Received", "");
-      INFO("Sending ACK...", "");
+      data.peer_vm_id = 2;
+      data.type = 0x2;
+      INFO("Sending ACK...", ""); 
       ioctl(shmem_fd[instance_no], SHMEM_IOCTACK, &data);
     };
 }
