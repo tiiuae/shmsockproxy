@@ -61,8 +61,8 @@ static struct {
   int vm_ids[VM_COUNT];
   struct {
     volatile __attribute__((aligned(64))) unsigned char vm1[SHMEM_BUFFER_SIZE];
-    volatile __attribute__((aligned(64))) unsigned char vm2[SHMEM_BUFFER_SIZE];
-    transport_type type_vm1, type_vm2;
+    int data_len;
+    transport_type prot_type;
   } buffer[VM_COUNT];
 } *kvm_ivshmem_shared_mem;
 
@@ -200,16 +200,22 @@ static int kvm_transport_send(struct file *filp, unsigned long arg) {
 
   struct ioctl_transport_data ioctl_data;
   unsigned int interrupt;
-  transport_type *type;
   int ret;
 
   if (copy_ioctl_data(&ioctl_data, arg)) {
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSEND: invalid argument 0x%lx", arg);
     return -EINVAL;
   }
-  type = vm_id < ioctl_data.peer_vm_id
-             ? &kvm_ivshmem_shared_mem->buffer[ioctl_data.peer_vm_id].type_vm1
-             : &kvm_ivshmem_shared_mem->buffer[ioctl_data.peer_vm_id].type_vm2;
+  if (ioctl_data.length > SHMEM_BUFFER_SIZE) {
+    printk(KERN_ERR
+           "KVM_IVSHMEM: SHMEM_IOCSEND: invalid data length %d (max %d)",
+           ioctl_data.length, SHMEM_BUFFER_SIZE);
+    return -EINVAL;
+  }
+  if (ioctl_data.peer_vm_id == vm_id) {
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSEND: self vm id");
+    return -EINVAL;
+  }
   KVM_IVSHMEM_DPRINTK("Waiting for local_transport_data_ready");
   ret = wait_for_completion_interruptible(
       &local_transport_data_ready[ioctl_data.peer_vm_id][ioctl_data.type]);
@@ -227,7 +233,16 @@ static int kvm_transport_send(struct file *filp, unsigned long arg) {
   local_resource_count[ioctl_data.peer_vm_id] = 0;
   spin_unlock(&rawhide_irq_lock);
 
-  *type = ioctl_data.type;
+  kvm_ivshmem_shared_mem->buffer[vm_id].prot_type = ioctl_data.type;
+  kvm_ivshmem_shared_mem->buffer[vm_id].data_len = ioctl_data.length;
+  if (copy_from_user((void *)&kvm_ivshmem_shared_mem->buffer[vm_id].vm1[0],
+                     (void __user *)ioctl_data.data, ioctl_data.length)) {
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSEND: invalid ioctl data pointer %p",
+           ioctl_data.data);
+
+    return -EINVAL;
+  }
+
   interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 |
               (vm_id << 1 | LOCAL_RESOURCE_READY_INT_VEC);
   KVM_IVSHMEM_DPRINTK(KERN_ERR "KVM_IVSHMEM: raising interrupt 0x%x",
@@ -246,6 +261,10 @@ static int kvm_transport_ack(struct file *filp, unsigned long arg) {
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCACK: invalid argument 0x%lx", arg);
     return -EINVAL;
   }
+  if (ioctl_data.peer_vm_id == vm_id) {
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCACK: self vm id");
+    return -EINVAL;
+  }
 
   /* Send interrupt */
   interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 |
@@ -260,10 +279,14 @@ static int kvm_transport_ack(struct file *filp, unsigned long arg) {
 static int kvm_transport_receive(struct file *filp, unsigned long arg) {
 
   struct ioctl_transport_data ioctl_data;
-  int ret;
+  int ret, data_length;
 
   if (copy_ioctl_data(&ioctl_data, arg)) {
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCTRCV: invalid argument 0x%lx", arg);
+    return -EINVAL;
+  }
+  if (ioctl_data.peer_vm_id == vm_id) {
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCRCV: self vm id");
     return -EINVAL;
   }
 
@@ -285,9 +308,20 @@ static int kvm_transport_receive(struct file *filp, unsigned long arg) {
   if (ret)
     return -EINTR;
 
-  KVM_IVSHMEM_DPRINTK("Waiting finished");
+  data_length =
+      min(kvm_ivshmem_shared_mem->buffer[ioctl_data.peer_vm_id].data_len,
+          ioctl_data.length);
+  if (copy_to_user(
+          (void __user *)ioctl_data.data,
+          (void *)&kvm_ivshmem_shared_mem->buffer[ioctl_data.peer_vm_id].vm1[0],
+          data_length)) {
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSEND: invalid ioctl data pointer %p",
+           ioctl_data.data);
 
-  return 0;
+    return -EINVAL;
+  }
+
+  return data_length;
 }
 
 static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
@@ -584,11 +618,12 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   for (i = 0; i < VM_COUNT; i++) {
     if (irq == irq_incoming_data[i]) {
       out_counter++;
-      type = vm_id > i ? kvm_ivshmem_shared_mem->buffer[i].type_vm1
-                       : kvm_ivshmem_shared_mem->buffer[i].type_vm2;
+      type = kvm_ivshmem_shared_mem->buffer[i].prot_type;
       KVM_IVSHMEM_DPRINTK(
-          "%d wake up peer_data_ready_wait_queue count=%d type=%d", i,
-          out_counter, type);
+          "%d wake up peer_data_ready_wait_queue count=%d type=%d 0x%lx", i,
+          out_counter, type,
+          (unsigned long)&kvm_ivshmem_shared_mem->buffer[vm_id].prot_type -
+              (unsigned long)kvm_ivshmem_shared_mem);
       if (peer_resource_count[i]) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: peer_resource_count>0!: %d", i,
                             peer_resource_count[i]);
@@ -606,10 +641,10 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
     }
     if (irq == irq_ack[i]) {
       in_counter++;
-      type = vm_id > i ? kvm_ivshmem_shared_mem->buffer[i].type_vm2
-                       : kvm_ivshmem_shared_mem->buffer[i].type_vm1;
-      KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue count=%d type=%d vm_id=%d", i,
-                          in_counter, type, vm_id);
+      type = kvm_ivshmem_shared_mem->buffer[vm_id].prot_type;
+      KVM_IVSHMEM_DPRINTK(
+          "%d wake up local_data_ready_wait_queue count=%d type=%d vm_id=%d", i,
+          in_counter, type, vm_id);
       if (local_resource_count[i]) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
                             local_resource_count[i]);

@@ -283,7 +283,7 @@ int get_remote_socket(int instance_no, int my_fd, int close_fd,
 
 void shmem_init(int instance_no, int server) {
 
-  int res = -1, vm_id;
+  int res = -1, vm_id, c = 2;
   long int shmem_size;
   struct ioctl_transport_data data;
 
@@ -313,24 +313,26 @@ void shmem_init(int instance_no, int server) {
 
   if (!server) {
     while(1) {
+      unsigned char str1[256];
+      sprintf(str1, "Ala ma %d kota\n", c++);
       INFO("Sending1...", "");
       data.peer_vm_id = 0x4;
       data.type = 0x2;
-      ioctl(shmem_fd[instance_no], SHMEM_IOCTSEND, &data);
-      data.peer_vm_id = 0x4;
-      data.type = 0x2;
-      INFO("Sending2...", "");
+      data.data = str1;
+      data.length = sizeof(str1);
       ioctl(shmem_fd[instance_no], SHMEM_IOCTSEND, &data);
     }
   } else
     while(1) {
+      unsigned char str2[256];
       INFO("Receving...", "");
       data.peer_vm_id = 2;
       data.type = 0x2;
+      data.data = str2;
+      data.length = sizeof(str2);
       ioctl(shmem_fd[instance_no], SHMEM_IOCTRCV, &data);
       INFO("Received", "");
-      data.peer_vm_id = 2;
-      data.type = 0x2;
+      printf(str2);
       INFO("Sending ACK...", ""); 
       ioctl(shmem_fd[instance_no], SHMEM_IOCTACK, &data);
     };

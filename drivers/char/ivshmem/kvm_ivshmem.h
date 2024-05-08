@@ -35,4 +35,6 @@ struct ioctl_data {
 struct ioctl_transport_data {
   unsigned int peer_vm_id;
   transport_type type;
+  int length;
+  void *data;
 };
