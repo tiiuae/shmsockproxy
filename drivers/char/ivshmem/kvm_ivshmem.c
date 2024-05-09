@@ -60,7 +60,7 @@ static struct {
   /* Table of physical vm addresses indexed by logical vm_id */
   int vm_ids[VM_COUNT];
   struct {
-    volatile __attribute__((aligned(64))) unsigned char vm1[SHMEM_BUFFER_SIZE];
+    volatile __attribute__((aligned(64))) unsigned char data[SHMEM_BUFFER_SIZE];
     int data_len;
     transport_type prot_type;
   } buffer[VM_COUNT];
@@ -165,13 +165,22 @@ static int kvm_transport_init(struct file *filp, unsigned long arg) {
     return -EINVAL;
   }
 
+  if (sizeof(*kvm_ivshmem_shared_mem) > kvm_ivshmem_dev.ioaddr_size) {
+    printk(
+        KERN_ERR
+        "KVM_IVSHMEM: To small shared memory area: %d bytes. Need %ld bytes.",
+        kvm_ivshmem_dev.ioaddr_size, sizeof(*kvm_ivshmem_shared_mem));
+    return -ENOMEM;
+  }
   kvm_ivshmem_shared_mem = kvm_ivshmem_dev.base_addr;
   kvm_ivshmem_shared_mem->vm_ids[vm_id] = kvm_ivshmem_dev.my_vmid;
 
   KVM_IVSHMEM_DPRINTK(KERN_ERR
                       "KVM_IVSHMEM: logical vm_id=%d physical vm_id=%d",
                       vm_id, kvm_ivshmem_shared_mem->vm_ids[vm_id]);
-
+  KVM_IVSHMEM_DPRINTK(KERN_ERR "Used %ld MB out of %d MB",
+                      sizeof(*kvm_ivshmem_shared_mem) / (1024 * 1024),
+                      kvm_ivshmem_dev.ioaddr_size / (1024 * 1024));
   for (i = 0; i < VM_COUNT; i++)
     for (n = 0; n < PROTOCOLS_COUNT; n++) {
       init_completion(&local_transport_data_ready[i][n]);
@@ -235,7 +244,7 @@ static int kvm_transport_send(struct file *filp, unsigned long arg) {
 
   kvm_ivshmem_shared_mem->buffer[vm_id].prot_type = ioctl_data.type;
   kvm_ivshmem_shared_mem->buffer[vm_id].data_len = ioctl_data.length;
-  if (copy_from_user((void *)&kvm_ivshmem_shared_mem->buffer[vm_id].vm1[0],
+  if (copy_from_user((void *)&kvm_ivshmem_shared_mem->buffer[vm_id].data[0],
                      (void __user *)ioctl_data.data, ioctl_data.length)) {
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSEND: invalid ioctl data pointer %p",
            ioctl_data.data);
@@ -313,7 +322,8 @@ static int kvm_transport_receive(struct file *filp, unsigned long arg) {
           ioctl_data.length);
   if (copy_to_user(
           (void __user *)ioctl_data.data,
-          (void *)&kvm_ivshmem_shared_mem->buffer[ioctl_data.peer_vm_id].vm1[0],
+          (void *)&kvm_ivshmem_shared_mem->buffer[ioctl_data.peer_vm_id]
+              .data[0],
           data_length)) {
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSEND: invalid ioctl data pointer %p",
            ioctl_data.data);
