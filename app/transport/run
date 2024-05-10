@@ -1,0 +1,8 @@
+DEVICE=/dev/ivshmem
+MODDIR=~ghaf/shmsockproxy/module
+cd $MODDIR
+make
+cd -
+sudo rmmod kvm_ivshmem; sudo insmod $MODDIR/kvm_ivshmem.ko vm_id=4; sudo chmod a+rwx /dev/ivshmem
+rm transport
+make
