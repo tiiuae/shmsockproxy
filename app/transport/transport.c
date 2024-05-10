@@ -170,7 +170,7 @@ void run(int instance_no, int server) {
     while (1) {
       unsigned char str2[256];
       INFO("Waiting for the data...", "");
-      data.peer_vm_id = 2;
+      data.peer_vm_id = 3;
       data.type = 0x2;
       data.data = str2;
       data.length = sizeof(str2);
