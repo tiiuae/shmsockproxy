@@ -158,8 +158,8 @@ void run(int instance_no, int server) {
   if (!server) {
     while (1) {
       unsigned char str1[256];
-      sprintf(str1, "Ala ma %d kota\n", c++);
-      INFO("Sending1...", "]1");
+      sprintf(str1, "Hello word! %d\n", c++);
+      INFO("Sending...", "]1");
       data.peer_vm_id = 0x4;
       data.type = 0x2;
       data.data = str1;
@@ -169,7 +169,7 @@ void run(int instance_no, int server) {
   } else
     while (1) {
       unsigned char str2[256];
-      INFO("Receving...", "");
+      INFO("Waiting for the data...", "");
       data.peer_vm_id = 2;
       data.type = 0x2;
       data.data = str2;
@@ -177,8 +177,6 @@ void run(int instance_no, int server) {
       ioctl(shmem_fd[instance_no], SHMEM_IOCTRCV, &data);
       INFO("Received", "");
       printf(str2);
-      INFO("Sending ACK...", "");
-      ioctl(shmem_fd[instance_no], SHMEM_IOCTACK, &data);
     };
 }
 
