@@ -225,17 +225,23 @@ static int kvm_transport_send(struct file *filp, unsigned long arg) {
     return -EINVAL;
   }
   KVM_IVSHMEM_DPRINTK("Waiting for local_transport_data_ready");
-  ret = wait_for_completion_interruptible(
-      &local_transport_data_ready[ioctl_data.peer_vm_id][ioctl_data.type]);
-  if (ret)
+  ret = wait_for_completion_interruptible_timeout(
+      &local_transport_data_ready[ioctl_data.peer_vm_id][ioctl_data.type],
+      ioctl_data.timeout * HZ / 1000);
+  if (ret < 0)
     return -EINTR;
+  if (!ret)
+    return -ETIMEDOUT;
 
   /* Wait for the common buffer to be free and lock it */
-  ret = wait_event_interruptible(
+  ret = wait_event_interruptible_timeout(
       local_data_ready_wait_queue[ioctl_data.peer_vm_id],
-      local_resource_count[ioctl_data.peer_vm_id]);
-  if (ret)
+      local_resource_count[ioctl_data.peer_vm_id],
+      ioctl_data.timeout * HZ / 1000);
+  if (ret < 0)
     return -EINTR;
+  if (!ret)
+    return -ETIMEDOUT;
 
   spin_lock(&rawhide_irq_lock);
   local_resource_count[ioctl_data.peer_vm_id] = 0;
@@ -288,7 +294,6 @@ static int kvm_transport_receive(struct file *filp, unsigned long arg) {
 
   struct ioctl_transport_data ioctl_data;
   int ret = 0, data_length;
-  int interrupt;
 
   if (copy_ioctl_data(&ioctl_data, arg)) {
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCTRCV: invalid argument 0x%lx", arg);
@@ -301,17 +306,23 @@ static int kvm_transport_receive(struct file *filp, unsigned long arg) {
 
   KVM_IVSHMEM_DPRINTK("Waiting for remote_transport_data_ready. peer_vm_id=%d",
                       ioctl_data.peer_vm_id);
-  ret = wait_for_completion_interruptible(
-      &remote_transport_data_ready[ioctl_data.peer_vm_id][ioctl_data.type]);
-  if (ret)
+  ret = wait_for_completion_interruptible_timeout(
+      &remote_transport_data_ready[ioctl_data.peer_vm_id][ioctl_data.type],
+      ioctl_data.timeout * HZ / 1000);
+  if (ret < 0)
     return -EINTR;
+  if (!ret)
+    return -ETIMEDOUT;
 
   /* Wait for the common buffer to be received */
-  ret = wait_event_interruptible(
+  ret = wait_event_interruptible_timeout(
       peer_data_ready_wait_queue[ioctl_data.peer_vm_id],
-      peer_resource_count[ioctl_data.peer_vm_id]);
-  if (ret)
+      peer_resource_count[ioctl_data.peer_vm_id],
+      ioctl_data.timeout * HZ / 1000);
+  if (ret < 0)
     return -EINTR;
+  if (!ret)
+    return -ETIMEDOUT;
 
   spin_lock(&rawhide_irq_lock);
   peer_resource_count[ioctl_data.peer_vm_id] = 0;

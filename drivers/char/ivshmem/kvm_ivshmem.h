@@ -37,4 +37,5 @@ struct ioctl_transport_data {
   transport_type type;
   int length;
   void *data;
+  unsigned long timeout;
 };

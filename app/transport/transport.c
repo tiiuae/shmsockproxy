@@ -127,7 +127,7 @@ int get_shmem_size(int instance_no) {
 
 void run(int instance_no, int server) {
 
-  int res = -1, vm_id, c = 2;
+  int res = -1, vm_id, c = 2, ret;
   long int shmem_size;
   struct ioctl_transport_data data;
 
@@ -164,7 +164,13 @@ void run(int instance_no, int server) {
       data.type = 0x2;
       data.data = str1;
       data.length = sizeof(str1);
-      ioctl(shmem_fd[instance_no], SHMEM_IOCTSEND, &data);
+      data.timeout = 999;
+      ret = ioctl(shmem_fd[instance_no], SHMEM_IOCTSEND, &data);
+      if (ret < 0) {
+        INFO("Send timeout: ret=%d", ret); 
+      } else {
+        INFO("Send: ret=%d", ret);
+      }
     }
   } else
     while (1) {
@@ -174,8 +180,13 @@ void run(int instance_no, int server) {
       data.type = 0x2;
       data.data = str2;
       data.length = sizeof(str2);
-      ioctl(shmem_fd[instance_no], SHMEM_IOCTRCV, &data);
-      INFO("Received", "");
+      data.timeout = 999;
+      ret = ioctl(shmem_fd[instance_no], SHMEM_IOCTRCV, &data);
+      if (ret < 0) {
+        INFO("Received timeout: ret=%d", ret); 
+      } else {
+        INFO("Received: ret=%d", ret);
+      }
       ioctl(shmem_fd[instance_no], SHMEM_IOCTACK, &data);
     };
 }
