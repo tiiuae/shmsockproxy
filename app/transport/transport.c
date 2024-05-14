@@ -167,7 +167,7 @@ void run(int instance_no, int server) {
       data.timeout = 999;
       ret = ioctl(shmem_fd[instance_no], SHMEM_IOCTSEND, &data);
       if (ret < 0) {
-        INFO("Send timeout: ret=%d", ret); 
+        INFO("Send timeout: ret=%d", ret);
       } else {
         INFO("Send: ret=%d", ret);
       }
@@ -183,7 +183,7 @@ void run(int instance_no, int server) {
       data.timeout = 999;
       ret = ioctl(shmem_fd[instance_no], SHMEM_IOCTRCV, &data);
       if (ret < 0) {
-        INFO("Received timeout: ret=%d", ret); 
+        INFO("Received timeout: ret=%d", ret);
       } else {
         INFO("Received: ret=%d", ret);
       }

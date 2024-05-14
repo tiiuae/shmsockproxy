@@ -279,7 +279,7 @@ static int kvm_transport_ack(struct file *filp, unsigned long arg) {
     printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCACK: self vm id");
     return -EINVAL;
   }
-  
+
   /* Send interrupt */
   interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 |
               (vm_id << 1 | PEER_RESOURCE_CONSUMED_INT_VEC);
@@ -345,15 +345,15 @@ static int kvm_transport_receive(struct file *filp, unsigned long arg) {
     ret = data_length;
   }
 
-  #if 0 /* ACK is sent by user application */
+#if 0 /* ACK is sent by user application */
   /* Send interrupt to the peer vm that the common buffer can be released */
   interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 |
               (vm_id << 1 | PEER_RESOURCE_CONSUMED_INT_VEC);
   KVM_IVSHMEM_DPRINTK(KERN_ERR "KVM_IVSHMEM: raising interrupt 0x%x",
                       interrupt);
   writel(interrupt, kvm_ivshmem_dev.regs + Doorbell);
-  #endif
-  
+#endif
+
   return ret;
 }
 
@@ -674,8 +674,8 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       in_counter++;
       type = kvm_ivshmem_shared_mem->buffer[vm_id].prot_type;
       KVM_IVSHMEM_DPRINTK(
-          "%d wake up local_data_ready_wait_queue count=%d type=%d vm_id=%d", peer_vm,
-          in_counter, type, vm_id);
+          "%d wake up local_data_ready_wait_queue count=%d type=%d vm_id=%d",
+          peer_vm, in_counter, type, vm_id);
       if (local_resource_count[peer_vm]) {
         KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", peer_vm,
                             local_resource_count[peer_vm]);
