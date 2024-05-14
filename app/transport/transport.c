@@ -176,7 +176,7 @@ void run(int instance_no, int server) {
       data.length = sizeof(str2);
       ioctl(shmem_fd[instance_no], SHMEM_IOCTRCV, &data);
       INFO("Received", "");
-      printf(str2);
+      ioctl(shmem_fd[instance_no], SHMEM_IOCTACK, &data);
     };
 }
 

@@ -260,6 +260,30 @@ static int kvm_transport_send(struct file *filp, unsigned long arg) {
   return 0;
 }
 
+static int kvm_transport_ack(struct file *filp, unsigned long arg) {
+
+  struct ioctl_transport_data ioctl_data;
+  int interrupt;
+
+  if (copy_ioctl_data(&ioctl_data, arg)) {
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCACK: invalid argument 0x%lx", arg);
+    return -EINVAL;
+  }
+  if (ioctl_data.peer_vm_id == vm_id) {
+    printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCACK: self vm id");
+    return -EINVAL;
+  }
+  
+  /* Send interrupt */
+  interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 |
+              (vm_id << 1 | PEER_RESOURCE_CONSUMED_INT_VEC);
+  KVM_IVSHMEM_DPRINTK(KERN_ERR "KVM_IVSHMEM: raising interrupt 0x%x",
+                      interrupt);
+  writel(interrupt, kvm_ivshmem_dev.regs + Doorbell);
+
+  return 0;
+}
+
 static int kvm_transport_receive(struct file *filp, unsigned long arg) {
 
   struct ioctl_transport_data ioctl_data;
@@ -275,6 +299,13 @@ static int kvm_transport_receive(struct file *filp, unsigned long arg) {
     return -EINVAL;
   }
 
+  KVM_IVSHMEM_DPRINTK("Waiting for remote_transport_data_ready. peer_vm_id=%d",
+                      ioctl_data.peer_vm_id);
+  ret = wait_for_completion_interruptible(
+      &remote_transport_data_ready[ioctl_data.peer_vm_id][ioctl_data.type]);
+  if (ret)
+    return -EINTR;
+
   /* Wait for the common buffer to be received */
   ret = wait_event_interruptible(
       peer_data_ready_wait_queue[ioctl_data.peer_vm_id],
@@ -285,13 +316,6 @@ static int kvm_transport_receive(struct file *filp, unsigned long arg) {
   spin_lock(&rawhide_irq_lock);
   peer_resource_count[ioctl_data.peer_vm_id] = 0;
   spin_unlock(&rawhide_irq_lock);
-
-  KVM_IVSHMEM_DPRINTK("Waiting for remote_transport_data_ready. peer_vm_id=%d",
-                      ioctl_data.peer_vm_id);
-  ret = wait_for_completion_interruptible(
-      &remote_transport_data_ready[ioctl_data.peer_vm_id][ioctl_data.type]);
-  if (ret)
-    return -EINTR;
 
   /* Copy the received data */
   data_length =
@@ -310,13 +334,15 @@ static int kvm_transport_receive(struct file *filp, unsigned long arg) {
     ret = data_length;
   }
 
+  #if 0 /* ACK is sent by user application */
   /* Send interrupt to the peer vm that the common buffer can be released */
   interrupt = kvm_ivshmem_shared_mem->vm_ids[ioctl_data.peer_vm_id] << 16 |
               (vm_id << 1 | PEER_RESOURCE_CONSUMED_INT_VEC);
   KVM_IVSHMEM_DPRINTK(KERN_ERR "KVM_IVSHMEM: raising interrupt 0x%x",
                       interrupt);
   writel(interrupt, kvm_ivshmem_dev.regs + Doorbell);
-
+  #endif
+  
   return ret;
 }
 
@@ -413,6 +439,10 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCTSEND:
     rv = kvm_transport_send(filp, arg);
+    break;
+
+  case SHMEM_IOCTACK:
+    rv = kvm_transport_ack(filp, arg);
     break;
 
   case SHMEM_IOCTRCV:
@@ -599,7 +629,7 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
 static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   struct kvm_ivshmem_device *dev = dev_instance;
   transport_type type;
-  int i;
+  int peer_vm;
 
   if (unlikely(dev == NULL)) {
     KVM_IVSHMEM_DPRINTK("return IRQ_NONE");
@@ -607,46 +637,50 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   }
 
   KVM_IVSHMEM_DPRINTK("irq %d", irq);
-  for (i = 0; i < VM_COUNT; i++) {
-    if (irq == irq_incoming_data[i]) {
+  for (peer_vm = 0; peer_vm < VM_COUNT; peer_vm++) {
+    if (irq == irq_incoming_data[peer_vm]) {
       out_counter++;
-      type = kvm_ivshmem_shared_mem->buffer[i].prot_type;
+      type = kvm_ivshmem_shared_mem->buffer[peer_vm].prot_type;
       KVM_IVSHMEM_DPRINTK(
-          "%d wake up peer_data_ready_wait_queue count=%d type=%d 0x%lx", i,
-          out_counter, type,
-          (unsigned long)&kvm_ivshmem_shared_mem->buffer[vm_id].prot_type -
-              (unsigned long)kvm_ivshmem_shared_mem);
-      if (peer_resource_count[i]) {
-        KVM_IVSHMEM_DPRINTK("%d WARNING: peer_resource_count>0!: %d", i,
-                            peer_resource_count[i]);
+          "%d wake up peer_data_ready_wait_queue count=%d type=%d", peer_vm,
+          out_counter, type);
+      if (peer_resource_count[peer_vm]) {
+        KVM_IVSHMEM_DPRINTK("%d WARNING: peer_resource_count>0!: %d", peer_vm,
+                            peer_resource_count[peer_vm]);
       }
       spin_lock(&rawhide_irq_lock);
-      peer_resource_count[i] = 1;
+      peer_resource_count[peer_vm] = 1;
       spin_unlock(&rawhide_irq_lock);
-      wake_up_interruptible(&peer_data_ready_wait_queue[i]);
+      wake_up_interruptible(&peer_data_ready_wait_queue[peer_vm]);
       if (type < PROTOCOLS_COUNT)
-        complete(&remote_transport_data_ready[i][type]);
+        complete(&remote_transport_data_ready[peer_vm][type]);
       else
         printk(KERN_ERR "KVM_IVSHMEM: irq %d invalid protocol type %d", irq,
                type);
       return IRQ_HANDLED;
     }
-    if (irq == irq_ack[i]) {
+    if (irq == irq_ack[peer_vm]) {
       in_counter++;
       type = kvm_ivshmem_shared_mem->buffer[vm_id].prot_type;
       KVM_IVSHMEM_DPRINTK(
-          "%d wake up local_data_ready_wait_queue count=%d type=%d vm_id=%d", i,
+          "%d wake up local_data_ready_wait_queue count=%d type=%d vm_id=%d", peer_vm,
           in_counter, type, vm_id);
-      if (local_resource_count[i]) {
-        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", i,
-                            local_resource_count[i]);
+      if (local_resource_count[peer_vm]) {
+        KVM_IVSHMEM_DPRINTK("%d WARNING: local_resource_count>0!: %d", peer_vm,
+                            local_resource_count[peer_vm]);
       }
+      /* Unlock the common buffer */
       spin_lock(&rawhide_irq_lock);
-      local_resource_count[i] = 1;
+      local_resource_count[peer_vm] = 1;
       spin_unlock(&rawhide_irq_lock);
-      wake_up_interruptible(&local_data_ready_wait_queue[i]);
+      wake_up_interruptible(&local_data_ready_wait_queue[peer_vm]);
+
+      /* Release only the common buffer */
+      if (type == -1)
+        return IRQ_HANDLED;
+
       if (type < PROTOCOLS_COUNT)
-        complete(&local_transport_data_ready[i][type]);
+        complete(&local_transport_data_ready[peer_vm][type]);
       else
         printk(KERN_ERR "KVM_IVSHMEM: irq %d invalid protocol type %d", irq,
                type);
