@@ -584,6 +584,10 @@ extern ssize_t vmsplice(int fd, const struct iovec *iov,
               iovec_send.iov_base = (void *) &peer_shm->data[tmp];
               iovec_send.iov_len = data_chunk;
               rv = vmsplice(conn_fd, &iovec_send, 1, 0 /*SPLICE_F_GIFT*/ /*??? may not work*/);
+              if (rv != data_chunk) {
+                ERROR("Sent %d out of %d bytes on fd#%d errno=%d", rv,
+                      data_chunk, conn_fd, errno);
+              }
 #endif
             }
 
