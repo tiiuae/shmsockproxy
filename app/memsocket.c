@@ -21,6 +21,7 @@
 #include <sys/uio.h>
 #define _GNU_SOURCE
 #include <fcntl.h>
+#include <sys/sendfile.h>
 
 #include "../drivers/char/ivshmem/kvm_ivshmem.h"
 
@@ -464,6 +465,7 @@ void *run(void *arg) {
   int epollfd;
   vm_data *peer_shm, *my_shm;
   struct iovec iovec_send;
+  off_t offset;
 
   thread_init(instance_no);
   peer_shm = peer_shm_data[instance_no];
@@ -572,7 +574,6 @@ extern ssize_t vmsplice(int fd, const struct iovec *iov,
             for (tmp = 0; tmp < peer_shm->len; tmp += PAGE_SIZE) {
 
               data_chunk = ((peer_shm->len - tmp) / PAGE_SIZE) ? PAGE_SIZE:peer_shm->len - tmp;
-
 #if 0
               rv = send(conn_fd, (void *)&peer_shm->data[tmp],
                         data_chunk, 0);
@@ -581,6 +582,7 @@ extern ssize_t vmsplice(int fd, const struct iovec *iov,
                       data_chunk, conn_fd);
               }
 #else
+#if 0
               iovec_send.iov_base = (void *) &peer_shm->data[tmp];
               iovec_send.iov_len = data_chunk;
               rv = vmsplice(conn_fd, &iovec_send, 1, 0 /*SPLICE_F_GIFT*/ /*??? may not work*/);
@@ -589,6 +591,13 @@ extern ssize_t vmsplice(int fd, const struct iovec *iov,
                       data_chunk, conn_fd, errno);
               }
 #endif
+#endif
+              offset = (void *)&peer_shm->data[tmp] - (void*) vm_control;
+              rv = sendfile(conn_fd, shmem_fd[instance_no], &offset, data_chunk);
+              if (rv != data_chunk) {
+                ERROR("Sent %d out of %d bytes on fd#%d errno=%d", rv,
+                      data_chunk, conn_fd, errno);
+              }
             }
 
             DEBUG("Received data has been sent", "");
