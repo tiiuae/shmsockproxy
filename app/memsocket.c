@@ -4,7 +4,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <execinfo.h>
-#include <fcntl.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -19,6 +18,9 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <sys/uio.h>
+#define _GNU_SOURCE
+#include <fcntl.h>
 
 #include "../drivers/char/ivshmem/kvm_ivshmem.h"
 
@@ -461,7 +463,8 @@ void *run(void *arg) {
   unsigned int tmp, data_chunk;
   int epollfd;
   vm_data *peer_shm, *my_shm;
-  
+  struct iovec iovec_send;
+
   thread_init(instance_no);
   peer_shm = peer_shm_data[instance_no];
   my_shm = my_shm_data[instance_no];
@@ -560,17 +563,30 @@ void *run(void *arg) {
                   peer_shm->len, conn_fd,
                   cksum((unsigned char *)peer_shm->data,
                         peer_shm->len));
+
+
+extern ssize_t vmsplice(int fd, const struct iovec *iov,
+                        size_t nr_segs, unsigned int flags);
+
+
             for (tmp = 0; tmp < peer_shm->len; tmp += PAGE_SIZE) {
 
               data_chunk = ((peer_shm->len - tmp) / PAGE_SIZE) ? PAGE_SIZE:peer_shm->len - tmp;
 
+#if 0
               rv = send(conn_fd, (void *)&peer_shm->data[tmp],
                         data_chunk, 0);
               if (rv != data_chunk) {
                 ERROR("Sent %d out of %d bytes on fd#%d", rv,
                       data_chunk, conn_fd);
               }
+#else
+              iovec_send.iov_base = (void *) &peer_shm->data[tmp];
+              iovec_send.iov_len = data_chunk;
+              rv = vmsplice(conn_fd, &iovec_send, 1, 0 /*SPLICE_F_GIFT*/ /*??? may not work*/);
+#endif
             }
+
             DEBUG("Received data has been sent", "");
 
             if (peer_shm->cmd == CMD_DATA) {
