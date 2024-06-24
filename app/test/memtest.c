@@ -4,10 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
-#include <time.h>
 #include <sys/times.h>
+#include <sys/un.h>
+#include <time.h>
+#include <unistd.h>
 
 #define LISTEN_BACKLOG 50
 #define BUFFER_SIZE (10240)
@@ -52,16 +52,19 @@ unsigned crc8(unsigned crc, unsigned char const *data, size_t len) {
   return crc;
 }
 
-void time_report(struct tms *start, struct tms *end, clock_t c_start, clock_t c_end, long int sent_bytes)
-{
-    double time_elapsed = c_end - c_start;
-    double real_time = (double)(c_end - c_start) / sysconf(_SC_CLK_TCK);
-    double bytes_per_sec = (double) sent_bytes  / real_time;
-    double u_time = (double)(end->tms_utime - start->tms_utime) / sysconf(_SC_CLK_TCK);
-    double s_time = (double)(end->tms_stime - start->tms_stime) / sysconf(_SC_CLK_TCK);
-    
-    printf("Sent/received %ld bytes %.0f Mbytes/sec\n", sent_bytes, bytes_per_sec/1024/1024);
-    printf("real %.3fs\nuser %.3fs\nsys  %.3fs\n", real_time, u_time, s_time);
+void time_report(struct tms *start, struct tms *end, clock_t c_start,
+                 clock_t c_end, long int sent_bytes) {
+  double time_elapsed = c_end - c_start;
+  double real_time = (double)(c_end - c_start) / sysconf(_SC_CLK_TCK);
+  double bytes_per_sec = (double)sent_bytes / real_time;
+  double u_time =
+      (double)(end->tms_utime - start->tms_utime) / sysconf(_SC_CLK_TCK);
+  double s_time =
+      (double)(end->tms_stime - start->tms_stime) / sysconf(_SC_CLK_TCK);
+
+  printf("Sent/received %ld bytes %.0f Mbytes/sec\n", sent_bytes,
+         bytes_per_sec / 1024 / 1024);
+  printf("real %.3fs\nuser %.3fs\nsys  %.3fs\n", real_time, u_time, s_time);
 }
 
 void receive_file(char *socket_path) {
@@ -113,9 +116,10 @@ void receive_file(char *socket_path) {
       crc = crc8(crc, buff, rv);
     };
     r_time_end = times(&time_end);
-    time_report(&time_start, &time_end, r_time_start, r_time_end, read_count+1);
+    time_report(&time_start, &time_end, r_time_start, r_time_end,
+                read_count + 1);
     printf("Read %d bytes.", read_count);
-    if (crc == CRC8_RESIDUE) 
+    if (crc == CRC8_RESIDUE)
       printf(" CRC OK\n");
     else
       printf(" BAD CRC!\n");
@@ -153,7 +157,7 @@ void send_file(char *socket_path, char *input_file, int size, int error) {
 
   crc = 0;
   r_time_start = times(&time_start);
-  while(1) {
+  while (1) {
     rv = read(in_fd, buff, sizeof(buff));
     if (rv < 0)
       handle_error("read");
@@ -165,27 +169,30 @@ void send_file(char *socket_path, char *input_file, int size, int error) {
 
     crc = crc8(crc, buff, rv);
     sent_bytes += rv;
-    if(size && sent_bytes >=size)
+    if (size && sent_bytes >= size)
       break;
   };
   buff[0] = crc & 0xff;
-  if (error) 
-    buff[0]--;
+  if (error)
+    buff[0]--; /* make the CRC invalid */
   wv = write(out_fd, buff, 1);
 
   r_time_end = times(&time_end);
-  time_report(&time_start, &time_end, r_time_start, r_time_end, sent_bytes+1);
+  time_report(&time_start, &time_end, r_time_start, r_time_end, sent_bytes + 1);
   if (wv <= 0)
     handle_error("write");
 }
 
 void usage(char *cmd) {
-  printf("Usage: %s socket_path for receiving.\n%s socket_path input_file [size CRC_error]"
-         " for sending.\nBefore using stop the memsocket service: 'systemctl stop --user memsocket.service'.\n"
-         "For receiving run e.g.: 'memsocket -c ./test.sock &; %s ./test.sock'.\n"
-         "To send a file run on other VM: 'memsocket -s ./test.sock 3 &; %s ./test.sock /dev/random 10M.'\n"
-         "To force wrong CRC on sending: '%s ./test.sock /dev/random 10M xxx\n'"
-         ,
+  printf("Usage:\nFor receiving: %s socket_path.\nFor sending: %s socket_path "
+         "input_file [size CRC_error]"
+         "\nBefore using stop the memsocket service: systemctl stop --user "
+         "memsocket.service\n"
+         "For receiving run e.g.: memsocket -c ./test.sock & %s ./test.sock\n"
+         "To send a file run on other VM: memsocket -s ./test.sock 3 &%s "
+         "./test.sock /dev/random 10M\n"
+         "To force wrong CRC on sending use anything as the 5th parameter: %s "
+         "./test.sock /dev/random 10M xxx\n",
          cmd, cmd, cmd, cmd, cmd);
   exit(0);
 }
@@ -218,6 +225,6 @@ int main(int argc, char **argv) {
     }
 
     // printf(">>%d\n", __LINE__);
-    send_file(socket_path, file_path, size, argc ==5 );
+    send_file(socket_path, file_path, size, argc == 5);
   }
 }
