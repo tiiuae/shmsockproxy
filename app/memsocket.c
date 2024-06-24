@@ -595,12 +595,12 @@ extern ssize_t vmsplice(int fd, const struct iovec *iov,
               }
 #else
               offset = (void *)&peer_shm->data[tmp] - (void*) vm_control;
-              rv = lseek(shmem_fd[instance_no], offset, SEEK_SET);
+              rv = lseek(shmem_fd[instance_no], 0 /*offset*/, SEEK_SET);
               if (rv < 0) {
                 ERROR("lseek %d errno=%d", rv, errno);
               }
 
-              rv = sendfile(conn_fd, shmem_fd[instance_no], NULL, data_chunk);
+              rv = sendfile(conn_fd, shmem_fd[instance_no], /*NULL*/ &offset, data_chunk);
 
 #endif
 #endif
