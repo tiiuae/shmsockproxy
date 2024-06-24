@@ -149,8 +149,8 @@ int get_shmem_size(int instance_no) {
   if (res < 0) {
     FATAL("seek");
   }
-  res = lseek(shmem_fd[instance_no], 0, SEEK_SET);
-  if (res < 0) {
+  
+  if (lseek(shmem_fd[instance_no], 0, SEEK_SET) < 0) {
     FATAL("seek");
   }
   return res;
