@@ -1,6 +1,6 @@
-From d757986275e63119309f32fd9bbad598d63d166c Mon Sep 17 00:00:00 2001
+From 516be8fa7fd1773198387fc0d062edb578d4e84d Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Mon, 1 Jul 2024 12:35:07 +0400
+Date: Mon, 1 Jul 2024 16:40:42 +0400
 Subject: ivshmem flat memory support
 
 ---
@@ -58,17 +58,17 @@ index 7d9dbc2..8d61075 100644
      machine_class_allow_dynamic_sysbus_dev(mc, TYPE_TPM_TIS_SYSBUS);
  #endif
 diff --git a/hw/i386/pc_q35.c b/hw/i386/pc_q35.c
-index dc27a9e..a760cae 100644
+index dc27a9e..f3ed060 100644
 --- a/hw/i386/pc_q35.c
 +++ b/hw/i386/pc_q35.c
-@@ -57,6 +57,7 @@
+@@ -55,6 +55,7 @@
+ #include "qemu/error-report.h"
+ #include "sysemu/numa.h"
  #include "hw/hyperv/vmbus-bridge.h"
++#include "hw/misc/ivshmem.h"
  #include "hw/mem/nvdimm.h"
  #include "hw/i386/acpi-build.h"
-+#include "hw/misc/ivshmem.h"
  
- /* ICH9 AHCI has 6 ports */
- #define MAX_SATA_PORTS     6
 @@ -377,6 +378,7 @@ static void pc_q35_machine_options(MachineClass *m)
      machine_class_allow_dynamic_sysbus_dev(m, TYPE_INTEL_IOMMU_DEVICE);
      machine_class_allow_dynamic_sysbus_dev(m, TYPE_RAMFB_DEVICE);

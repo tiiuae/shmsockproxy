@@ -55,9 +55,9 @@
 #include "qemu/error-report.h"
 #include "sysemu/numa.h"
 #include "hw/hyperv/vmbus-bridge.h"
+#include "hw/misc/ivshmem.h"
 #include "hw/mem/nvdimm.h"
 #include "hw/i386/acpi-build.h"
-#include "hw/misc/ivshmem.h"
 
 /* ICH9 AHCI has 6 ports */
 #define MAX_SATA_PORTS     6
