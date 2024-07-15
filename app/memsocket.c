@@ -458,7 +458,6 @@ void *run(void *arg) {
   struct epoll_event ev, *current_event;
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
-  unsigned int tmp, data_chunk;
   int epollfd;
   vm_data *peer_shm, *my_shm;
   
@@ -560,16 +559,11 @@ void *run(void *arg) {
                   peer_shm->len, conn_fd,
                   cksum((unsigned char *)peer_shm->data,
                         peer_shm->len));
-            for (tmp = 0; tmp < peer_shm->len; tmp += PAGE_SIZE) {
-
-              data_chunk = ((peer_shm->len - tmp) / PAGE_SIZE) ? PAGE_SIZE:peer_shm->len - tmp;
-
-              rv = send(conn_fd, (void *)&peer_shm->data[tmp],
-                        data_chunk, 0);
-              if (rv != data_chunk) {
-                ERROR("Sent %d out of %d bytes on fd#%d", rv,
-                      data_chunk, conn_fd);
-              }
+            rv = send(conn_fd, (const void *)peer_shm->data,
+                      peer_shm->len, 0);
+            if (rv != peer_shm->len) {
+              ERROR("Sent %d out of %d bytes on fd#%d", rv,
+                    peer_shm->len, conn_fd);
             }
             DEBUG("Received data has been sent", "");
 
