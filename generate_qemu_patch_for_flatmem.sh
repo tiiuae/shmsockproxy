@@ -2,10 +2,10 @@
 
 set -euo pipefail
 
-[[ ! -d qemu ]] && git clone https://github.com/qemu/qemu.git --branch v8.1.3 --depth 1
+[[ ! -d qemu ]] && git clone https://github.com/qemu/qemu.git --branch v9.0.0 --depth 1
 
 pushd qemu
-  git reset --hard 179cc58e00eab7497ce0ac3a1897ec4878588a15
+  git reset --hard c25df57ae8f9fe1c72eee2dab37d76d904ac382e
   git clean -xdf
 
   cp -Rv ../qemu-flatmem/contrib .
