@@ -195,7 +195,7 @@ void server_init(int instance_no) {
     FATAL("server_init: epoll_ctl: server_socket");
   }
 
-  INFO("server initialized", "");
+  INFO("server initialized%s", "");
 }
 
 int wayland_connect(int instance_no) {
@@ -226,7 +226,7 @@ int wayland_connect(int instance_no) {
     FATAL("epoll_ctl: wayland_fd");
   }
 
-  INFO("client initialized", "");
+  INFO("client initialized%s", "");
   return wayland_fd;
 }
 
@@ -336,9 +336,9 @@ void shmem_init(int instance_no) {
   *my_vmid = vm_id;
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
   if (run_as_server) {
-    INFO("server", "");
+    INFO("server%s", "");
   } else {
-    INFO("client", "");
+    INFO("client%s", "");
   }
 
   ev.events = EPOLLIN | EPOLLOUT;
@@ -357,7 +357,7 @@ void shmem_init(int instance_no) {
   ioctl(shmem_fd[instance_no], SHMEM_IOCSET,
         (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
 
-  INFO("shared memory initialized", "");
+  INFO("shared memory initialized%s", "");
 }
 
 void thread_init(int instance_no) {
@@ -458,6 +458,7 @@ void *run(void *arg) {
   struct epoll_event ev, *current_event;
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
+  unsigned int tmp;
   int epollfd;
   vm_data *peer_shm, *my_shm;
   
@@ -470,9 +471,9 @@ void *run(void *arg) {
   while (1) {
 #ifdef DEBUG_ON
     if (epollfd == epollfd_full[instance_no]) {
-      DEBUG("Waiting for all events", "");
+      DEBUG("Waiting for all events%s", "");
     } else {
-      DEBUG("Waiting for ACK", "");
+      DEBUG("Waiting for ACK%s", "");
     }
 #endif
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -489,7 +490,7 @@ void *run(void *arg) {
 #endif
       if (current_event->events & EPOLLOUT &&
           current_event->data.fd == my_buffer_fds.fd) {
-        DEBUG("Remote ACK", "");
+        DEBUG("Remote ACK%s", "");
         /* Set the local buffer is consumed and ready for use */
         ioctl(my_buffer_fds.fd, SHMEM_IOCSET,
               (LOCAL_RESOURCE_READY_INT_VEC << 8) + 0);
@@ -565,7 +566,7 @@ void *run(void *arg) {
               ERROR("Sent %d out of %d bytes on fd#%d", rv,
                     peer_shm->len, conn_fd);
             }
-            DEBUG("Received data has been sent", "");
+            DEBUG("Received data has been sent%s", "");
 
             if (peer_shm->cmd == CMD_DATA) {
               break;
@@ -600,7 +601,7 @@ void *run(void *arg) {
           } /* switch peer_shm->cmd */
 
           /* Signal the other side that its buffer has been processed */
-          DEBUG("Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC", "");
+          DEBUG("Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC%s", "");
           peer_shm->cmd = -1;
 
           ioctl_data.int_no = remote_rc_int_no[instance_no];
@@ -622,7 +623,7 @@ void *run(void *arg) {
           } else {
             conn_fd = current_event->data.fd;
           }
-          DEBUG("Reading from wayland/waypipe socket", "");
+          DEBUG("Reading from wayland/waypipe socket%s", "");
           read_count =
               read(current_event->data.fd, (void *)my_shm->data,
                    sizeof(my_shm->data));
