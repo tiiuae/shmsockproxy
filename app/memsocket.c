@@ -35,7 +35,7 @@
 #define UNKNOWN_PEER (-1)
 #define CLOSE_FD (1)
 #define IGNORE_ERROR (1)
-#define PAGE_SIZE (32)
+#define PAGE_SIZE (4096)
 
 #define DBG(fmt, ...)                                                          \
   {                                                                            \
