@@ -948,7 +948,7 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
   vma->vm_flags |= VM_SHARED;
 #endif
 
-  if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
+  if (remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
                          vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
     KVM_IVSHMEM_DPRINTK("%ld mmap failed",
                         (unsigned long int)filp->private_data);

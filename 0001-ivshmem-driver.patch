@@ -1,6 +1,6 @@
-From 2db9bad030cf1bb6d3a4d65a7aa0abc088b068a6 Mon Sep 17 00:00:00 2001
+From 46b38890c4456f37f65a0d9b0f0f2026d96004d9 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Fri, 5 Apr 2024 09:54:31 +0400
+Date: Mon, 1 Jul 2024 12:34:57 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..0a850b05e
 +obj-y += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..456879434
+index 000000000..e6ca47f82
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,703 @@
@@ -747,7 +747,7 @@ index 000000000..456879434
 +  vma->vm_flags |= VM_SHARED;
 +  #endif
 +
-+  if (io_remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
++  if (remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
 +                         vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
 +    KVM_IVSHMEM_DPRINTK("%ld mmap failed",
 +                        (unsigned long int)filp->private_data);
@@ -796,5 +796,5 @@ index 000000000..aacd7f73e
 +  int len;
 +};
 -- 
-2.44.0
+2.45.2
 
