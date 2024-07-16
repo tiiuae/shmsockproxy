@@ -285,8 +285,8 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
 
 #ifdef DEBUG
   if (!mask) {
-    printk(KERN_ERR "KVM_IVSHMEM: poll: timeout: query for events 0x%x",
-           req_events);
+    printk(KERN_ERR "KVM_IVSHMEM: %ld poll: timeout: query for events 0x%x",
+           (unsigned long int)filp->private_data, req_events);
   }
 #endif
   return mask;
@@ -382,8 +382,8 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
   return len;
 }
 
-//#define DEBUG
-#undef DEBUG
+#define DEBUG
+//#undef DEBUG
 #undef KVM_IVSHMEM_DPRINTK
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
