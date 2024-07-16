@@ -1,6 +1,6 @@
-From 46b38890c4456f37f65a0d9b0f0f2026d96004d9 Mon Sep 17 00:00:00 2001
+From 3d6dfb0ab64a7cdef5e17e6f70912e90ce67da82 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Mon, 1 Jul 2024 12:34:57 +0400
+Date: Mon, 15 Jul 2024 17:01:50 +0400
 Subject: ivshmem driver
 
 ---
@@ -57,7 +57,7 @@ index 000000000..0a850b05e
 +obj-y += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..e6ca47f82
+index 000000000..c694714ef
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
 @@ -0,0 +1,703 @@
@@ -98,7 +98,7 @@ index 000000000..e6ca47f82
 +#define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 +#define VECTORS_COUNT (2 * VM_COUNT)
 +
-+// #define DEBUG
++#define DEBUG
 +#ifdef DEBUG
 +#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
 +  do {                                                                         \
