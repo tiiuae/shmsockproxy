@@ -35,7 +35,7 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 #define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 #define VECTORS_COUNT (2 * VM_COUNT)
 
-#define DEBUG
+//#define DEBUG
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
   do {                                                                         \
