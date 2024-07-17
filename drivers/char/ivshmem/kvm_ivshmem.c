@@ -35,7 +35,7 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 #define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 #define VECTORS_COUNT (2 * VM_COUNT)
 
-//#define DEBUG
+#undef DEBUG
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
   do {                                                                         \
@@ -382,8 +382,7 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
   return len;
 }
 
-#define DEBUG
-//#undef DEBUG
+#undef DEBUG
 #undef KVM_IVSHMEM_DPRINTK
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
