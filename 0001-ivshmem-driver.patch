@@ -1,6 +1,6 @@
-From 4307636f3337ed25c407517706d7f4c37520b249 Mon Sep 17 00:00:00 2001
+From 5b4ce057cf4dae147b841062b25839f728dd3bad Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Wed, 17 Jul 2024 10:12:15 +0400
+Date: Wed, 17 Jul 2024 11:47:25 +0400
 Subject: ivshmem driver
 
 ---
@@ -8,9 +8,9 @@ Subject: ivshmem driver
  drivers/char/Makefile              |   1 +
  drivers/char/ivshmem/Kconfig       |   6 +
  drivers/char/ivshmem/Makefile      |   1 +
- drivers/char/ivshmem/kvm_ivshmem.c | 703 +++++++++++++++++++++++++++++
+ drivers/char/ivshmem/kvm_ivshmem.c | 702 +++++++++++++++++++++++++++++
  drivers/char/ivshmem/kvm_ivshmem.h |  25 +
- 6 files changed, 738 insertions(+)
+ 6 files changed, 737 insertions(+)
  create mode 100644 drivers/char/ivshmem/Kconfig
  create mode 100644 drivers/char/ivshmem/Makefile
  create mode 100644 drivers/char/ivshmem/kvm_ivshmem.c
@@ -57,10 +57,10 @@ index 000000000..0a850b05e
 +obj-y += kvm_ivshmem.o
 diff --git a/drivers/char/ivshmem/kvm_ivshmem.c b/drivers/char/ivshmem/kvm_ivshmem.c
 new file mode 100644
-index 000000000..13bd0c58c
+index 000000000..44fed0a0a
 --- /dev/null
 +++ b/drivers/char/ivshmem/kvm_ivshmem.c
-@@ -0,0 +1,703 @@
+@@ -0,0 +1,702 @@
 +/* drivers/char/kvm_ivshmem.c - driver for KVM Inter-VM shared memory PCI device
 +
 +* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
@@ -98,7 +98,7 @@ index 000000000..13bd0c58c
 +#define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
 +#define VECTORS_COUNT (2 * VM_COUNT)
 +
-+//#define DEBUG
++#undef DEBUG
 +#ifdef DEBUG
 +#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
 +  do {                                                                         \
@@ -445,8 +445,7 @@ index 000000000..13bd0c58c
 +  return len;
 +}
 +
-+#define DEBUG
-+//#undef DEBUG
++#undef DEBUG
 +#undef KVM_IVSHMEM_DPRINTK
 +#ifdef DEBUG
 +#define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
