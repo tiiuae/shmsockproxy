@@ -128,7 +128,7 @@ void receive_file(char *socket_path) {
   }
 }
 
-void send_file(char *socket_path, char *input_file, int size, int error) {
+void send_file(char *socket_path, char *input_file, long int size, int error) {
   int in_fd, out_fd;
   struct sockaddr_un socket_name;
   long int sent_bytes = 0, rv, wv;
@@ -169,7 +169,7 @@ void send_file(char *socket_path, char *input_file, int size, int error) {
 
     crc = crc8(crc, buff, rv);
     sent_bytes += rv;
-    if(size && sent_bytes >=size)
+    if(size && sent_bytes >= size)
       break;
   };
   buff[0] = crc & 0xff;
@@ -217,7 +217,7 @@ void usage(char *cmd) {
 int main(int argc, char **argv) {
 
   long int size = 0;
-  int m = 1;
+  long int m = 1;
   char c;
   char socket_path[100], file_path[100];
 
@@ -238,10 +238,8 @@ int main(int argc, char **argv) {
       else if (c == 'G')
         m = 1024 * 1024 * 1024;
       size = m * atoi(argv[3]);
-      // printf("size=%ld\n", size);
     }
 
-    // printf(">>%d\n", __LINE__);
     send_file(socket_path, file_path, size, argc ==5 );
   }
 }
