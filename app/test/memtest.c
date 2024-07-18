@@ -74,7 +74,7 @@ void receive_file(char *socket_path) {
   socklen_t peer_addr_size;
   struct sockaddr_un my_addr, peer_addr;
   unsigned char buff[BUFFER_SIZE];
-  int res, rv, read_count;
+  long int res, rv, read_count;
   unsigned int crc;
   struct tms time_start, time_end;
   clock_t r_time_start, r_time_end;
