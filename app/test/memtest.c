@@ -184,13 +184,33 @@ void send_file(char *socket_path, char *input_file, int size, int error) {
 }
 
 void usage(char *cmd) {
-  printf("Usage: %s socket_path for receiving.\n%s socket_path input_file [size CRC_error]"
-         " for sending.\nBefore using stop the memsocket service:\nsystemctl stop --user memsocket.service\n\n"
-         "For receiving run e.g.:\nmemsocket -c ./test.sock &\n%s ./test.sock\n\n"
-         "To send a file run on other VM:\nmemsocket -s ./test.sock 3&\n%s ./test.sock /dev/random 10M\n\n"
-         "To force wrong CRC on sending:\n%s ./test.sock /dev/random 10M xxx\n"
-         ,
-         cmd, cmd, cmd, cmd, cmd);
+  printf( "Usage:\n"
+          "  For receiving: %s socket_path\n"
+          "  For sending:   %s socket_path input_file [size [CRC_error]]\n\n"
+          "If the 3rd parameter is present, a broken CRC on the sender's side\n"
+          "is sent (for testing purposes).\n\n"
+          "Examples:\n"
+          "  Starting the receiving process (on the guivm machine) using an already\n"
+          "  running memsocket service:\n"
+          "  %s /run/user/1000/memsocket-client.sock\n\n"
+          "  Sending data (on any machine):\n"
+          "  %s /run/user/1000/memsocket-server.sock /dev/zero 1000M\n\n"
+          "  Checking the status of the memsocket service:\n"
+          "  systemctl status --user memsocket.service\n\n"
+          "Custom runs:\n"
+          "  Stopping the memsocket service on guivm and peer machines:\n"
+          "  systemctl stop --user memsocket.service\n\n"
+          "  Running the receiving process:\n"
+          "  memsocket -c ./test.sock &\n"
+          "  %s ./test.sock\n\n"
+          "  Sending data from another VM:\n"
+          "  Run once:\n"
+          "  memsocket -s ./test.sock 3 &\n\n"
+          "  Send the data:\n"
+          "  %s ./test.sock /dev/zero 100M\n\n"
+          "  To force a wrong CRC while sending, use anything as the 3rd parameter:\n"
+          "  %s ./test.sock /dev/zero 100M xxx\n",
+         cmd, cmd, cmd, cmd, cmd, cmd, cmd);
   exit(0);
 }
 
