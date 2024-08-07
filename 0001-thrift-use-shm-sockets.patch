@@ -1,0 +1,39 @@
+From f867cc2ca38ebafefeee04a89376fe46e38ab7f6 Mon Sep 17 00:00:00 2001
+From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
+Date: Fri, 2 Aug 2024 10:36:48 +0400
+Subject: thrift use shm sockets
+
+---
+ tutorial/cpp/CppClient.cpp | 2 +-
+ tutorial/cpp/CppServer.cpp | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tutorial/cpp/CppClient.cpp b/tutorial/cpp/CppClient.cpp
+index 5208411..65d929f 100644
+--- a/tutorial/cpp/CppClient.cpp
++++ b/tutorial/cpp/CppClient.cpp
+@@ -34,7 +34,7 @@ using namespace tutorial;
+ using namespace shared;
+ 
+ int main() {
+-  std::shared_ptr<TTransport> socket(new TSocket("localhost", 9090));
++  std::shared_ptr<TTransport> socket(new TSocket("/run/user/1000/memsocket-server.sock"));
+   std::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
+   std::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
+   CalculatorClient client(protocol);
+diff --git a/tutorial/cpp/CppServer.cpp b/tutorial/cpp/CppServer.cpp
+index 635afef..d52d473 100644
+--- a/tutorial/cpp/CppServer.cpp
++++ b/tutorial/cpp/CppServer.cpp
+@@ -132,7 +132,7 @@ class CalculatorCloneFactory : virtual public CalculatorIfFactory {
+ int main() {
+   TThreadedServer server(
+     std::make_shared<CalculatorProcessorFactory>(std::make_shared<CalculatorCloneFactory>()),
+-    std::make_shared<TServerSocket>(9090), //port
++    std::make_shared<TServerSocket>("/run/user/1000/memsocket-client.sock"), //port
+     std::make_shared<TBufferedTransportFactory>(),
+     std::make_shared<TBinaryProtocolFactory>());
+ 
+-- 
+2.45.2
+
