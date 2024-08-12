@@ -752,20 +752,9 @@ int main(int argc, char **argv) {
   }
 
   if (run_mode > 1 || run_as_server < 0 || (run_on_host && run_as_server) ||
-      optind < argc)
+      (instance_no < 0 && run_as_server > 0))
     goto wrong_args;
 
-  socket_path = argv[2];
-  if (!strlen(socket_path))
-    goto wrong_args;
-
-  if (run_as_server) {
-    if (strlen(argv[3])) {
-      instance_no = atoi(argv[3]);
-    } else {
-      goto wrong_args;
-    }
-  }
   for (i = 0; i < VM_COUNT; i++) {
     my_shm_data[i] = NULL;
     peer_shm_data[i] = NULL;
