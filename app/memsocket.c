@@ -1,6 +1,6 @@
 /* Copyright 2022-2024 TII (SSRC) and the Ghaf contributors
  * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 #include <arpa/inet.h>
 #include <errno.h>
 #include <execinfo.h>
@@ -31,7 +31,7 @@
 #define MAX_EVENTS (1024)
 #define MAX_CLIENTS (10)
 #define SHMEM_POLL_TIMEOUT (3000)
-#define SHMEM_BUFFER_SIZE (512*1024)
+#define SHMEM_BUFFER_SIZE (512 * 1024)
 #define UNKNOWN_PEER (-1)
 #define CLOSE_FD (1)
 #define IGNORE_ERROR (1)
@@ -103,7 +103,7 @@ struct {
 } fd_map[VM_COUNT][MAX_CLIENTS];
 
 typedef struct {
-  volatile __attribute__ ((aligned (64))) unsigned char data[SHMEM_BUFFER_SIZE];
+  volatile __attribute__((aligned(64))) unsigned char data[SHMEM_BUFFER_SIZE];
   volatile int server_vmid;
   volatile int cmd;
   volatile int fd;
@@ -122,11 +122,12 @@ int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
 pthread_t server_threads[VM_COUNT];
 struct {
   volatile int client_vmid;
-  vm_data __attribute__ ((aligned (64))) client_data[VM_COUNT];
-  vm_data __attribute__ ((aligned (64))) server_data[VM_COUNT];
+  vm_data __attribute__((aligned(64))) client_data[VM_COUNT];
+  vm_data __attribute__((aligned(64))) server_data[VM_COUNT];
 } *vm_control;
 
-static const char usage_string[] = "Usage: memsocket { -c socket_path [-h socket_path] | -s socket_path vmid }\n";
+static const char usage_string[] = "Usage: memsocket { -c socket_path [-h "
+                                   "socket_path] | -s socket_path vmid }\n";
 
 void report(const char *msg, int terminate) {
 
@@ -320,8 +321,12 @@ void shmem_init(int instance_no) {
     my_shm_data[instance_no] = &vm_control->client_data[instance_no];
     peer_shm_data[instance_no] = &vm_control->server_data[instance_no];
   }
-  DEBUG("[%d] vm_control=0x%p my_shm_data=0x%p peer_shm_data=0x%p\n", instance_no, vm_control, my_shm_data[instance_no], peer_shm_data[instance_no]);
-  DEBUG("[%d]                 my_shm_data=0x%lx peer_shm_data=0x%lx\n", instance_no, (void *)my_shm_data[instance_no] - (void*)vm_control, (void*)peer_shm_data[instance_no] - (void*)vm_control);
+  DEBUG("[%d] vm_control=0x%p my_shm_data=0x%p peer_shm_data=0x%p\n",
+        instance_no, vm_control, my_shm_data[instance_no],
+        peer_shm_data[instance_no]);
+  DEBUG("[%d]                 my_shm_data=0x%lx peer_shm_data=0x%lx\n",
+        instance_no, (void *)my_shm_data[instance_no] - (void *)vm_control,
+        (void *)peer_shm_data[instance_no] - (void *)vm_control);
   /* get my VM Id */
   res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &vm_id);
   if (res < 0) {
@@ -462,7 +467,7 @@ void *run(void *arg) {
   unsigned int tmp;
   int epollfd;
   vm_data *peer_shm, *my_shm;
-  
+
   thread_init(instance_no);
   peer_shm = peer_shm_data[instance_no];
   my_shm = my_shm_data[instance_no];
@@ -531,41 +536,33 @@ void *run(void *arg) {
         else if (current_event->data.fd == my_buffer_fds.fd) {
           DEBUG(
               "shmem_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote len: %d",
-              my_buffer_fds.fd, current_event->events,
-              peer_shm->cmd, peer_shm->fd,
-              peer_shm->len);
+              my_buffer_fds.fd, current_event->events, peer_shm->cmd,
+              peer_shm->fd, peer_shm->len);
 
           switch (peer_shm->cmd) {
           case CMD_LOGIN:
-            DEBUG("Received login request from 0x%x",
-                  peer_shm->fd);
+            DEBUG("Received login request from 0x%x", peer_shm->fd);
             /* If the peer VM starts again, close all opened file handles */
             close_peer_vm(instance_no);
 
-            local_rr_int_no[instance_no] = peer_shm->fd |
-                                           (instance_no << 1) |
+            local_rr_int_no[instance_no] = peer_shm->fd | (instance_no << 1) |
                                            LOCAL_RESOURCE_READY_INT_VEC;
-            remote_rc_int_no[instance_no] = peer_shm->fd |
-                                            (instance_no << 1) |
+            remote_rc_int_no[instance_no] = peer_shm->fd | (instance_no << 1) |
                                             PEER_RESOURCE_CONSUMED_INT_VEC;
 
             peer_shm->fd = -1;
             break;
           case CMD_DATA:
           case CMD_DATA_CLOSE:
-            conn_fd = run_as_server
-                          ? peer_shm->fd
-                          : map_peer_fd(instance_no,
-                                        peer_shm->fd, 0);
-            DEBUG("shmem: received %d bytes for %d cksum=0x%x",
-                  peer_shm->len, conn_fd,
-                  cksum((unsigned char *)peer_shm->data,
-                        peer_shm->len));
-            rv = send(conn_fd, (const void *)peer_shm->data,
-                      peer_shm->len, 0);
+            conn_fd = run_as_server ? peer_shm->fd
+                                    : map_peer_fd(instance_no, peer_shm->fd, 0);
+            DEBUG("shmem: received %d bytes for %d cksum=0x%x", peer_shm->len,
+                  conn_fd,
+                  cksum((unsigned char *)peer_shm->data, peer_shm->len));
+            rv = send(conn_fd, (const void *)peer_shm->data, peer_shm->len, 0);
             if (rv != peer_shm->len) {
-              ERROR("Sent %d out of %d bytes on fd#%d", rv,
-                    peer_shm->len, conn_fd);
+              ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm->len,
+                    conn_fd);
             }
             DEBUG("Received data has been sent%s", "");
 
@@ -578,10 +575,8 @@ void *run(void *arg) {
               conn_fd = peer_shm->fd;
               DEBUG("Closing %d", conn_fd);
             } else {
-              conn_fd =
-                  map_peer_fd(instance_no, peer_shm->fd, 1);
-              DEBUG("Closing %d peer fd=%d", conn_fd,
-                    peer_shm->fd);
+              conn_fd = map_peer_fd(instance_no, peer_shm->fd, 1);
+              DEBUG("Closing %d peer fd=%d", conn_fd, peer_shm->fd);
             }
             if (conn_fd > 0) {
               if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL, conn_fd,
@@ -592,12 +587,10 @@ void *run(void *arg) {
             }
             break;
           case CMD_CONNECT:
-            make_wayland_connection(instance_no,
-                                    peer_shm->fd);
+            make_wayland_connection(instance_no, peer_shm->fd);
             break;
           default:
-            ERROR("Invalid CMD 0x%x from peer!",
-                  peer_shm->cmd);
+            ERROR("Invalid CMD 0x%x from peer!", peer_shm->cmd);
             break;
           } /* switch peer_shm->cmd */
 
@@ -625,9 +618,8 @@ void *run(void *arg) {
             conn_fd = current_event->data.fd;
           }
           DEBUG("Reading from wayland/waypipe socket%s", "");
-          read_count =
-              read(current_event->data.fd, (void *)my_shm->data,
-                   sizeof(my_shm->data));
+          read_count = read(current_event->data.fd, (void *)my_shm->data,
+                            sizeof(my_shm->data));
 
           if (read_count <= 0) {
             if (read_count < 0)
@@ -640,8 +632,7 @@ void *run(void *arg) {
           } else { /* read_count > 0 */
             DEBUG("Read & sent %d bytes on fd#%d sent to %d checksum=0x%x",
                   read_count, current_event->data.fd, conn_fd,
-                  cksum((unsigned char *)my_shm->data,
-                        read_count));
+                  cksum((unsigned char *)my_shm->data, read_count));
 
             if (current_event->events & EPOLLHUP) {
               my_shm->cmd = CMD_DATA_CLOSE;
@@ -665,15 +656,14 @@ void *run(void *arg) {
             ioctl_data.fd = my_shm->fd;
             ioctl_data.len = my_shm->len;
 #endif
-            DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d",
-                  my_shm->cmd, my_shm->fd,
-                  my_shm->len);
+            DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d", my_shm->cmd,
+                  my_shm->fd, my_shm->len);
             epollfd = epollfd_limited[instance_no];
             ioctl(my_buffer_fds.fd, SHMEM_IOCDORBELL, &ioctl_data);
             break;
           }
         } /* received data from Wayland/waypipe server */
-      }   /* current_event->events & EPOLLIN */
+      } /* current_event->events & EPOLLIN */
 
       /* Handling connection close */
       if (current_event->events & (EPOLLHUP | EPOLLERR)) {
@@ -685,12 +675,11 @@ void *run(void *arg) {
           DEBUG("get_remote_socket: %d",
                 get_remote_socket(instance_no, current_event->data.fd, 0,
                                   IGNORE_ERROR));
-          my_shm->fd = get_remote_socket(
-              instance_no, current_event->data.fd, CLOSE_FD, IGNORE_ERROR);
+          my_shm->fd = get_remote_socket(instance_no, current_event->data.fd,
+                                         CLOSE_FD, IGNORE_ERROR);
         }
         if (my_shm->fd > 0) {
-          DEBUG("ioctl ending close request for %d",
-                my_shm->fd);
+          DEBUG("ioctl ending close request for %d", my_shm->fd);
 
           ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
@@ -737,32 +726,33 @@ int main(int argc, char **argv) {
 
   while ((opt = getopt(argc, argv, "c:s:h:")) != -1) {
     switch (opt) {
-      case 'c':
-        run_as_server = 0;
-        socket_path = optarg;
-        run_mode++;
-        break;
+    case 'c':
+      run_as_server = 0;
+      socket_path = optarg;
+      run_mode++;
+      break;
 
-      case 's':
-        run_as_server = 1;
-        socket_path = optarg;
-        run_mode++;
-        if (optind >= argc)
-          goto wrong_args;
-        instance_no = atoi(argv[optind]);
-        break;
+    case 's':
+      run_as_server = 1;
+      socket_path = optarg;
+      run_mode++;
+      if (optind >= argc)
+        goto wrong_args;
+      instance_no = atoi(argv[optind]);
+      break;
 
-      case 'h':
-        run_on_host = 1;
-        host_socket_path = optarg;
-        break;
+    case 'h':
+      run_on_host = 1;
+      host_socket_path = optarg;
+      break;
 
-      default: /* '?' */
-        goto wrong_args;      
+    default: /* '?' */
+      goto wrong_args;
     }
   }
 
-  if (run_mode > 1 || run_as_server < 0 || (run_on_host && run_as_server) || optind < argc)
+  if (run_mode > 1 || run_as_server < 0 || (run_on_host && run_as_server) ||
+      optind < argc)
     goto wrong_args;
 
   socket_path = argv[2];
