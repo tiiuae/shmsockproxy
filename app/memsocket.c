@@ -111,11 +111,13 @@ typedef struct {
 } vm_data;
 
 int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
-char *socket_path;
+char *socket_path = NULL;
 int server_socket = -1, shmem_fd[VM_COUNT];
+char *host_socket_path = NULL;
+int host_socket = -1; /* socket to ivshm server */
 volatile int *my_vmid = NULL;
 vm_data *my_shm_data[VM_COUNT], *peer_shm_data[VM_COUNT];
-int run_as_server = 0;
+int run_as_server = -1, run_on_host = 0;
 int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
 pthread_t server_threads[VM_COUNT];
 struct {
@@ -124,8 +126,7 @@ struct {
   vm_data __attribute__ ((aligned (64))) server_data[VM_COUNT];
 } *vm_control;
 
-static const char usage_string[] = "Usage: memsocket [-c|-s] socket_path "
-                                   "{instance number (server mode only)}\n";
+static const char usage_string[] = "Usage: memsocket { -c socket_path [-h socket_path] | -s socket_path vmid }\n";
 
 void report(const char *msg, int terminate) {
 
@@ -729,19 +730,39 @@ void print_usage_and_exit() {
 int main(int argc, char **argv) {
 
   int i, res = -1;
-  int instance_no = 0;
+  int instance_no = -1;
+  int opt;
+  int run_mode = 0;
   pthread_t threads[VM_COUNT];
 
-  if (argc <= 2)
-    goto wrong_args;
-  if (strcmp(argv[1], "-c") == 0) {
-    run_as_server = 0;
-  } else if (strcmp(argv[1], "-s") == 0) {
-    run_as_server = 1;
-  } else
-    goto wrong_args;
+  while ((opt = getopt(argc, argv, "c:s:h:")) != -1) {
+    switch (opt) {
+      case 'c':
+        run_as_server = 0;
+        socket_path = optarg;
+        run_mode++;
+        break;
 
-  if ((run_as_server && argc != 4) || (!run_as_server && argc != 3))
+      case 's':
+        run_as_server = 1;
+        socket_path = optarg;
+        run_mode++;
+        if (optind >= argc)
+          goto wrong_args;
+        instance_no = atoi(argv[optind]);
+        break;
+
+      case 'h':
+        run_on_host = 1;
+        host_socket_path = optarg;
+        break;
+
+      default: /* '?' */
+        goto wrong_args;      
+    }
+  }
+
+  if (run_mode > 1 || run_as_server < 0 || (run_on_host && run_as_server) || optind < argc)
     goto wrong_args;
 
   socket_path = argv[2];
