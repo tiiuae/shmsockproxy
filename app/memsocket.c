@@ -40,9 +40,9 @@
 #define DBG(fmt, ...)                                                          \
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
-    snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
-    snprintf(tmp1, sizeof(tmp1), "[%d] %s:%d: %s\n", instance_no,              \
-             __FUNCTION__, __LINE__, tmp2);                                    \
+    snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                                           \
+    snprintf(tmp1, sizeof(tmp1), "[%d] %s:%d: %s\n", instance_no, __FUNCTION__, __LINE__,     \
+            tmp2);                                                             \
     errno = 0;                                                                 \
     report(tmp1, 0);                                                           \
   }
@@ -61,9 +61,9 @@
 #define INFO(fmt, ...)                                                         \
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
-    snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
-    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d] %s\n", instance_no,             \
-             __FUNCTION__, __LINE__, tmp2);                                    \
+    snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                                           \
+    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,    \
+            tmp2);                                                             \
     errno = 0;                                                                 \
     report(tmp1, 0);                                                           \
   }
@@ -117,11 +117,12 @@ int server_socket = -1, shmem_fd[VM_COUNT];
    and talking to the ivshmem server */
 int run_on_host = 0;
 char *ivshmem_socket_path = NULL;
-int host_socket_fd = -1; /* socket to ivshm server */
+int host_socket_fd = -1;       /* socket to ivshm server */
 pthread_mutex_t host_fd_mutex;
 pthread_cond_t host_cond;
 
 volatile int *my_vmid = NULL;
+int vm_id = -1;
 vm_data *my_shm_data[VM_COUNT], *peer_shm_data[VM_COUNT];
 int run_as_server = -1;
 int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
@@ -206,14 +207,14 @@ static void read_msg(int ivshmem_fd, long int *buf, int *fd, int instance_no) {
     memcpy(fd, CMSG_DATA(cmsg), sizeof(*fd));
   }
 }
-static void *host_init(void *arg) {
+static void *host_run(void *arg) {
   /* Init on-host client:
     - connect to ivshmserver' socket
     - get shared memory fd
     - get vm id
     - start receiving interrupts
   */
-  int instance_no = (long int)arg;
+  int instance_no = (long int) arg;
   int ivshmemsrv_fd;
   long int tmp, id;
   int shm_fd;
@@ -246,15 +247,17 @@ static void *host_init(void *arg) {
     FATAL("invalid ivshmem server response");
   }
 
-  /* get shared memory fd */
-  read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
-  INFO("shared memory fd=%d", shm_fd);
-  if (shm_fd < 0 || tmp != -1) {
-    DEBUG("tmp=%ld fd=%d", tmp, shm_fd);
-    if (shm_fd > 0)
-      close(shm_fd);
-    FATAL("invalid ivshmem server response");
-  }
+  do {
+    /* get shared memory fd */
+    read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
+    INFO("shared memory fd=%d", shm_fd);
+    if (shm_fd < 0 || tmp != -1) {
+      DEBUG("tmp=%ld fd=%d", tmp, shm_fd);
+      if (shm_fd > 0)
+        close(shm_fd);
+      FATAL("invalid ivshmem server response");
+    }
+  } while(1);
 }
 
 static void server_init(int instance_no) {
@@ -379,21 +382,22 @@ static int get_remote_socket(int instance_no, int my_fd, int close_fd,
 
 static void shmem_init(int instance_no) {
 
-  int res = -1, vm_id;
+  int res = -1;
   struct epoll_event ev;
   long int shmem_size;
 
   /* Open shared memory */
-  if (run_on_host) {
+  if(run_on_host) {
     /* wait until shared memory file descriptor is received */
-    INFO("%s", "Waiting for shared memory fd");
+    INFO("%s", "Waiting for shared memory fd"); 
     pthread_mutex_lock(&host_fd_mutex);
     while (host_socket_fd == -1) {
       pthread_cond_wait(&host_cond, &host_fd_mutex);
     }
     pthread_mutex_unlock(&host_fd_mutex);
     INFO("ivshmem shared memory fd: %d", shmem_fd[instance_no]);
-  } else {
+  }
+  else {
     shmem_fd[instance_no] = open(SHM_DEVICE_FN, O_RDWR);
     if (shmem_fd[instance_no] < 0) {
       FATAL("Open " SHM_DEVICE_FN);
@@ -401,6 +405,7 @@ static void shmem_init(int instance_no) {
     INFO("shared memory fd: %d", shmem_fd[instance_no]);
   }
   /* Store instance number inside driver */
+  /* TODO: fix for host */
   ioctl(shmem_fd[instance_no], SHMEM_IOCSETINSTANCENO, instance_no);
 
   /* Get shared memory */
@@ -433,10 +438,12 @@ static void shmem_init(int instance_no) {
   DEBUG("[%d]                 my_shm_data=0x%lx peer_shm_data=0x%lx\n",
         instance_no, (void *)my_shm_data[instance_no] - (void *)vm_control,
         (void *)peer_shm_data[instance_no] - (void *)vm_control);
-  /* get my VM Id */
-  res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &vm_id);
-  if (res < 0) {
-    FATAL("ioctl SHMEM_IOCIVPOSN failed");
+  if(!run_on_host) {
+    /* get my VM Id */
+    res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &vm_id);
+    if (res < 0) {
+      FATAL("ioctl SHMEM_IOCIVPOSN failed");
+    }
   }
   vm_id = vm_id << 16;
   if (run_as_server) {
@@ -868,14 +875,14 @@ int main(int argc, char **argv) {
   }
 
   if (run_on_host) {
-    res = pthread_mutex_init(&host_fd_mutex, NULL);
-    if (res) {
-      FATAL("Cannot initialize the mutex");
-    }
-    res = pthread_create(&host_thread, NULL, host_init, (void *)(intptr_t)i);
-    if (res) {
-      FATAL("Cannot create the host thread");
-    }
+      res = pthread_mutex_init(&host_fd_mutex, NULL);
+      if (res) {
+        FATAL("Cannot initialize the mutex");
+      }
+      res = pthread_create(&host_thread, NULL, host_run, (void *)(intptr_t)i);
+      if (res) {
+        FATAL("Cannot create the host thread");
+      }
   }
 
   /* On client site start thread for each display VM */
