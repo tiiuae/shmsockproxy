@@ -113,6 +113,7 @@ typedef struct {
 int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
 char *socket_path = NULL;
 int server_socket = -1, shmem_fd[VM_COUNT];
+
 /* Variables related with running on host
    and talking to the ivshmem server */
 int run_on_host = 0;
@@ -120,6 +121,11 @@ char *ivshmem_socket_path = NULL;
 int host_socket_fd = -1;       /* socket to ivshm server */
 pthread_mutex_t host_fd_mutex;
 pthread_cond_t host_cond;
+struct peer {
+  int vm_id;
+  int interrupt_fd[VM_COUNT*2];
+  int fd_count;
+} peers[VM_COUNT];
 
 volatile int *my_vmid = NULL;
 int vm_id = -1;
@@ -207,6 +213,43 @@ static void read_msg(int ivshmem_fd, long int *buf, int *fd, int instance_no) {
     memcpy(fd, CMSG_DATA(cmsg), sizeof(*fd));
   }
 }
+
+int peer_index_op(int op, int vmid)
+{
+  int i, n, free = VM_COUNT;
+
+  if (vmid == vm_id) 
+    return 0; /* Our data is always on the index 0*/
+
+  for(i = 0; i < VM_COUNT; i++) {
+    if (peers[i].vm_id == -1) {
+      free = i;
+      continue;
+    }
+
+    if (peers[i].vm_id == vmid) {
+      switch(op) {
+        case 0: /* get index */
+          return i;
+          break;
+        case 1: /* clear */
+          peers[i].vm_id = -1;
+          for(n = 0; n < VM_COUNT*2; n++)
+            /* TODO: how about closing and active i/o operations ??? */
+            peers[i].interrupt_fd[n] = -1;
+          peers[i].fd_count = 0;
+          return 0;
+      }
+    }
+  }
+  switch(op) {
+    case 0:
+      return free;
+    case 1: 
+      return -1;
+  }
+}
+
 static void *host_run(void *arg) {
   /* Init on-host client:
     - connect to ivshmserver' socket
@@ -216,8 +259,10 @@ static void *host_run(void *arg) {
   */
   int instance_no = (long int) arg;
   int ivshmemsrv_fd;
-  long int tmp, id;
+  long int tmp;
   int shm_fd;
+  struct peer *peer;
+  int peer_idx;
   struct sockaddr_un socket_name;
 
   ivshmemsrv_fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -240,23 +285,72 @@ static void *host_run(void *arg) {
   INFO("ivshmem protocol version %ld", tmp);
 
   /* get my vm id */
-  read_msg(ivshmemsrv_fd, &id, &shm_fd, instance_no);
-  INFO("my vm id=%ld", id);
-  if (id < 0 || shm_fd != -1) {
-    DEBUG("id=%ld fd=%d", id, shm_fd);
+  read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
+  if (tmp >= 0 || shm_fd == -1) {
+    vm_id = tmp;
+    INFO("my vm id=%d", vm_id);
+  } else {
+    DEBUG("tmp=%ld fd=%d", tmp, shm_fd);
     FATAL("invalid ivshmem server response");
   }
 
+  /* get shared memory fd */
+  read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
+  INFO("shared memory fd=%d", shm_fd);
+  if (shm_fd >= 0 || tmp == -1) {
+    host_socket_fd = shm_fd;
+  }
+  else {
+    DEBUG("tmp=%ld fd=%d", tmp, shm_fd);
+    if (shm_fd > 0)
+      close(shm_fd);
+    FATAL("invalid ivshmem server response");
+  }
+  /* TODO:how about waiting for interrupts???*/
   do {
-    /* get shared memory fd */
     read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
-    INFO("shared memory fd=%d", shm_fd);
-    if (shm_fd < 0 || tmp != -1) {
-      DEBUG("tmp=%ld fd=%d", tmp, shm_fd);
-      if (shm_fd > 0)
-        close(shm_fd);
-      FATAL("invalid ivshmem server response");
+    INFO("tmp=%ld shm_fd=%d", tmp, shm_fd);
+
+    if (tmp >= 0) { /* peer connection or disconnection */
+      if (shm_fd >= 0 ) {
+        
+        peer_idx = peer_index_op(0, tmp);
+        if (peer_idx >= VM_COUNT) {
+          ERROR("vm id %ld not found", tmp);
+          continue;
+        }
+        peer = &peers[peer_idx];
+
+        if (peer->fd_count >= VM_COUNT*2) {
+          ERROR("Ignored received excessive interrupt fd: %d", shm_fd);
+          continue;
+        }
+        if (peer->interrupt_fd[peer->fd_count] == -1) {
+            peer->interrupt_fd[peer->fd_count++] = shm_fd;
+          INFO("Received peer %d interrupt[%d] fd %d", peer_idx, peer->fd_count, shm_fd);
+          if (peer->fd_count == VM_COUNT*2 && !peer_idx) {
+            INFO("%s", "Host configuration ready");
+            // pthread_cond_signal(&host_cond);
+            // pthread_mutex_unlock(&host_fd_mutex);
+          }
+        } else 
+          ERROR("Ignored re-using peer %d interrupt[%d] fd: %d", peer_idx, peer->fd_count, shm_fd);
+        continue;
+      } 
+      
+      else { /* peer disconnection */
+        if (!peer_index_op(1, tmp) ) {
+          INFO("Client %d disconnected")
+        }
+      } 
+
     }
+
+    if (tmp == -1) {
+      ERROR("Ignored msg. Params: -1, %d", shm_fd);
+    }
+
+
   } while(1);
 }
 
@@ -395,6 +489,7 @@ static void shmem_init(int instance_no) {
       pthread_cond_wait(&host_cond, &host_fd_mutex);
     }
     pthread_mutex_unlock(&host_fd_mutex);
+    shmem_fd[instance_no] = host_socket_fd;
     INFO("ivshmem shared memory fd: %d", shmem_fd[instance_no]);
   }
   else {
@@ -432,10 +527,10 @@ static void shmem_init(int instance_no) {
     my_shm_data[instance_no] = &vm_control->client_data[instance_no];
     peer_shm_data[instance_no] = &vm_control->server_data[instance_no];
   }
-  DEBUG("[%d] vm_control=0x%p my_shm_data=0x%p peer_shm_data=0x%p\n",
+  DEBUG("[%d] vm_control=%p my_shm_data=%p peer_shm_data=%p",
         instance_no, vm_control, my_shm_data[instance_no],
         peer_shm_data[instance_no]);
-  DEBUG("[%d]                 my_shm_data=0x%lx peer_shm_data=0x%lx\n",
+  DEBUG("[%d]                 my_shm_data=0x%lx peer_shm_data=0x%lx",
         instance_no, (void *)my_shm_data[instance_no] - (void *)vm_control,
         (void *)peer_shm_data[instance_no] - (void *)vm_control);
   if(!run_on_host) {
@@ -831,7 +926,7 @@ static void print_usage_and_exit() {
 
 int main(int argc, char **argv) {
 
-  int i, res = -1;
+  int i, n, res = -1;
   int instance_no = -1;
   int opt;
   int run_mode = 0;
@@ -872,6 +967,10 @@ int main(int argc, char **argv) {
     my_shm_data[i] = NULL;
     peer_shm_data[i] = NULL;
     shmem_fd[i] = -1;
+    peers[i].vm_id = -1;
+    peers[i].fd_count = 0;
+    for(n = 0; n < VM_COUNT*2; n++)
+      peers[i].interrupt_fd[n] = -1;
   }
 
   if (run_on_host) {
@@ -879,6 +978,7 @@ int main(int argc, char **argv) {
       if (res) {
         FATAL("Cannot initialize the mutex");
       }
+      pthread_mutex_lock(&host_fd_mutex);
       res = pthread_create(&host_thread, NULL, host_run, (void *)(intptr_t)i);
       if (res) {
         FATAL("Cannot create the host thread");
