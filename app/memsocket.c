@@ -217,27 +217,31 @@ static void read_msg(int ivshmem_fd, long int *buf, int *fd, int instance_no) {
 int peer_index_op(int op, int vmid)
 {
   int i, n, free = VM_COUNT;
+  struct peer *peer;
 
   if (vmid == vm_id) 
     return 0; /* Our data is always on the index 0*/
 
   for(i = 0; i < VM_COUNT; i++) {
-    if (peers[i].vm_id == -1) {
+    peer = &peers[i];
+    if (peer->vm_id == -1) {
       free = i;
       continue;
     }
 
-    if (peers[i].vm_id == vmid) {
+    if (peer->vm_id == vmid) {
       switch(op) {
         case 0: /* get index */
           return i;
           break;
         case 1: /* clear */
-          peers[i].vm_id = -1;
+          peer->vm_id = -1;
           for(n = 0; n < VM_COUNT*2; n++)
             /* TODO: how about closing and active i/o operations ??? */
-            peers[i].interrupt_fd[n] = -1;
-          peers[i].fd_count = 0;
+            if (peer->interrupt_fd[n] >=0 )
+              close(peer->interrupt_fd[n]);
+            peer->interrupt_fd[n] = -1;
+          peer->fd_count = 0;
           return 0;
       }
     }
