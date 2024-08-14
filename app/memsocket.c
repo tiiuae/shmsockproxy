@@ -36,13 +36,13 @@
 #define CLOSE_FD (1)
 #define IGNORE_ERROR (1)
 #define PAGE_SIZE (4096)
-
+#define DEBUG_ON /* TODO: debug only */
 #define DBG(fmt, ...)                                                          \
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
-    sprintf(tmp2, fmt, __VA_ARGS__);                                           \
-    sprintf(tmp1, "[%d] %s:%d: %s\n", instance_no, __FUNCTION__, __LINE__,     \
-            tmp2);                                                             \
+    snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
+    snprintf(tmp1, sizeof(tmp1), "[%d] %s:%d: %s\n", instance_no,              \
+             __FUNCTION__, __LINE__, tmp2);                                    \
     errno = 0;                                                                 \
     report(tmp1, 0);                                                           \
   }
@@ -61,9 +61,9 @@
 #define INFO(fmt, ...)                                                         \
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
-    sprintf(tmp2, fmt, __VA_ARGS__);                                           \
-    sprintf(tmp1, "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,    \
-            tmp2);                                                             \
+    snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
+    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d] %s\n", instance_no,             \
+             __FUNCTION__, __LINE__, tmp2);                                    \
     errno = 0;                                                                 \
     report(tmp1, 0);                                                           \
   }
@@ -72,26 +72,26 @@
 #define ERROR0(msg)                                                            \
   {                                                                            \
     char tmp[512];                                                             \
-    sprintf(tmp, "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,     \
-            msg);                                                              \
+    snprintf(tmp, sizeof(tmp), "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, \
+             __LINE__, msg);                                                   \
     report(tmp, 0);                                                            \
   }
 
 #define ERROR(fmt, ...)                                                        \
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
-    sprintf(tmp2, fmt, __VA_ARGS__);                                           \
-    sprintf(tmp1, "[%d] [%s:%d] %s\n", instance_no, __FUNCTION__, __LINE__,    \
-            tmp2);                                                             \
+    snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
+    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d] %s\n", instance_no,             \
+             __FUNCTION__, __LINE__, tmp2);                                    \
     report(tmp1, 0);                                                           \
   }
 
-#define FATAL(msg)                                                             \
+#define FATAL(msg, ...)                                                        \
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
-    sprintf(tmp2, msg);                                                        \
-    sprintf(tmp1, "[%d] [%s:%d]: %s\n", instance_no, __FUNCTION__, __LINE__,   \
-            tmp2);                                                             \
+    snprintf(tmp2, sizeof(tmp2), msg);                                         \
+    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d]: %s\n", instance_no,            \
+             __FUNCTION__, __LINE__, tmp2);                                    \
     report(tmp1, 1);                                                           \
   }
 
@@ -113,11 +113,17 @@ typedef struct {
 int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
 char *socket_path = NULL;
 int server_socket = -1, shmem_fd[VM_COUNT];
-char *host_socket_path = NULL;
-int host_socket = -1; /* socket to ivshm server */
+/* Variables related with running on host
+   and talking to the ivshmem server */
+int run_on_host = 0;
+char *ivshmem_socket_path = NULL;
+int host_socket_fd = -1; /* socket to ivshm server */
+pthread_mutex_t host_fd_mutex;
+pthread_cond_t host_cond;
+
 volatile int *my_vmid = NULL;
 vm_data *my_shm_data[VM_COUNT], *peer_shm_data[VM_COUNT];
-int run_as_server = -1, run_on_host = 0;
+int run_as_server = -1;
 int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
 pthread_t server_threads[VM_COUNT];
 struct {
@@ -129,7 +135,7 @@ struct {
 static const char usage_string[] = "Usage: memsocket { -c socket_path [-h "
                                    "socket_path] | -s socket_path vmid }\n";
 
-void report(const char *msg, int terminate) {
+static void report(const char *msg, int terminate) {
 
   if (errno)
     perror(msg);
@@ -140,7 +146,7 @@ void report(const char *msg, int terminate) {
     exit(-1);
 }
 
-int get_shmem_size(int instance_no) {
+static int get_shmem_size(int instance_no) {
 
   int res;
 
@@ -152,7 +158,7 @@ int get_shmem_size(int instance_no) {
   return res;
 }
 
-void fd_map_clear(int instance_no) {
+static void fd_map_clear(int instance_no) {
 
   int i;
 
@@ -162,7 +168,96 @@ void fd_map_clear(int instance_no) {
   }
 }
 
-void server_init(int instance_no) {
+static void read_msg(int ivshmem_fd, long int *buf, int *fd, int instance_no) {
+  int rv;
+  struct msghdr msg;
+  struct iovec iov[1];
+  union {
+    struct cmsghdr cmsg;
+    char control[CMSG_SPACE(sizeof(int))];
+  } msg_ctl;
+  struct cmsghdr *cmsg;
+
+  iov[0].iov_base = buf;
+  iov[0].iov_len = sizeof(buf);
+
+  memset(&msg, 0, sizeof(msg));
+  msg.msg_iov = iov;
+  msg.msg_iovlen = 1;
+  msg.msg_control = &msg_ctl;
+  msg.msg_controllen = sizeof(msg_ctl);
+
+  rv = recvmsg(ivshmem_fd, &msg, 0);
+  if (!rv)
+    FATAL("ivshmem server socket: connection closed")
+  if (rv < sizeof(buf))
+    FATAL("ivshmem server socket: can't read");
+
+  *buf = le64toh(*buf);
+  *fd = -1;
+
+  for (cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+
+    if (cmsg->cmsg_len != CMSG_LEN(sizeof(int)) ||
+        cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_type != SCM_RIGHTS) {
+      continue;
+    }
+
+    memcpy(fd, CMSG_DATA(cmsg), sizeof(*fd));
+  }
+}
+static void *host_init(void *arg) {
+  /* Init on-host client:
+    - connect to ivshmserver' socket
+    - get shared memory fd
+    - get vm id
+    - start receiving interrupts
+  */
+  int instance_no = (long int)arg;
+  int ivshmemsrv_fd;
+  long int tmp, id;
+  int shm_fd;
+  struct sockaddr_un socket_name;
+
+  ivshmemsrv_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (ivshmemsrv_fd < 0) {
+    FATAL("ivshmem server socket");
+  }
+
+  DEBUG("ivshmem server socket: %d", ivshmemsrv_fd);
+
+  memset(&socket_name, 0, sizeof(socket_name));
+  socket_name.sun_family = AF_UNIX;
+  strncpy(socket_name.sun_path, ivshmem_socket_path,
+          sizeof(socket_name.sun_path) - 1);
+  if (connect(ivshmemsrv_fd, (struct sockaddr *)&socket_name,
+              sizeof(socket_name)) < 0) {
+    FATAL("connect to ivshmem server socket");
+  }
+
+  read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
+  INFO("ivshmem protocol version %ld", tmp);
+
+  /* get my vm id */
+  read_msg(ivshmemsrv_fd, &id, &shm_fd, instance_no);
+  INFO("my vm id=%ld", id);
+  if (id < 0 || shm_fd != -1) {
+    DEBUG("id=%ld fd=%d", id, shm_fd);
+    FATAL("invalid ivshmem server response");
+  }
+
+  /* get shared memory fd */
+  read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
+  INFO("shared memory fd=%d", shm_fd);
+  if (shm_fd < 0 || tmp != -1) {
+    DEBUG("tmp=%ld fd=%d", tmp, shm_fd);
+    if (shm_fd > 0)
+      close(shm_fd);
+    FATAL("invalid ivshmem server response");
+  }
+}
+
+static void server_init(int instance_no) {
 
   struct sockaddr_un socket_name;
   struct epoll_event ev;
@@ -197,10 +292,10 @@ void server_init(int instance_no) {
     FATAL("server_init: epoll_ctl: server_socket");
   }
 
-  INFO("server initialized%s", "");
+  INFO("%s", "server initialized");
 }
 
-int wayland_connect(int instance_no) {
+static int wayland_connect(int instance_no) {
 
   struct sockaddr_un socket_name;
   struct epoll_event ev;
@@ -228,11 +323,11 @@ int wayland_connect(int instance_no) {
     FATAL("epoll_ctl: wayland_fd");
   }
 
-  INFO("client initialized%s", "");
+  INFO("%s", "client initialized");
   return wayland_fd;
 }
 
-void make_wayland_connection(int instance_no, int peer_fd) {
+static void make_wayland_connection(int instance_no, int peer_fd) {
 
   int i;
 
@@ -247,7 +342,7 @@ void make_wayland_connection(int instance_no, int peer_fd) {
   FATAL("fd_map table full");
 }
 
-int map_peer_fd(int instance_no, int peer_fd, int close_fd) {
+static int map_peer_fd(int instance_no, int peer_fd, int close_fd) {
 
   int i, rv;
 
@@ -263,8 +358,8 @@ int map_peer_fd(int instance_no, int peer_fd, int close_fd) {
   return -1;
 }
 
-int get_remote_socket(int instance_no, int my_fd, int close_fd,
-                      int ignore_error) {
+static int get_remote_socket(int instance_no, int my_fd, int close_fd,
+                             int ignore_error) {
 
   int i;
 
@@ -282,18 +377,29 @@ int get_remote_socket(int instance_no, int my_fd, int close_fd,
   return -1;
 }
 
-void shmem_init(int instance_no) {
+static void shmem_init(int instance_no) {
 
   int res = -1, vm_id;
   struct epoll_event ev;
   long int shmem_size;
 
   /* Open shared memory */
-  shmem_fd[instance_no] = open(SHM_DEVICE_FN, O_RDWR);
-  if (shmem_fd[instance_no] < 0) {
-    FATAL("Open " SHM_DEVICE_FN);
+  if (run_on_host) {
+    /* wait until shared memory file descriptor is received */
+    INFO("%s", "Waiting for shared memory fd");
+    pthread_mutex_lock(&host_fd_mutex);
+    while (host_socket_fd == -1) {
+      pthread_cond_wait(&host_cond, &host_fd_mutex);
+    }
+    pthread_mutex_unlock(&host_fd_mutex);
+    INFO("ivshmem shared memory fd: %d", shmem_fd[instance_no]);
+  } else {
+    shmem_fd[instance_no] = open(SHM_DEVICE_FN, O_RDWR);
+    if (shmem_fd[instance_no] < 0) {
+      FATAL("Open " SHM_DEVICE_FN);
+    }
+    INFO("shared memory fd: %d", shmem_fd[instance_no]);
   }
-  INFO("shared memory fd: %d", shmem_fd[instance_no]);
   /* Store instance number inside driver */
   ioctl(shmem_fd[instance_no], SHMEM_IOCSETINSTANCENO, instance_no);
 
@@ -342,9 +448,9 @@ void shmem_init(int instance_no) {
   *my_vmid = vm_id;
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
   if (run_as_server) {
-    INFO("server%s", "");
+    INFO("%s", "server");
   } else {
-    INFO("client%s", "");
+    INFO("%s", "client");
   }
 
   ev.events = EPOLLIN | EPOLLOUT;
@@ -363,10 +469,10 @@ void shmem_init(int instance_no) {
   ioctl(shmem_fd[instance_no], SHMEM_IOCSET,
         (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
 
-  INFO("shared memory initialized%s", "");
+  INFO("%s", "shared memory initialized");
 }
 
-void thread_init(int instance_no) {
+static void thread_init(int instance_no) {
 
   int res;
   struct ioctl_data ioctl_data;
@@ -416,7 +522,7 @@ void thread_init(int instance_no) {
   }
 }
 
-void close_peer_vm(int instance_no) {
+static void close_peer_vm(int instance_no) {
   int i;
 
   for (i = 0; i < MAX_CLIENTS; i++) {
@@ -426,7 +532,7 @@ void close_peer_vm(int instance_no) {
   fd_map_clear(instance_no);
 }
 
-int wait_shmem_ready(int instance_no, struct pollfd *my_buffer_fds) {
+static int wait_shmem_ready(int instance_no, struct pollfd *my_buffer_fds) {
   int rv;
 
   rv = poll(my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
@@ -447,14 +553,14 @@ int wait_shmem_ready(int instance_no, struct pollfd *my_buffer_fds) {
   return rv;
 }
 
-int cksum(unsigned char *buf, int len) {
+static int cksum(unsigned char *buf, int len) {
   int i, res = 0;
   for (i = 0; i < len; i++)
     res += buf[i];
   return res;
 }
 
-void *run(void *arg) {
+static void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
   int conn_fd, rv, nfds, n, read_count;
@@ -477,9 +583,9 @@ void *run(void *arg) {
   while (1) {
 #ifdef DEBUG_ON
     if (epollfd == epollfd_full[instance_no]) {
-      DEBUG("Waiting for all events%s", "");
+      DEBUG("%s", "Waiting for all events");
     } else {
-      DEBUG("Waiting for ACK%s", "");
+      DEBUG("%s", "Waiting for ACK");
     }
 #endif
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -496,7 +602,7 @@ void *run(void *arg) {
 #endif
       if (current_event->events & EPOLLOUT &&
           current_event->data.fd == my_buffer_fds.fd) {
-        DEBUG("Remote ACK%s", "");
+        DEBUG("%s", "Remote ACK");
         /* Set the local buffer is consumed and ready for use */
         ioctl(my_buffer_fds.fd, SHMEM_IOCSET,
               (LOCAL_RESOURCE_READY_INT_VEC << 8) + 0);
@@ -564,7 +670,7 @@ void *run(void *arg) {
               ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm->len,
                     conn_fd);
             }
-            DEBUG("Received data has been sent%s", "");
+            DEBUG("%s", "Received data has been sent");
 
             if (peer_shm->cmd == CMD_DATA) {
               break;
@@ -595,7 +701,7 @@ void *run(void *arg) {
           } /* switch peer_shm->cmd */
 
           /* Signal the other side that its buffer has been processed */
-          DEBUG("Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC%s", "");
+          DEBUG("%s", "Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC");
           peer_shm->cmd = -1;
 
           ioctl_data.int_no = remote_rc_int_no[instance_no];
@@ -617,7 +723,7 @@ void *run(void *arg) {
           } else {
             conn_fd = current_event->data.fd;
           }
-          DEBUG("Reading from wayland/waypipe socket%s", "");
+          DEBUG("%s", "Reading from wayland/waypipe socket");
           read_count = read(current_event->data.fd, (void *)my_shm->data,
                             sizeof(my_shm->data));
 
@@ -711,7 +817,7 @@ void *run(void *arg) {
   return 0;
 }
 
-void print_usage_and_exit() {
+static void print_usage_and_exit() {
   fprintf(stderr, usage_string);
   exit(1);
 }
@@ -722,7 +828,7 @@ int main(int argc, char **argv) {
   int instance_no = -1;
   int opt;
   int run_mode = 0;
-  pthread_t threads[VM_COUNT];
+  pthread_t threads[VM_COUNT], host_thread;
 
   while ((opt = getopt(argc, argv, "c:s:h:")) != -1) {
     switch (opt) {
@@ -743,7 +849,7 @@ int main(int argc, char **argv) {
 
     case 'h':
       run_on_host = 1;
-      host_socket_path = optarg;
+      ivshmem_socket_path = optarg;
       break;
 
     default: /* '?' */
@@ -761,6 +867,17 @@ int main(int argc, char **argv) {
     shmem_fd[i] = -1;
   }
 
+  if (run_on_host) {
+    res = pthread_mutex_init(&host_fd_mutex, NULL);
+    if (res) {
+      FATAL("Cannot initialize the mutex");
+    }
+    res = pthread_create(&host_thread, NULL, host_init, (void *)(intptr_t)i);
+    if (res) {
+      FATAL("Cannot create the host thread");
+    }
+  }
+
   /* On client site start thread for each display VM */
   if (run_as_server == 0) {
     for (i = 0; i < VM_COUNT; i++) {
@@ -770,7 +887,6 @@ int main(int argc, char **argv) {
         FATAL("Cannot create a thread");
       }
     }
-
     for (i = 0; i < VM_COUNT; i++) {
       res = pthread_join(threads[i], NULL);
       if (res) {
@@ -779,6 +895,21 @@ int main(int argc, char **argv) {
     }
   } else { /* server mode - run only one instance */
     run((void *)(intptr_t)instance_no);
+  }
+
+  if (run_on_host) {
+    res = pthread_join(host_thread, NULL);
+    if (res) {
+      ERROR("error %d waiting for the host thread", res);
+    }
+    res = pthread_mutex_destroy(&host_fd_mutex);
+    if (res) {
+      ERROR("error %d destroying mutex ", res);
+    }
+    res = pthread_cond_destroy(&host_cond);
+    if (res) {
+      ERROR("error %d destroying mutex ", res);
+    }
   }
 
   return 0;
