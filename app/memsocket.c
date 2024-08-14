@@ -236,11 +236,12 @@ int peer_index_op(int op, int vmid)
           break;
         case 1: /* clear */
           peer->vm_id = -1;
-          for(n = 0; n < VM_COUNT*2; n++)
+          for(n = 0; n < VM_COUNT*2; n++) {
             /* TODO: how about closing and active i/o operations ??? */
             if (peer->interrupt_fd[n] >=0 )
               close(peer->interrupt_fd[n]);
             peer->interrupt_fd[n] = -1;
+          }
           peer->fd_count = 0;
           return 0;
       }
@@ -248,19 +249,15 @@ int peer_index_op(int op, int vmid)
   }
   switch(op) {
     case 0:
+      peers[free].vm_id = vmid;
       return free;
     case 1: 
       return -1;
   }
 }
 
-static void *host_run(void *arg) {
-  /* Init on-host client:
-    - connect to ivshmserver' socket
-    - get shared memory fd
-    - get vm id
-    - start receiving interrupts
-  */
+static void *host_run(void *arg) 
+{
   int instance_no = (long int) arg;
   int ivshmemsrv_fd;
   long int tmp;
@@ -269,13 +266,12 @@ static void *host_run(void *arg) {
   int peer_idx;
   struct sockaddr_un socket_name;
 
+  /* Set up socket connection */
   ivshmemsrv_fd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (ivshmemsrv_fd < 0) {
     FATAL("ivshmem server socket");
   }
-
   DEBUG("ivshmem server socket: %d", ivshmemsrv_fd);
-
   memset(&socket_name, 0, sizeof(socket_name));
   socket_name.sun_family = AF_UNIX;
   strncpy(socket_name.sun_path, ivshmem_socket_path,
@@ -285,10 +281,11 @@ static void *host_run(void *arg) {
     FATAL("connect to ivshmem server socket");
   }
 
+  /* Read protocol version */
   read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
   INFO("ivshmem protocol version %ld", tmp);
 
-  /* get my vm id */
+  /* Get my vm id */
   read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
   if (tmp >= 0 || shm_fd == -1) {
     vm_id = tmp;
@@ -298,7 +295,7 @@ static void *host_run(void *arg) {
     FATAL("invalid ivshmem server response");
   }
 
-  /* get shared memory fd */
+  /* Get shared memory fd */
   read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
   INFO("shared memory fd=%d", shm_fd);
   if (shm_fd >= 0 || tmp == -1) {
@@ -310,15 +307,16 @@ static void *host_run(void *arg) {
       close(shm_fd);
     FATAL("invalid ivshmem server response");
   }
-  /* TODO:how about waiting for interrupts???*/
+  /* Process messages */
   do {
     read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
     INFO("tmp=%ld shm_fd=%d", tmp, shm_fd);
 
-    if (tmp >= 0) { /* peer connection or disconnection */
-      if (shm_fd >= 0 ) {
+    if (tmp >= 0) { /* peer or self  connection or disconnection */
+      if (shm_fd >= 0 ) { /* peer or self connection */
         
         peer_idx = peer_index_op(0, tmp);
+        INFO("peer_idx=%d", peer_idx);
         if (peer_idx >= VM_COUNT) {
           ERROR("vm id %ld not found", tmp);
           continue;
@@ -330,22 +328,27 @@ static void *host_run(void *arg) {
           continue;
         }
         if (peer->interrupt_fd[peer->fd_count] == -1) {
-            peer->interrupt_fd[peer->fd_count++] = shm_fd;
+            peer->interrupt_fd[peer->fd_count] = shm_fd;
           INFO("Received peer %d interrupt[%d] fd %d", peer_idx, peer->fd_count, shm_fd);
+          peer->fd_count++;
           if (peer->fd_count == VM_COUNT*2 && !peer_idx) {
             INFO("%s", "Host configuration ready");
-            // pthread_cond_signal(&host_cond);
-            // pthread_mutex_unlock(&host_fd_mutex);
+            pthread_cond_signal(&host_cond);
+            pthread_mutex_unlock(&host_fd_mutex);
+            INFO("my vm id=%d", vm_id); // TODO: remove
+            vm_id <<= 16;
           }
         } else 
-          ERROR("Ignored re-using peer %d interrupt[%d] fd: %d", peer_idx, peer->fd_count, shm_fd);
+          ERROR("Ignored re-using peer's %d interrupt[%d] fd: %d", peer_idx, peer->fd_count, shm_fd);
         continue;
       } 
       
       else { /* peer disconnection */
-        if (!peer_index_op(1, tmp) ) {
-          INFO("Client %d disconnected")
+        if (!peer_index_op(1, tmp)) {
+          INFO("Peer %ld disconnected", tmp);
         }
+        else
+          ERROR("Peer %ld not found", tmp);
       } 
 
     }
@@ -483,6 +486,7 @@ static void shmem_init(int instance_no) {
   int res = -1;
   struct epoll_event ev;
   long int shmem_size;
+  int tmp;
 
   /* Open shared memory */
   if(run_on_host) {
@@ -539,12 +543,12 @@ static void shmem_init(int instance_no) {
         (void *)peer_shm_data[instance_no] - (void *)vm_control);
   if(!run_on_host) {
     /* get my VM Id */
-    res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &vm_id);
+    res = ioctl(shmem_fd[instance_no], SHMEM_IOCIVPOSN, &tmp);
     if (res < 0) {
       FATAL("ioctl SHMEM_IOCIVPOSN failed");
     }
+    vm_id = tmp << 16;
   }
-  vm_id = vm_id << 16;
   if (run_as_server) {
     my_vmid = &vm_control->server_data[instance_no].server_vmid;
   } else {
