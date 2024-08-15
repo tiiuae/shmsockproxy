@@ -666,7 +666,7 @@ static int cksum(unsigned char *buf, int len) {
 static void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
-  int conn_fd, rv, nfds, n, read_count;
+  int new_connection_fd, rv, nfds, n, read_count;
   struct sockaddr_un caddr;      /* client address */
   socklen_t len = sizeof(caddr); /* address length could change */
   struct pollfd my_buffer_fds = {.events = POLLOUT};
@@ -715,19 +715,19 @@ static void *run(void *arg) {
       /* Handle the new connection on the socket */
       if (current_event->events & EPOLLIN) {
         if (run_as_server && current_event->data.fd == server_socket) {
-          conn_fd = accept(server_socket, (struct sockaddr *)&caddr, &len);
-          if (conn_fd == -1) {
+          new_connection_fd = accept(server_socket, (struct sockaddr *)&caddr, &len);
+          if (new_connection_fd == -1) {
           FATAL("accept");
         }
         ev.events = EPOLLIN | EPOLLET | EPOLLHUP;
-          ev.data.fd = conn_fd;
-          if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, conn_fd,
-                        &ev) == -1) {
-            FATAL("epoll_ctl: conn_fd");
+        ev.data.fd = new_connection_fd;
+        if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD,
+                      new_connection_fd, &ev) == -1) {
+          FATAL("epoll_ctl: new_connection_fd");
         }
         /* Send the connect request to the wayland peer */
           my_shm->cmd = CMD_CONNECT;
-          my_shm->fd = conn_fd;
+          my_shm->fd = new_connection_fd;
           my_shm->len = 0;
         ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
@@ -737,7 +737,7 @@ static void *run(void *arg) {
 #endif
         epollfd = epollfd_limited[instance_no];
           ioctl(my_buffer_fds.fd, SHMEM_IOCDORBELL, &ioctl_data);
-          DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
+          DEBUG("Executed ioctl to add the client on fd %d", new_connection_fd);
       }
 
         /* Both sides: Received data from the peer via shared memory - EPOLLIN
@@ -767,19 +767,19 @@ static void *run(void *arg) {
           break;
         case CMD_DATA:
         case CMD_DATA_CLOSE:
-            conn_fd = run_as_server
+            new_connection_fd = run_as_server
                           ? peer_shm->fd
                           : map_peer_fd(instance_no,
                                         peer_shm->fd, 0);
             DEBUG("shmem: received %d bytes for %d cksum=0x%x",
-                  peer_shm->len, conn_fd,
+                  peer_shm->len, new_connection_fd,
                   cksum((unsigned char *)peer_shm->data,
                         peer_shm->len));
-            rv = send(conn_fd, (const void *)peer_shm->data,
+            rv = send(new_connection_fd, (const void *)peer_shm->data,
                       peer_shm->len, 0);
             if (rv != peer_shm->len) {
               ERROR("Sent %d out of %d bytes on fd#%d", rv,
-                    peer_shm->len, conn_fd);
+                    peer_shm->len, new_connection_fd);
           }
             DEBUG("Received data has been sent%s", "");
 
@@ -789,20 +789,20 @@ static void *run(void *arg) {
           /* no break if we need to the the fd */
         case CMD_CLOSE:
           if (run_as_server) {
-              conn_fd = peer_shm->fd;
-              DEBUG("Closing %d", conn_fd);
+              new_connection_fd = peer_shm->fd;
+              DEBUG("Closing %d", new_connection_fd);
           } else {
-              conn_fd =
+              new_connection_fd =
                   map_peer_fd(instance_no, peer_shm->fd, 1);
-              DEBUG("Closing %d peer fd=%d", conn_fd,
+              DEBUG("Closing %d peer fd=%d", new_connection_fd,
                     peer_shm->fd);
           }
-            if (conn_fd > 0) {
-              if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL, conn_fd,
+            if (new_connection_fd > 0) {
+              if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL, new_connection_fd,
                             NULL) == -1) {
               ERROR0("epoll_ctl: EPOLL_CTL_DEL");
             }
-              close(conn_fd);
+              close(new_connection_fd);
           }
           break;
         case CMD_CONNECT:
@@ -832,11 +832,11 @@ static void *run(void *arg) {
         be sent to the peer */
         else {
         if (!run_as_server) {
-            conn_fd = get_remote_socket(instance_no, current_event->data.fd, 0,
+            new_connection_fd = get_remote_socket(instance_no, current_event->data.fd, 0,
                                         IGNORE_ERROR);
-            DEBUG("get_remote_socket: %d", conn_fd);
+            DEBUG("get_remote_socket: %d", new_connection_fd);
         } else {
-            conn_fd = current_event->data.fd;
+            new_connection_fd = current_event->data.fd;
         }
           DEBUG("Reading from wayland/waypipe socket%s", "");
           read_count =
@@ -853,7 +853,7 @@ static void *run(void *arg) {
 
         } else { /* read_count > 0 */
           DEBUG("Read & sent %d bytes on fd#%d sent to %d checksum=0x%x",
-                  read_count, current_event->data.fd, conn_fd,
+                  read_count, current_event->data.fd, new_connection_fd,
                   cksum((unsigned char *)my_shm->data,
                         read_count));
 
@@ -870,7 +870,7 @@ static void *run(void *arg) {
           } else
               my_shm->cmd = CMD_DATA;
 
-            my_shm->fd = conn_fd;
+            my_shm->fd = new_connection_fd;
             my_shm->len = read_count;
 
           ioctl_data.int_no = local_rr_int_no[instance_no];
