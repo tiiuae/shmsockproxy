@@ -704,7 +704,7 @@ static void *run(void *arg) {
           current_event->data.fd, tmp & 0xffff, tmp >> 16);
 #endif
       /* Received ACK from the peer via shared memory */
-      if (!host_run && current_event->events & EPOLLOUT &&
+      if (!run_on_host && current_event->events & EPOLLOUT &&
           current_event->data.fd == shm_buffer_fd.fd) {
 
         DEBUG("%s", "Received remote ACK");
