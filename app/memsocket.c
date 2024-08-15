@@ -125,7 +125,7 @@ struct peer {
   int vm_id;
   int interrupt_fd[VM_COUNT*2];
   int fd_count;
-} peers[VM_COUNT];
+} peers_on_host[VM_COUNT];
 
 volatile int *my_vmid = NULL;
 int vm_id = -1;
@@ -223,7 +223,7 @@ int peer_index_op(int op, int vmid)
     return 0; /* Our data is always on the index 0*/
 
   for(i = 0; i < VM_COUNT; i++) {
-    peer = &peers[i];
+    peer = &peers_on_host[i];
     if (peer->vm_id == -1) {
       free = i;
       continue;
@@ -249,7 +249,7 @@ int peer_index_op(int op, int vmid)
   }
   switch(op) {
     case 0:
-      peers[free].vm_id = vmid;
+      peers_on_host[free].vm_id = vmid;
       return free;
     case 1: 
       return -1;
@@ -321,7 +321,7 @@ static void *host_run(void *arg)
           ERROR("vm id %ld not found", tmp);
           continue;
         }
-        peer = &peers[peer_idx];
+        peer = &peers_on_host[peer_idx];
 
         if (peer->fd_count >= VM_COUNT*2) {
           ERROR("Ignored received excessive interrupt fd: %d", shm_fd);
@@ -506,10 +506,9 @@ static void shmem_init(int instance_no) {
       FATAL("Open " SHM_DEVICE_FN);
     }
     INFO("shared memory fd: %d", shmem_fd[instance_no]);
+    /* Store instance number inside driver */
+    ioctl(shmem_fd[instance_no], SHMEM_IOCSETINSTANCENO, instance_no);
   }
-  /* Store instance number inside driver */
-  /* TODO: fix for host */
-  ioctl(shmem_fd[instance_no], SHMEM_IOCSETINSTANCENO, instance_no);
 
   /* Get shared memory */
   shmem_size = get_shmem_size(instance_no);
@@ -642,21 +641,21 @@ static void close_peer_vm(int instance_no) {
   fd_map_clear(instance_no);
 }
 
-static int wait_shmem_ready(int instance_no, struct pollfd *my_buffer_fds) {
+static int wait_shmem_ready(int instance_no, struct pollfd *my_buffer_fd) {
   int rv;
 
-  rv = poll(my_buffer_fds, 1, SHMEM_POLL_TIMEOUT);
+  rv = poll(my_buffer_fd, 1, SHMEM_POLL_TIMEOUT);
   if (rv < 0) {
-    ERROR("poll failed fd=%d poll=%d", my_buffer_fds->fd, rv);
+    ERROR("poll failed fd=%d poll=%d", my_buffer_fd->fd, rv);
     return -1;
   }
 
-  if (rv == 0 || (my_buffer_fds->revents & ~POLLOUT)) {
+  if (rv == 0 || (my_buffer_fd->revents & ~POLLOUT)) {
     ERROR("unexpected event or timeout on shmem_fd %d: poll=%d fd=%d "
           "revents=0x%x "
           "events=0x%x",
-          shmem_fd[instance_no], rv, my_buffer_fds->fd, my_buffer_fds->revents,
-          my_buffer_fds->events);
+          shmem_fd[instance_no], rv, my_buffer_fd->fd, my_buffer_fd->revents,
+          my_buffer_fd->events);
     return 0;
   }
 
@@ -673,21 +672,21 @@ static int cksum(unsigned char *buf, int len) {
 static void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
-  int conn_fd, rv, nfds, n, read_count;
+  int new_connection_fd, rv, nfds, n, read_count;
   struct sockaddr_un caddr;      /* client address */
   socklen_t len = sizeof(caddr); /* address length could change */
-  struct pollfd my_buffer_fds = {.events = POLLOUT};
+  struct pollfd shm_buffer_fd = {.events = POLLOUT};
   struct epoll_event ev, *current_event;
   struct epoll_event events[MAX_EVENTS];
   struct ioctl_data ioctl_data;
   unsigned int tmp;
   int epollfd;
-  vm_data *peer_shm, *my_shm;
+  vm_data *peer_shm_desc, *my_shm_desc;
 
   thread_init(instance_no);
-  peer_shm = peer_shm_data[instance_no];
-  my_shm = my_shm_data[instance_no];
-  my_buffer_fds.fd = shmem_fd[instance_no];
+  peer_shm_desc = peer_shm_data[instance_no];
+  my_shm_desc = my_shm_data[instance_no];
+  shm_buffer_fd.fd = shmem_fd[instance_no];
   epollfd = epollfd_full[instance_no];
 
   while (1) {
@@ -706,15 +705,16 @@ static void *run(void *arg) {
     for (n = 0; n < nfds; n++) {
       current_event = &events[n];
 #ifdef DEBUG_ON
-      ioctl(my_buffer_fds.fd, SHMEM_IOCNOP, &tmp);
+      ioctl(shm_buffer_fd.fd, SHMEM_IOCNOP, &tmp);
       DBG("Event index=%d 0x%x on fd %d inout=%d-%d", n, current_event->events,
           current_event->data.fd, tmp & 0xffff, tmp >> 16);
 #endif
+      /* Received ACK from the peer via shared memory */
       if (current_event->events & EPOLLOUT &&
-          current_event->data.fd == my_buffer_fds.fd) {
-        DEBUG("%s", "Remote ACK");
+          current_event->data.fd == shm_buffer_fd.fd) {
+        DEBUG("%s", "Received remote ACK");
         /* Set the local buffer is consumed and ready for use */
-        ioctl(my_buffer_fds.fd, SHMEM_IOCSET,
+        ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
               (LOCAL_RESOURCE_READY_INT_VEC << 8) + 0);
         epollfd = epollfd_full[instance_no];
       }
@@ -722,97 +722,98 @@ static void *run(void *arg) {
       /* Handle the new connection on the socket */
       if (current_event->events & EPOLLIN) {
         if (run_as_server && current_event->data.fd == server_socket) {
-          conn_fd = accept(server_socket, (struct sockaddr *)&caddr, &len);
-          if (conn_fd == -1) {
+          new_connection_fd = accept(server_socket, (struct sockaddr *)&caddr, &len);
+          if (new_connection_fd == -1) {
             FATAL("accept");
           }
           ev.events = EPOLLIN | EPOLLET | EPOLLHUP;
-          ev.data.fd = conn_fd;
-          if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, conn_fd,
+          ev.data.fd = new_connection_fd;
+          if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, new_connection_fd,
                         &ev) == -1) {
-            FATAL("epoll_ctl: conn_fd");
+            FATAL("epoll_ctl: new_connection_fd");
           }
           /* Send the connect request to the wayland peer */
-          my_shm->cmd = CMD_CONNECT;
-          my_shm->fd = conn_fd;
-          my_shm->len = 0;
+          my_shm_desc->cmd = CMD_CONNECT;
+          my_shm_desc->fd = new_connection_fd;
+          my_shm_desc->len = 0;
           ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
-          ioctl_data.cmd = my_shm->cmd;
-          ioctl_data.fd = my_shm->fd;
-          ioctl_data.len = my_shm->len;
+          ioctl_data.cmd = my_shm_desc->cmd;
+          ioctl_data.fd = my_shm_desc->fd;
+          ioctl_data.len = my_shm_desc->len;
 #endif
           epollfd = epollfd_limited[instance_no];
-          ioctl(my_buffer_fds.fd, SHMEM_IOCDORBELL, &ioctl_data);
-          DEBUG("Executed ioctl to add the client on fd %d", conn_fd);
+          ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
+          DEBUG("Executed ioctl to add the client on fd %d", new_connection_fd);
         }
 
-        /* Both sides: Received data from the peer via shared memory - EPOLLIN
+        /* 
+          Both sides: Received data from the peer via shared memory - EPOLLIN
          */
-        else if (current_event->data.fd == my_buffer_fds.fd) {
+        else if (current_event->data.fd == shm_buffer_fd.fd) {
           DEBUG(
               "shmem_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote len: %d",
-              my_buffer_fds.fd, current_event->events, peer_shm->cmd,
-              peer_shm->fd, peer_shm->len);
+              shm_buffer_fd.fd, current_event->events, peer_shm_desc->cmd,
+              peer_shm_desc->fd, peer_shm_desc->len);
 
-          switch (peer_shm->cmd) {
+          switch (peer_shm_desc->cmd) {
           case CMD_LOGIN:
-            DEBUG("Received login request from 0x%x", peer_shm->fd);
+            DEBUG("Received login request from 0x%x", peer_shm_desc->fd);
             /* If the peer VM starts again, close all opened file handles */
             close_peer_vm(instance_no);
 
-            local_rr_int_no[instance_no] = peer_shm->fd | (instance_no << 1) |
+            local_rr_int_no[instance_no] = peer_shm_desc->fd | (instance_no << 1) |
                                            LOCAL_RESOURCE_READY_INT_VEC;
-            remote_rc_int_no[instance_no] = peer_shm->fd | (instance_no << 1) |
+            remote_rc_int_no[instance_no] = peer_shm_desc->fd | (instance_no << 1) |
                                             PEER_RESOURCE_CONSUMED_INT_VEC;
 
-            peer_shm->fd = -1;
+            peer_shm_desc->fd = -1;
             break;
           case CMD_DATA:
           case CMD_DATA_CLOSE:
-            conn_fd = run_as_server ? peer_shm->fd
-                                    : map_peer_fd(instance_no, peer_shm->fd, 0);
-            DEBUG("shmem: received %d bytes for %d cksum=0x%x", peer_shm->len,
-                  conn_fd,
-                  cksum((unsigned char *)peer_shm->data, peer_shm->len));
-            rv = send(conn_fd, (const void *)peer_shm->data, peer_shm->len, 0);
-            if (rv != peer_shm->len) {
-              ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm->len,
-                    conn_fd);
+            new_connection_fd = run_as_server ? peer_shm_desc->fd
+                                    : map_peer_fd(instance_no, peer_shm_desc->fd, 0);
+            DEBUG("shmem: received %d bytes for %d cksum=0x%x", peer_shm_desc->len,
+                  new_connection_fd,
+                  cksum((unsigned char *)peer_shm_desc->data, peer_shm_desc->len));
+            rv = send(new_connection_fd, (const void *)peer_shm_desc->data, peer_shm_desc->len, 0);
+            if (rv != peer_shm_desc->len) {
+              ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
+                    new_connection_fd);
             }
             DEBUG("%s", "Received data has been sent");
 
-            if (peer_shm->cmd == CMD_DATA) {
+            if (peer_shm_desc->cmd == CMD_DATA) {
               break;
             }
             /* no break if we need to the the fd */
           case CMD_CLOSE:
             if (run_as_server) {
-              conn_fd = peer_shm->fd;
-              DEBUG("Closing %d", conn_fd);
+              new_connection_fd = peer_shm_desc->fd;
+              DEBUG("Closing %d", new_connection_fd);
             } else {
-              conn_fd = map_peer_fd(instance_no, peer_shm->fd, 1);
-              DEBUG("Closing %d peer fd=%d", conn_fd, peer_shm->fd);
+              new_connection_fd = map_peer_fd(instance_no, peer_shm_desc->fd, 1);
+              DEBUG("Closing %d peer fd=%d", new_connection_fd, peer_shm_desc->fd);
             }
-            if (conn_fd > 0) {
-              if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL, conn_fd,
+            if (new_connection_fd > 0) {
+              if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL, new_connection_fd,
                             NULL) == -1) {
                 ERROR0("epoll_ctl: EPOLL_CTL_DEL");
               }
-              close(conn_fd);
+              close(new_connection_fd);
             }
             break;
           case CMD_CONNECT:
-            make_wayland_connection(instance_no, peer_shm->fd);
+            make_wayland_connection(instance_no, peer_shm_desc->fd);
             break;
           default:
-            ERROR("Invalid CMD 0x%x from peer!", peer_shm->cmd);
+            ERROR("Invalid CMD 0x%x from peer!", peer_shm_desc->cmd);
             break;
-          } /* switch peer_shm->cmd */
+          } /* switch peer_shm_desc->cmd */
 
           /* Signal the other side that its buffer has been processed */
           DEBUG("%s", "Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC");
-          peer_shm->cmd = -1;
+          peer_shm_desc->cmd = -1;
 
           ioctl_data.int_no = remote_rc_int_no[instance_no];
 #ifdef DEBUG_IOCTL
@@ -820,38 +821,38 @@ static void *run(void *arg) {
           ioctl_data.fd = 0;
           ioctl_data.len = 0;
 #endif
-          ioctl(my_buffer_fds.fd, SHMEM_IOCDORBELL, &ioctl_data);
+          ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
         } /* End of "data arrived from the peer via shared memory" */
 
         /* Received data from Wayland or from waypipe. It needs to
           be sent to the peer */
         else {
           if (!run_as_server) {
-            conn_fd = get_remote_socket(instance_no, current_event->data.fd, 0,
+            new_connection_fd = get_remote_socket(instance_no, current_event->data.fd, 0,
                                         IGNORE_ERROR);
-            DEBUG("get_remote_socket: %d", conn_fd);
+            DEBUG("get_remote_socket: %d", new_connection_fd);
           } else {
-            conn_fd = current_event->data.fd;
+            new_connection_fd = current_event->data.fd;
           }
           DEBUG("%s", "Reading from wayland/waypipe socket");
-          read_count = read(current_event->data.fd, (void *)my_shm->data,
-                            sizeof(my_shm->data));
+          read_count = read(current_event->data.fd, (void *)my_shm_desc->data,
+                            sizeof(my_shm_desc->data));
 
           if (read_count <= 0) {
             if (read_count < 0)
               ERROR("read from wayland/waypipe socket failed fd=%d",
                     current_event->data.fd);
             /* Release output buffer */
-            ioctl(my_buffer_fds.fd, SHMEM_IOCSET,
+            ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
                   (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
 
           } else { /* read_count > 0 */
             DEBUG("Read & sent %d bytes on fd#%d sent to %d checksum=0x%x",
-                  read_count, current_event->data.fd, conn_fd,
-                  cksum((unsigned char *)my_shm->data, read_count));
+                  read_count, current_event->data.fd, new_connection_fd,
+                  cksum((unsigned char *)my_shm_desc->data, read_count));
 
             if (current_event->events & EPOLLHUP) {
-              my_shm->cmd = CMD_DATA_CLOSE;
+              my_shm_desc->cmd = CMD_DATA_CLOSE;
               current_event->events &= ~EPOLLHUP;
 
               /* unmap local fd */
@@ -861,21 +862,21 @@ static void *run(void *arg) {
               /* close local fd*/
               close(current_event->data.fd);
             } else
-              my_shm->cmd = CMD_DATA;
+              my_shm_desc->cmd = CMD_DATA;
 
-            my_shm->fd = conn_fd;
-            my_shm->len = read_count;
+            my_shm_desc->fd = new_connection_fd;
+            my_shm_desc->len = read_count;
 
             ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
-            ioctl_data.cmd = my_shm->cmd;
-            ioctl_data.fd = my_shm->fd;
-            ioctl_data.len = my_shm->len;
+            ioctl_data.cmd = my_shm_desc->cmd;
+            ioctl_data.fd = my_shm_desc->fd;
+            ioctl_data.len = my_shm_desc->len;
 #endif
-            DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d", my_shm->cmd,
-                  my_shm->fd, my_shm->len);
+            DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d", my_shm_desc->cmd,
+                  my_shm_desc->fd, my_shm_desc->len);
             epollfd = epollfd_limited[instance_no];
-            ioctl(my_buffer_fds.fd, SHMEM_IOCDORBELL, &ioctl_data);
+            ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
             break;
           }
         } /* received data from Wayland/waypipe server */
@@ -884,33 +885,33 @@ static void *run(void *arg) {
       /* Handling connection close */
       if (current_event->events & (EPOLLHUP | EPOLLERR)) {
         DEBUG("Closing fd#%d", current_event->data.fd);
-        my_shm->cmd = CMD_CLOSE;
+        my_shm_desc->cmd = CMD_CLOSE;
         if (run_as_server)
-          my_shm->fd = current_event->data.fd;
+          my_shm_desc->fd = current_event->data.fd;
         else {
           DEBUG("get_remote_socket: %d",
                 get_remote_socket(instance_no, current_event->data.fd, 0,
                                   IGNORE_ERROR));
-          my_shm->fd = get_remote_socket(instance_no, current_event->data.fd,
+          my_shm_desc->fd = get_remote_socket(instance_no, current_event->data.fd,
                                          CLOSE_FD, IGNORE_ERROR);
         }
-        if (my_shm->fd > 0) {
-          DEBUG("ioctl ending close request for %d", my_shm->fd);
+        if (my_shm_desc->fd > 0) {
+          DEBUG("ioctl ending close request for %d", my_shm_desc->fd);
 
           ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
-          ioctl_data.cmd = my_shm->cmd;
-          ioctl_data.fd = my_shm->fd;
-          ioctl_data.len = my_shm->len;
+          ioctl_data.cmd = my_shm_desc->cmd;
+          ioctl_data.fd = my_shm_desc->fd;
+          ioctl_data.len = my_shm_desc->len;
 #endif
           /* Output buffer is busy. Accept only the interrupts
              that don't use it */
           epollfd = epollfd_limited[instance_no];
-          ioctl(my_buffer_fds.fd, SHMEM_IOCDORBELL, &ioctl_data);
+          ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
 
         } else { /* unlock output buffer */
           ERROR("Attempt to close invalid fd %d", current_event->data.fd);
-          ioctl(my_buffer_fds.fd, SHMEM_IOCSET,
+          ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
                 (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
         }
         if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL,
@@ -975,10 +976,10 @@ int main(int argc, char **argv) {
     my_shm_data[i] = NULL;
     peer_shm_data[i] = NULL;
     shmem_fd[i] = -1;
-    peers[i].vm_id = -1;
-    peers[i].fd_count = 0;
+    peers_on_host[i].vm_id = -1;
+    peers_on_host[i].fd_count = 0;
     for(n = 0; n < VM_COUNT*2; n++)
-      peers[i].interrupt_fd[n] = -1;
+      peers_on_host[i].interrupt_fd[n] = -1;
   }
 
   if (run_on_host) {
