@@ -742,14 +742,14 @@ static void *run(void *arg) {
           DEBUG("Executed ioctl to add the client on fd %d", new_connection_fd);
       }
 
-        /* Both sides: Received data from the peer via shared memory - EPOLLIN
+      /*
+       * Both sides: Received INT from peer VM - there is incoming data in the
+       * shared memory - EPOLLIN
        */
         else if (current_event->data.fd == shm_buffer_fd.fd) {
-          DEBUG(
-              "shmem_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote len: %d",
-              shm_buffer_fd.fd, current_event->events,
-              peer_shm_desc->cmd, peer_shm_desc->fd,
-              peer_shm_desc->len);
+        DEBUG("shmem_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote len: %d",
+              shm_buffer_fd.fd, current_event->events, peer_shm_desc->cmd,
+              peer_shm_desc->fd, peer_shm_desc->len);
 
           switch (peer_shm_desc->cmd) {
         case CMD_LOGIN:
@@ -792,14 +792,13 @@ static void *run(void *arg) {
               new_connection_fd = peer_shm_desc->fd;
               DEBUG("Closing %d", new_connection_fd);
           } else {
-              new_connection_fd =
-                  map_peer_fd(instance_no, peer_shm_desc->fd, 1);
+            new_connection_fd = map_peer_fd(instance_no, peer_shm_desc->fd, 1);
               DEBUG("Closing %d peer fd=%d", new_connection_fd,
                     peer_shm_desc->fd);
           }
             if (new_connection_fd > 0) {
-              if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL, new_connection_fd,
-                            NULL) == -1) {
+            if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL,
+                          new_connection_fd, NULL) == -1) {
               ERROR0("epoll_ctl: EPOLL_CTL_DEL");
             }
               close(new_connection_fd);
@@ -830,8 +829,8 @@ static void *run(void *arg) {
         be sent to the peer */
         else {
         if (!run_as_server) {
-            new_connection_fd = get_remote_socket(instance_no, current_event->data.fd, 0,
-                                        IGNORE_ERROR);
+          new_connection_fd = get_remote_socket(
+              instance_no, current_event->data.fd, 0, IGNORE_ERROR);
             DEBUG("get_remote_socket: %d", new_connection_fd);
         } else {
             new_connection_fd = current_event->data.fd;
