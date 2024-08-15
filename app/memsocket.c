@@ -666,7 +666,7 @@ static int cksum(unsigned char *buf, int len) {
 static void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
-  int new_connection_fd, rv, nfds, n, read_count;
+  int new_connection_fd, rv, nfds, n, read_count, event_handled;
   struct sockaddr_un caddr;      /* client address */
   socklen_t len = sizeof(caddr); /* address length could change */
   struct pollfd shm_buffer_fd = {.events = POLLOUT};
@@ -704,20 +704,22 @@ static void *run(void *arg) {
           current_event->data.fd, tmp & 0xffff, tmp >> 16);
 #endif
       /* Received ACK from the peer via shared memory */
-      if (current_event->events & EPOLLOUT &&
+      if (!host_run && current_event->events & EPOLLOUT &&
           current_event->data.fd == shm_buffer_fd.fd) {
 
         DEBUG("%s", "Received remote ACK");
         /* Set the local buffer is consumed and ready for use */
         ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
               (LOCAL_RESOURCE_READY_INT_VEC << 8) + 0);
+        /* as the local is free, start to handle all events */
         epollfd = epollfd_full[instance_no];
       }
-
+      event_handled = 0;
       /* Handle the new connection on the socket */
-      if (current_event->events & EPOLLIN) {
-        if (run_as_server && current_event->data.fd == server_socket) {
-          new_connection_fd = accept(server_socket, (struct sockaddr *)&caddr, &len);
+      //if ()
+        if (current_event->events & EPOLLIN && run_as_server && current_event->data.fd == server_socket) {
+          new_connection_fd =
+            accept(server_socket, (struct sockaddr *)&caddr, &len);
           if (new_connection_fd == -1) {
           FATAL("accept");
         }
@@ -740,13 +742,14 @@ static void *run(void *arg) {
         epollfd = epollfd_limited[instance_no];
           ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
           DEBUG("Executed ioctl to add the client on fd %d", new_connection_fd);
+        event_handled = 1;
       }
 
       /*
        * Both sides: Received INT from peer VM - there is incoming data in the
        * shared memory - EPOLLIN
        */
-        else if (current_event->data.fd == shm_buffer_fd.fd) {
+      if (current_event->events & EPOLLIN && current_event->data.fd == shm_buffer_fd.fd) {
         DEBUG("shmem_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote len: %d",
               shm_buffer_fd.fd, current_event->events, peer_shm_desc->cmd,
               peer_shm_desc->fd, peer_shm_desc->len);
@@ -823,11 +826,12 @@ static void *run(void *arg) {
         ioctl_data.len = 0;
 #endif
           ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
+        event_handled = 1;
       } /* End of "data arrived from the peer via shared memory" */
 
       /* Received data from Wayland or from waypipe. It needs to
         be sent to the peer */
-        else {
+      if (current_event->events & EPOLLIN && !event_handled) {
         if (!run_as_server) {
           new_connection_fd = get_remote_socket(
               instance_no, current_event->data.fd, 0, IGNORE_ERROR);
@@ -881,7 +885,7 @@ static void *run(void *arg) {
           break;
         }
       } /* received data from Wayland/waypipe server */
-      }   /* current_event->events & EPOLLIN */
+         /* current_event->events & EPOLLIN */
 
       /* Handling connection close */
       if (current_event->events & (EPOLLHUP | EPOLLERR)) {
@@ -924,7 +928,7 @@ static void *run(void *arg) {
         if (epollfd == epollfd_limited[instance_no])
           break;
       } /* Handling connection close */
-    }
+    } /* for */
   } /* while(1) */
   return 0;
 }
