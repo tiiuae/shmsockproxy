@@ -126,7 +126,7 @@ struct peer {
   int interrupt_fd[VM_COUNT * 2];
   int fd_count;
 } peers_on_host[VM_COUNT];
-const char qemu_int_data = '1'; /* defined by qemu ivshm */
+const long long int kick = 1; /* defined by qemu ivshm */
 
 volatile int *my_vmid = NULL;
 int vm_id = -1;
@@ -266,7 +266,9 @@ int doorbell_fd(int instance_no, unsigned int_addr) {
   vm_id = int_addr >> 16;
   index = peer_index_op(3, vm_id, instance_no);
   res = write(peers_on_host[index].interrupt_fd[int_addr & 0xffff],
-              &qemu_int_data, 1);
+              &kick, sizeof(kick));
+  INFO("Writing to interrupt fd: Addr=0x%x fd=%d", int_addr,
+    peers_on_host[index].interrupt_fd[int_addr & 0xffff]);
   if (res < 0) {
     ERROR("Writing to interrupt fd failed. Addr=0x%x fd=%d", int_addr,
     peers_on_host[index].interrupt_fd[int_addr & 0xffff]);
@@ -346,7 +348,7 @@ static void *host_run(void *arg) {
         }
         if (peer->interrupt_fd[peer->fd_count] == -1) {
           peer->interrupt_fd[peer->fd_count] = shm_fd;
-          INFO("Received peer %d interrupt[%d] fd %d", peer_idx, peer->fd_count,
+          INFO("Received peer idx=%d interrupt[%d] fd %d", peer_idx, peer->fd_count,
                shm_fd);
           peer->fd_count++;
           if (peer->fd_count == VM_COUNT * 2 && !peer_idx) {
@@ -550,7 +552,7 @@ static void shmem_init(int instance_no) {
   }
   DEBUG("[%d] vm_control=%p my_shm_data=%p peer_shm_data=%p", instance_no,
         vm_control, my_shm_data[instance_no], peer_shm_data[instance_no]);
-  DEBUG("[%d]                 my_shm_data=0x%lx peer_shm_data=0x%lx",
+  DEBUG("[%d] my_shm_data offset=0x%lx peer_shm_data offset=0x%lx",
         instance_no, (void *)my_shm_data[instance_no] - (void *)vm_control,
         (void *)peer_shm_data[instance_no] - (void *)vm_control);
   if (!run_on_host) {
@@ -595,7 +597,7 @@ static void shmem_init(int instance_no) {
     ev.events = EPOLLIN;
     ev.data.fd =
         peers_on_host[0]
-            .interrupt_fd[instance_no | PEER_RESOURCE_CONSUMED_INT_VEC];
+            .interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
     if (epoll_ctl(epollfd_limited[instance_no], EPOLL_CTL_ADD, ev.data.fd,
                   &ev) == -1) {
       FATAL("epoll_ctl: -1");
@@ -603,7 +605,7 @@ static void shmem_init(int instance_no) {
     ev.events = EPOLLIN;
     ev.data.fd =
         peers_on_host[0]
-            .interrupt_fd[instance_no | PEER_RESOURCE_CONSUMED_INT_VEC];
+            .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
     if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
         -1) {
       FATAL("epoll_ctl: -1");
@@ -659,12 +661,11 @@ static void thread_init(int instance_no) {
     if (!run_on_host) { // TODO
       res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
     } else { /* run on host */
-      INFO("vm_control->client_vmid=0x%x", vm_control->client_vmid);
-      INFO("ioctl_data.int_no=0x%x", ioctl_data.int_no); // TODO
+      INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no); // TODO
       res = doorbell_fd(instance_no, ioctl_data.int_no);
     }
-    DEBUG("Client #%d: sent login vmid: 0x%x ioctl result=%d client vm_id=0x%x",
-          instance_no, *my_vmid, res, vm_control->client_vmid);
+    DEBUG("Sent login vmid: 0x%x ioctl result=%d --> vm_id=0x%x",
+          *my_vmid, res, vm_control->client_vmid);
   }
 }
 
@@ -711,14 +712,15 @@ static void *run(void *arg) {
   shm_buffer_fd.fd = shmem_fd[instance_no];
   epollfd = epollfd_full[instance_no];
 
-  if (run_on_host) { // TODO wrong! Find peer index;
-    // tmp = peer_index_op(0, >>16)
-    // fd_int_data_ack =
-    //     peers_on_host[]
-    //         .interrupt_fd[instance_no | PEER_RESOURCE_CONSUMED_INT_VEC];
-    // fd_int_data_ready =
-    //     peers_on_host[0]
-    //         .interrupt_fd[instance_no | LOCAL_RESOURCE_READY_INT_VEC];
+  if (run_on_host) {
+    tmp = 0;
+    fd_int_data_ack =
+        peers_on_host[tmp]
+            .interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
+    fd_int_data_ready =
+        peers_on_host[tmp]
+            .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
+    INFO("fd_int_data_ack=%d fd_int_data_ready=%d", fd_int_data_ack, fd_int_data_ready)
   }
 
   while (1) {
@@ -737,12 +739,12 @@ static void *run(void *arg) {
     for (n = 0; n < nfds; n++) {
       current_event = &events[n];
 #ifdef DEBUG_ON
-      if (!run_on_host) {
+      if (!run_on_host)
         ioctl(shm_buffer_fd.fd, SHMEM_IOCNOP, &tmp);
+      
         DBG("Event index=%d 0x%x on fd %d inout=%d-%d", n,
             current_event->events, current_event->data.fd, tmp & 0xffff,
             tmp >> 16);
-      }
 #endif
       /* Check for ACK from the peer via shared memory */
       if (!run_on_host)
@@ -800,13 +802,14 @@ static void *run(void *arg) {
        * Client and server: Received INT from peer VM - there is incoming data
        * in the shared memory - EPOLLIN
        */
+      INFO("current_event->events=0x%x current_event->data.fd=%d fd_int_data_ready=%d", current_event->events, current_event->data.fd, fd_int_data_ready)
       if (!run_on_host)
         data_in = current_event->events & EPOLLIN &&
                   current_event->data.fd == shm_buffer_fd.fd;
-      else { /* run on host */
+      else  /* run on host */
         data_in = data_in = current_event->events & EPOLLIN &&
                             current_event->data.fd == fd_int_data_ready;
-      }
+    
       if (data_in) {
         DEBUG("shmem_fd/host_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote "
               "len: %d",
@@ -878,8 +881,8 @@ static void *run(void *arg) {
         /* Signal the other side that its buffer has been processed */
         DEBUG("%s", "Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC");
         peer_shm_desc->cmd = -1;
+        ioctl_data.int_no = remote_rc_int_no[instance_no];
         if (!run_on_host) {
-          ioctl_data.int_no = remote_rc_int_no[instance_no];
 #ifdef DEBUG_IOCTL
           ioctl_data.cmd = -1;
           ioctl_data.fd = 0;
@@ -1071,14 +1074,14 @@ int main(int argc, char **argv) {
 
   /* On client site start thread for each display VM */
   if (run_as_server == 0) {
-    for (i = 0; i < VM_COUNT; i++) {
+    for (i = 1; i <= 1/* VM_COUNT*/; i++) { // TODO: revert
       res = pthread_create(&threads[i], NULL, run, (void *)(intptr_t)i);
       if (res) {
         ERROR("Thread id=%d", i);
         FATAL("Cannot create a thread");
       }
     }
-    for (i = 0; i < VM_COUNT; i++) {
+    for (i = 1; i <= 1 /*VM_COUNT*/; i++) { // TODO:
       res = pthread_join(threads[i], NULL);
       if (res) {
         ERROR("error %d waiting for the thread #%d", res, i);
