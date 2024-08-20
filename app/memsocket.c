@@ -265,13 +265,13 @@ int doorbell_fd(int instance_no, unsigned int_addr) {
 
   vm_id = int_addr >> 16;
   index = peer_index_op(3, vm_id, instance_no);
-  res = write(peers_on_host[index].interrupt_fd[int_addr & 0xffff],
-              &kick, sizeof(kick));
+  res = write(peers_on_host[index].interrupt_fd[int_addr & 0xffff], &kick,
+              sizeof(kick));
   INFO("Writing to interrupt fd: Addr=0x%x fd=%d", int_addr,
-    peers_on_host[index].interrupt_fd[int_addr & 0xffff]);
+       peers_on_host[index].interrupt_fd[int_addr & 0xffff]);
   if (res < 0) {
     ERROR("Writing to interrupt fd failed. Addr=0x%x fd=%d", int_addr,
-    peers_on_host[index].interrupt_fd[int_addr & 0xffff]);
+          peers_on_host[index].interrupt_fd[int_addr & 0xffff]);
     FATAL("Exiting"); // TODO: maybe we shouldn't exit?
   }
   return res;
@@ -348,8 +348,8 @@ static void *host_run(void *arg) {
         }
         if (peer->interrupt_fd[peer->fd_count] == -1) {
           peer->interrupt_fd[peer->fd_count] = shm_fd;
-          INFO("Received peer idx=%d interrupt[%d] fd %d", peer_idx, peer->fd_count,
-               shm_fd);
+          INFO("Received peer idx=%d interrupt[%d] fd %d", peer_idx,
+               peer->fd_count, shm_fd);
           peer->fd_count++;
           if (peer->fd_count == VM_COUNT * 2 && !peer_idx) {
             INFO("%s", "Host configuration ready");
@@ -552,8 +552,8 @@ static void shmem_init(int instance_no) {
   }
   DEBUG("[%d] vm_control=%p my_shm_data=%p peer_shm_data=%p", instance_no,
         vm_control, my_shm_data[instance_no], peer_shm_data[instance_no]);
-  DEBUG("[%d] my_shm_data offset=0x%lx peer_shm_data offset=0x%lx",
-        instance_no, (void *)my_shm_data[instance_no] - (void *)vm_control,
+  DEBUG("[%d] my_shm_data offset=0x%lx peer_shm_data offset=0x%lx", instance_no,
+        (void *)my_shm_data[instance_no] - (void *)vm_control,
         (void *)peer_shm_data[instance_no] - (void *)vm_control);
   if (!run_on_host) {
     /* get my VM Id */
@@ -654,9 +654,9 @@ static void thread_init(int instance_no) {
 
     ioctl_data.int_no = local_rr_int_no[instance_no];
 #ifdef DEBUG_IOCTL
-      ioctl_data.cmd = my_shm_data[instance_no]->cmd;
-      ioctl_data.fd = my_shm_data[instance_no]->fd;
-      ioctl_data.len = my_shm_data[instance_no]->len;
+    ioctl_data.cmd = my_shm_data[instance_no]->cmd;
+    ioctl_data.fd = my_shm_data[instance_no]->fd;
+    ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
     if (!run_on_host) { // TODO
       res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
@@ -664,8 +664,8 @@ static void thread_init(int instance_no) {
       INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no); // TODO
       res = doorbell_fd(instance_no, ioctl_data.int_no);
     }
-    DEBUG("Sent login vmid: 0x%x ioctl result=%d --> vm_id=0x%x",
-          *my_vmid, res, vm_control->client_vmid);
+    DEBUG("Sent login vmid: 0x%x ioctl result=%d --> vm_id=0x%x", *my_vmid, res,
+          vm_control->client_vmid);
   }
 }
 
@@ -702,6 +702,7 @@ static void *run(void *arg) {
   int data_ack, data_in;
   int fd_int_data_ack /* peer has consumed our data */;
   int fd_int_data_ready; /* signal the peer that there is data ready */
+  long long int kick;
 
   if (instance_no >= VM_COUNT || instance_no < 0)
     FATAL("Invalid instance no");
@@ -713,14 +714,21 @@ static void *run(void *arg) {
   epollfd = epollfd_full[instance_no];
 
   if (run_on_host) {
-    tmp = 0;
-    fd_int_data_ack =
-        peers_on_host[tmp]
-            .interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
-    fd_int_data_ready =
-        peers_on_host[tmp]
-            .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
-    INFO("fd_int_data_ack=%d fd_int_data_ready=%d", fd_int_data_ack, fd_int_data_ready)
+    if (!run_as_server) {
+      fd_int_data_ack =
+          peers_on_host[0]
+              .interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
+      fd_int_data_ready =
+          peers_on_host[0]
+              .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
+    } else {
+      fd_int_data_ack =
+          peers_on_host[0].interrupt_fd[PEER_RESOURCE_CONSUMED_INT_VEC];
+      fd_int_data_ready =
+          peers_on_host[0].interrupt_fd[LOCAL_RESOURCE_READY_INT_VEC];
+    }
+    INFO("fd_int_data_ack=%d fd_int_data_ready=%d", fd_int_data_ack,
+         fd_int_data_ready)
   }
 
   while (1) {
@@ -741,10 +749,9 @@ static void *run(void *arg) {
 #ifdef DEBUG_ON
       if (!run_on_host)
         ioctl(shm_buffer_fd.fd, SHMEM_IOCNOP, &tmp);
-      
-        DBG("Event index=%d 0x%x on fd %d inout=%d-%d", n,
-            current_event->events, current_event->data.fd, tmp & 0xffff,
-            tmp >> 16);
+
+      DBG("Event index=%d 0x%x on fd %d inout=%d-%d", n, current_event->events,
+          current_event->data.fd, tmp & 0xffff, tmp >> 16);
 #endif
       /* Check for ACK from the peer via shared memory */
       if (!run_on_host)
@@ -757,8 +764,16 @@ static void *run(void *arg) {
         DEBUG("%s", "Received remote ACK");
         /* Notify the driver that we reserve the local buffer */
         if (!run_on_host) {
+          INFO("%s", "????????? ....");
           ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
                 (LOCAL_RESOURCE_READY_INT_VEC << 8) + 0);
+        } else {
+          INFO("%s", "Reading ....");
+          rv = read(fd_int_data_ack, &kick, sizeof(kick));
+          if (rv < 0) {
+            FATAL("Exiting");
+          } else if (rv != sizeof(kick))
+            ERROR("Invalid read data lenght %d", rv);
         }
         /* as the local is free, start to handle all events */
         epollfd = epollfd_full[instance_no];
@@ -802,14 +817,16 @@ static void *run(void *arg) {
        * Client and server: Received INT from peer VM - there is incoming data
        * in the shared memory - EPOLLIN
        */
-      INFO("current_event->events=0x%x current_event->data.fd=%d fd_int_data_ready=%d", current_event->events, current_event->data.fd, fd_int_data_ready)
+      INFO("current_event->events=0x%x current_event->data.fd=%d "
+           "fd_int_data_ready=%d",
+           current_event->events, current_event->data.fd, fd_int_data_ready)
       if (!run_on_host)
         data_in = current_event->events & EPOLLIN &&
                   current_event->data.fd == shm_buffer_fd.fd;
-      else  /* run on host */
+      else /* run on host */
         data_in = data_in = current_event->events & EPOLLIN &&
                             current_event->data.fd == fd_int_data_ready;
-    
+
       if (data_in) {
         DEBUG("shmem_fd/host_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote "
               "len: %d",
@@ -1074,7 +1091,7 @@ int main(int argc, char **argv) {
 
   /* On client site start thread for each display VM */
   if (run_as_server == 0) {
-    for (i = 1; i <= 1/* VM_COUNT*/; i++) { // TODO: revert
+    for (i = 1; i <= 1 /* VM_COUNT*/; i++) { // TODO: revert
       res = pthread_create(&threads[i], NULL, run, (void *)(intptr_t)i);
       if (res) {
         ERROR("Thread id=%d", i);
