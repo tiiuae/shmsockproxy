@@ -523,7 +523,7 @@ static void shmem_init(int instance_no) {
     INFO("shared memory fd: %d", shmem_fd[instance_no]);
     /* Store instance number inside driver */
     // TODO: it's own vm id. It should be peer vm id
-    // check: TODO: check interrupt numbering    
+    // check: TODO: check interrupt numbering
     // check: it's own vm id. It should be peer vm id
     ioctl(shmem_fd[instance_no], SHMEM_IOCSETINSTANCENO, instance_no);
   }
@@ -600,8 +600,8 @@ static void shmem_init(int instance_no) {
     ev.data.fd =
         peers_on_host[0]
             .interrupt_fd[(instance_no << 1) | PEER_RESOURCE_CONSUMED_INT_VEC];
-    if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, ev.data.fd,
-                  &ev) == -1) {
+    if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
+        -1) {
       FATAL("epoll_ctl: -1");
     }
     if (epoll_ctl(epollfd_limited[instance_no], EPOLL_CTL_ADD, ev.data.fd,
@@ -647,7 +647,7 @@ static void thread_init(int instance_no) {
      * Add the socket fd to the epollfd_full
      */
     server_init(instance_no);
-    /* interrupt/doorbell sent when the peer there is a data ready to process  */
+    /* interrupt/doorbell sent when the peer there is a data ready to process */
     local_rr_int_no[instance_no] = vm_control->client_vmid |
                                    (instance_no << 1) |
                                    LOCAL_RESOURCE_READY_INT_VEC;
@@ -733,9 +733,11 @@ static void *run(void *arg) {
               .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
     } else {
       fd_int_data_ack =
-          peers_on_host[0].interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
+          peers_on_host[0]
+              .interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
       fd_int_data_ready =
-          peers_on_host[0].interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
+          peers_on_host[0]
+              .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
     }
     INFO("fd_int_data_ack=%d fd_int_data_ready=%d", fd_int_data_ack,
          fd_int_data_ready)
@@ -789,7 +791,6 @@ static void *run(void *arg) {
         event_handled = 1; // TODO: is it needed?
       }
 
-
       /* Handle the new connection on the socket */
       if (current_event->events & EPOLLIN && run_as_server &&
           current_event->data.fd == server_socket) {
@@ -814,7 +815,7 @@ static void *run(void *arg) {
         ioctl_data.fd = my_shm_desc->fd;
         ioctl_data.len = my_shm_desc->len;
 #endif
-        /* Buffer is busy now. Switch to waiting for doorbell ACK from 
+        /* Buffer is busy now. Switch to waiting for doorbell ACK from
            the peer  */
         epollfd = epollfd_limited[instance_no];
         if (!run_on_host) {
@@ -826,12 +827,12 @@ static void *run(void *arg) {
         event_handled = 1;
       }
 
-
       /*
        * Client and server: Received INT from peer VM - there is incoming data
        * in the shared memory - EPOLLIN
        */
-      INFO("Possible incoming data: current_event->events=0x%x current_event->data.fd=%d "
+      INFO("Possible incoming data: current_event->events=0x%x "
+           "current_event->data.fd=%d "
            "fd_int_data_ready=%d",
            current_event->events, current_event->data.fd, fd_int_data_ready)
       if (!run_on_host)
@@ -839,7 +840,7 @@ static void *run(void *arg) {
                   current_event->data.fd == shm_buffer_fd.fd;
       else /* run on host */
         data_in = current_event->events & EPOLLIN &&
-                            current_event->data.fd == fd_int_data_ready;
+                  current_event->data.fd == fd_int_data_ready;
 
       if (data_in) {
         DEBUG("shmem_fd/host_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote "
@@ -856,7 +857,7 @@ static void *run(void *arg) {
           // TODO: check interrupt numbering
           // now were are sending a kind of 'self' interrupts
           // shouldn't instance_no be replaced with our vmid?
-          // 
+          //
           local_rr_int_no[instance_no] = peer_shm_desc->fd |
                                          (instance_no << 1) |
                                          LOCAL_RESOURCE_READY_INT_VEC;
@@ -893,8 +894,7 @@ static void *run(void *arg) {
             DEBUG("Closing %d", connected_app_fd);
           } else {
             connected_app_fd = map_peer_fd(instance_no, peer_shm_desc->fd, 1);
-            DEBUG("Closing %d peer fd=%d", connected_app_fd,
-                  peer_shm_desc->fd);
+            DEBUG("Closing %d peer fd=%d", connected_app_fd, peer_shm_desc->fd);
           }
           if (connected_app_fd > 0) {
             if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_DEL,
@@ -933,7 +933,6 @@ static void *run(void *arg) {
         }
         event_handled = 1;
       } /* End of "data arrived from the peer via shared memory" */
-
 
       /* Received an app data via connected socket. It needs to
          be sent to the shared memory peer */
