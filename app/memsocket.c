@@ -329,13 +329,12 @@ static void *host_run(void *arg) {
   /* Process messages */
   do {
     read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
-    INFO("tmp=%ld shm_fd=%d", tmp, shm_fd);
+    INFO("peer addr=%ld shm_fd=%d", tmp, shm_fd);
 
     if (tmp >= 0) {      /* peer or self  connection or disconnection */
       if (shm_fd >= 0) { /* peer or self connection */
 
         peer_idx = peer_index_op(0, tmp, instance_no);
-        INFO("peer_idx=%d", peer_idx);
         if (peer_idx >= VM_COUNT) {
           ERROR("vm id %ld not found", tmp);
           continue;
@@ -523,6 +522,9 @@ static void shmem_init(int instance_no) {
     }
     INFO("shared memory fd: %d", shmem_fd[instance_no]);
     /* Store instance number inside driver */
+    // TODO: it's own vm id. It should be peer vm id
+    // check: TODO: check interrupt numbering    
+    // check: it's own vm id. It should be peer vm id
     ioctl(shmem_fd[instance_no], SHMEM_IOCSETINSTANCENO, instance_no);
   }
 
@@ -597,17 +599,25 @@ static void shmem_init(int instance_no) {
     ev.events = EPOLLIN;
     ev.data.fd =
         peers_on_host[0]
-            .interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
+            .interrupt_fd[(instance_no << 1) | PEER_RESOURCE_CONSUMED_INT_VEC];
+    if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, ev.data.fd,
+                  &ev) == -1) {
+      FATAL("epoll_ctl: -1");
+    }
     if (epoll_ctl(epollfd_limited[instance_no], EPOLL_CTL_ADD, ev.data.fd,
                   &ev) == -1) {
       FATAL("epoll_ctl: -1");
     }
-    ev.events = EPOLLIN; // TODO: is it needed??? It's always ready
+    ev.events = EPOLLIN;
     ev.data.fd =
         peers_on_host[0]
-            .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
+            .interrupt_fd[(instance_no << 1) | LOCAL_RESOURCE_READY_INT_VEC];
     if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
         -1) {
+      FATAL("epoll_ctl: -1");
+    }
+    if (epoll_ctl(epollfd_limited[instance_no], EPOLL_CTL_ADD, ev.data.fd,
+                  &ev) == -1) {
       FATAL("epoll_ctl: -1");
     }
   }
@@ -723,9 +733,9 @@ static void *run(void *arg) {
               .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
     } else {
       fd_int_data_ack =
-          peers_on_host[0].interrupt_fd[PEER_RESOURCE_CONSUMED_INT_VEC];
+          peers_on_host[0].interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
       fd_int_data_ready =
-          peers_on_host[0].interrupt_fd[LOCAL_RESOURCE_READY_INT_VEC];
+          peers_on_host[0].interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
     }
     INFO("fd_int_data_ack=%d fd_int_data_ready=%d", fd_int_data_ack,
          fd_int_data_ready)
@@ -768,7 +778,6 @@ static void *run(void *arg) {
           ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
                 (LOCAL_RESOURCE_READY_INT_VEC << 8) + 0);
         } else {
-          INFO("%s", "Data_ack: reading ....");
           rv = read(fd_int_data_ack, &kick, sizeof(kick));
           if (rv < 0) {
             FATAL("Exiting");
@@ -778,7 +787,7 @@ static void *run(void *arg) {
         /* as the local is free, start to handle all events */
         epollfd = epollfd_full[instance_no];
       }
-      event_handled = 0; // TODO: is it needed?
+      event_handled = 1; // TODO: is it needed?
       /* Handle the new connection on the socket */
       if (current_event->events & EPOLLIN && run_as_server &&
           current_event->data.fd == server_socket) {
@@ -841,7 +850,10 @@ static void *run(void *arg) {
           DEBUG("Received login request from 0x%x", peer_shm_desc->fd);
           /* If the peer VM starts again, close all opened file handles */
           close_peer_vm(instance_no);
-
+          // TODO: check interrupt numbering
+          // now were are sending a kind of 'self' interrupts
+          // shouldn't instance_no be replaced with our vmid?
+          // 
           local_rr_int_no[instance_no] = peer_shm_desc->fd |
                                          (instance_no << 1) |
                                          LOCAL_RESOURCE_READY_INT_VEC;
@@ -909,6 +921,11 @@ static void *run(void *arg) {
 #endif
           ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
         } else {
+          rv = read(fd_int_data_ready, &kick, sizeof(kick));
+          if (rv < 0) {
+            FATAL("Invalid response");
+          } else if (rv != sizeof(kick))
+            ERROR("Invalid read data lenght %d", rv);
           doorbell_fd(instance_no, ioctl_data.int_no);
         }
         event_handled = 1;
