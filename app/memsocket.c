@@ -602,7 +602,7 @@ static void shmem_init(int instance_no) {
                   &ev) == -1) {
       FATAL("epoll_ctl: -1");
     }
-    ev.events = EPOLLIN;
+    ev.events = EPOLLIN; // TODO: is it needed??? It's always ready
     ev.data.fd =
         peers_on_host[0]
             .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
@@ -637,11 +637,11 @@ static void thread_init(int instance_no) {
      * Add the socket fd to the epollfd_full
      */
     server_init(instance_no);
-    /* interrupt signaling the peer there is data ready to process  */
+    /* interrupt/doorbell sent when the peer there is a data ready to process  */
     local_rr_int_no[instance_no] = vm_control->client_vmid |
                                    (instance_no << 1) |
                                    LOCAL_RESOURCE_READY_INT_VEC;
-    /* interrupt received when the peer has consumed our data */
+    /* interrupt/doorbell received when the peer has consumed our data */
     remote_rc_int_no[instance_no] = vm_control->client_vmid |
                                     (instance_no << 1) |
                                     PEER_RESOURCE_CONSUMED_INT_VEC;
@@ -658,7 +658,7 @@ static void thread_init(int instance_no) {
     ioctl_data.fd = my_shm_data[instance_no]->fd;
     ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
-    if (!run_on_host) { // TODO
+    if (!run_on_host) { // TODO -> convert doorbell
       res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
     } else { /* run on host */
       INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no); // TODO
@@ -764,11 +764,11 @@ static void *run(void *arg) {
         DEBUG("%s", "Received remote ACK");
         /* Notify the driver that we reserve the local buffer */
         if (!run_on_host) {
-          INFO("%s", "????????? ....");
+          INFO("%s", "????????? ...."); // TODO
           ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
                 (LOCAL_RESOURCE_READY_INT_VEC << 8) + 0);
         } else {
-          INFO("%s", "Reading ....");
+          INFO("%s", "Data_ack: reading ....");
           rv = read(fd_int_data_ack, &kick, sizeof(kick));
           if (rv < 0) {
             FATAL("Exiting");
@@ -778,7 +778,7 @@ static void *run(void *arg) {
         /* as the local is free, start to handle all events */
         epollfd = epollfd_full[instance_no];
       }
-      event_handled = 0;
+      event_handled = 0; // TODO: is it needed?
       /* Handle the new connection on the socket */
       if (current_event->events & EPOLLIN && run_as_server &&
           current_event->data.fd == server_socket) {
@@ -803,6 +803,8 @@ static void *run(void *arg) {
         ioctl_data.fd = my_shm_desc->fd;
         ioctl_data.len = my_shm_desc->len;
 #endif
+        /* Buffer is busy now. Switch to waiting for doorbell ACK from 
+           the peer  */
         epollfd = epollfd_limited[instance_no];
         if (!run_on_host) {
           ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
@@ -824,7 +826,7 @@ static void *run(void *arg) {
         data_in = current_event->events & EPOLLIN &&
                   current_event->data.fd == shm_buffer_fd.fd;
       else /* run on host */
-        data_in = data_in = current_event->events & EPOLLIN &&
+        data_in = current_event->events & EPOLLIN &&
                             current_event->data.fd == fd_int_data_ready;
 
       if (data_in) {
