@@ -553,9 +553,9 @@ static void shmem_init(int instance_no) {
     my_shm_data[instance_no] = &vm_control->client_data[instance_no];
     peer_shm_data[instance_no] = &vm_control->server_data[instance_no];
   }
-  DEBUG("vm_control=%p my_shm_data=%p peer_shm_data=%p", instance_no,
-        vm_control, my_shm_data[instance_no], peer_shm_data[instance_no]);
-  DEBUG("my_shm_data offset=0x%lx peer_shm_data offset=0x%lx", instance_no,
+  DEBUG("vm_control=%p my_shm_data=%p peer_shm_data=%p", vm_control,
+        my_shm_data[instance_no], peer_shm_data[instance_no]);
+  DEBUG("my_shm_data offset=0x%lx peer_shm_data offset=0x%lx",
         (void *)my_shm_data[instance_no] - (void *)vm_control,
         (void *)peer_shm_data[instance_no] - (void *)vm_control);
   if (!run_on_host) {
