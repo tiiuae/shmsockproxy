@@ -553,9 +553,9 @@ static void shmem_init(int instance_no) {
     my_shm_data[instance_no] = &vm_control->client_data[instance_no];
     peer_shm_data[instance_no] = &vm_control->server_data[instance_no];
   }
-  DEBUG("[%d] vm_control=%p my_shm_data=%p peer_shm_data=%p", instance_no,
+  DEBUG("vm_control=%p my_shm_data=%p peer_shm_data=%p", instance_no,
         vm_control, my_shm_data[instance_no], peer_shm_data[instance_no]);
-  DEBUG("[%d] my_shm_data offset=0x%lx peer_shm_data offset=0x%lx", instance_no,
+  DEBUG("my_shm_data offset=0x%lx peer_shm_data offset=0x%lx", instance_no,
         (void *)my_shm_data[instance_no] - (void *)vm_control,
         (void *)peer_shm_data[instance_no] - (void *)vm_control);
   if (!run_on_host) {
@@ -715,8 +715,10 @@ static void *run(void *arg) {
   int fd_int_data_ready; /* signal the peer that there is data ready */
   long long int kick;
 
-  if (instance_no >= VM_COUNT || instance_no < 0)
-    FATAL("Invalid instance no");
+  if (instance_no >= VM_COUNT || instance_no < 0) {
+    ERROR("Invalid instance no %d", instance_no);
+    FATAL("Exiting");
+  }
 
   thread_init(instance_no);
   peer_shm_desc = peer_shm_data[instance_no];
@@ -1115,14 +1117,14 @@ int main(int argc, char **argv) {
 
   /* On client site start thread for each display VM */
   if (run_as_server == 0) {
-    for (i = 0; i <= VM_COUNT; i++) { // TODO: reverted. delete the comment
+    for (i = 0; i < VM_COUNT; i++) {
       res = pthread_create(&threads[i], NULL, run, (void *)(intptr_t)i);
       if (res) {
         ERROR("Thread id=%d", i);
         FATAL("Cannot create a thread");
       }
     }
-    for (i = 0; i < VM_COUNT; i++) { // TODO: reverted. delete the comment
+    for (i = 0; i < VM_COUNT; i++) {
       res = pthread_join(threads[i], NULL);
       if (res) {
         ERROR("error %d waiting for the thread #%d", res, i);
