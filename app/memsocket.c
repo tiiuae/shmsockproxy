@@ -277,6 +277,7 @@ int doorbell_fd(int instance_no, unsigned int_addr) {
   return res;
 }
 
+/* Executed when the app is executed on host, not iniside a VM */
 static void *host_run(void *arg) {
   int instance_no = (long int)arg;
   int ivshmemsrv_fd;
@@ -354,7 +355,7 @@ static void *host_run(void *arg) {
             INFO("%s", "Host configuration ready");
             pthread_cond_signal(&host_cond);
             pthread_mutex_unlock(&host_fd_mutex);
-            INFO("my physical vm id=0x%x", vm_id); // TODO: remove
+            INFO("my physical vm id=%d", vm_id); // TODO: remove
           }
         } else
           ERROR("Ignored re-using peer's %d interrupt[%d] fd: %d", peer_idx,
@@ -572,7 +573,7 @@ static void shmem_init(int instance_no) {
     vm_control->server_data[instance_no].server_vmid = UNKNOWN_PEER;
   }
   *my_vmid = vm_id;
-  INFO("My VM id = 0x%x. Running as a ", *my_vmid);
+  INFO("My VM id = %d. Running as a ", *my_vmid);
   if (run_as_server) {
     INFO("%s", "server");
   } else {
@@ -674,7 +675,7 @@ static void thread_init(int instance_no) {
       INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no); // TODO
       res = doorbell_fd(instance_no, ioctl_data.int_no);
     }
-    DEBUG("Sent login vmid: 0x%x ioctl result=%d --> vm_id=0x%x", *my_vmid, res,
+    DEBUG("Sent login vmid: %d ioctl result=%d --> vm_id=%d", *my_vmid, res,
           vm_control->client_vmid);
   }
 }
@@ -1100,6 +1101,7 @@ int main(int argc, char **argv) {
   }
 
   if (run_on_host) {
+    /* Create a thread which collects data about peer VMs*/
     res = pthread_mutex_init(&host_fd_mutex, NULL);
     if (res) {
       FATAL("Cannot initialize the mutex");
@@ -1113,14 +1115,14 @@ int main(int argc, char **argv) {
 
   /* On client site start thread for each display VM */
   if (run_as_server == 0) {
-    for (i = 1; i <= 1 /* VM_COUNT*/; i++) { // TODO: revert
+    for (i = 0; i <= VM_COUNT; i++) { // TODO: reverted. delete the comment
       res = pthread_create(&threads[i], NULL, run, (void *)(intptr_t)i);
       if (res) {
         ERROR("Thread id=%d", i);
         FATAL("Cannot create a thread");
       }
     }
-    for (i = 1; i <= 1 /*VM_COUNT*/; i++) { // TODO:
+    for (i = 0; i < VM_COUNT; i++) { // TODO: reverted. delete the comment
       res = pthread_join(threads[i], NULL);
       if (res) {
         ERROR("error %d waiting for the thread #%d", res, i);
