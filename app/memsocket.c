@@ -238,7 +238,6 @@ int peer_index_op(int op, int vmid, int instance_no) {
       case 1: /* clear */
         peer->vm_id = -1;
         for (n = 0; n < VM_COUNT * 2; n++) {
-          /* TODO: how about closing and active i/o operations ??? */
           if (peer->interrupt_fd[n] >= 0)
             close(peer->interrupt_fd[n]);
           peer->interrupt_fd[n] = -1;
@@ -260,19 +259,22 @@ int peer_index_op(int op, int vmid, int instance_no) {
   }
 }
 
-int doorbell_fd(int instance_no, unsigned int_addr) {
-  int vm_id, fd_no, index, res;
+int doorbell(int instance_no, struct ioctl_data *ioctl_data) {
+  int vm_id, index, res;
 
-  vm_id = int_addr >> 16;
+  if (!run_on_host) {
+    return ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, ioctl_data);
+  }
+  vm_id = ioctl_data->int_no >> 16;
   index = peer_index_op(3, vm_id, instance_no);
-  res = write(peers_on_host[index].interrupt_fd[int_addr & 0xffff], &kick,
-              sizeof(kick));
-  INFO("Writing to interrupt fd: Addr=0x%x fd=%d", int_addr,
-       peers_on_host[index].interrupt_fd[int_addr & 0xffff]);
+  res = write(peers_on_host[index].interrupt_fd[ioctl_data->int_no & 0xffff],
+              &kick, sizeof(kick));
+  INFO("Writing to interrupt fd: Addr=0x%x fd=%d", ioctl_data->int_no,
+       peers_on_host[index].interrupt_fd[ioctl_data->int_no & 0xffff]);
   if (res < 0) {
-    ERROR("Writing to interrupt fd failed. Addr=0x%x fd=%d", int_addr,
-          peers_on_host[index].interrupt_fd[int_addr & 0xffff]);
-    FATAL("Exiting"); // TODO: maybe we shouldn't exit?
+    ERROR("Writing to interrupt fd failed. Addr=0x%x fd=%d", ioctl_data->int_no,
+          peers_on_host[index].interrupt_fd[ioctl_data->int_no & 0xffff]);
+    FATAL("Exiting");
   }
   return res;
 }
@@ -355,7 +357,7 @@ static void *host_run(void *arg) {
             INFO("%s", "Host configuration ready");
             pthread_cond_signal(&host_cond);
             pthread_mutex_unlock(&host_fd_mutex);
-            INFO("my physical vm id=%d", vm_id); // TODO: remove
+            INFO("my physical vm id=%d", vm_id);
           }
         } else
           ERROR("Ignored re-using peer's %d interrupt[%d] fd: %d", peer_idx,
@@ -669,12 +671,9 @@ static void thread_init(int instance_no) {
     ioctl_data.fd = my_shm_data[instance_no]->fd;
     ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
-    if (!run_on_host) { // TODO -> convert doorbell
-      res = ioctl(shmem_fd[instance_no], SHMEM_IOCDORBELL, &ioctl_data);
-    } else { /* run on host */
-      INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no); // TODO
-      res = doorbell_fd(instance_no, ioctl_data.int_no);
-    }
+    INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no); // TODO
+    res = doorbell(instance_no, &ioctl_data);
+
     DEBUG("Sent login vmid: %d ioctl result=%d --> vm_id=%d", *my_vmid, res,
           vm_control->client_vmid);
   }
@@ -821,13 +820,9 @@ static void *run(void *arg) {
         /* Buffer is busy now. Switch to waiting for doorbell ACK from
            the peer  */
         epollfd = epollfd_limited[instance_no];
-        if (!run_on_host) {
-          ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
-        } else {
-          doorbell_fd(instance_no, ioctl_data.int_no);
-        }
+        doorbell(instance_no, &ioctl_data);
         DEBUG("Doorbell to add the new client on fd %d", connected_app_fd);
-        event_handled = 1;
+        event_handled = 1; // TODO: change to continue???
       }
 
       /*
@@ -858,7 +853,7 @@ static void *run(void *arg) {
           /* If the peer VM starts again, close all opened file handles */
           close_peer_vm(instance_no);
           // TODO: check interrupt numbering
-          // now were are sending a kind of 'self' interrupts
+          // now were are sending self addrressed interrupts
           // shouldn't instance_no be replaced with our vmid?
           //
           local_rr_int_no[instance_no] = peer_shm_desc->fd |
@@ -925,14 +920,15 @@ static void *run(void *arg) {
           ioctl_data.fd = 0;
           ioctl_data.len = 0;
 #endif
-          ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
+          // TODO:
+          //          ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
         } else {
           rv = read(fd_int_data_ready, &kick, sizeof(kick));
           if (rv < 0) {
             FATAL("Invalid response");
           } else if (rv != sizeof(kick))
-            ERROR("Invalid read data lenght %d", rv);
-          doorbell_fd(instance_no, ioctl_data.int_no);
+            ERROR("Invalid read data length %d", rv);
+          doorbell(instance_no, &ioctl_data);
         }
         event_handled = 1;
       } /* End of "data arrived from the peer via shared memory" */
@@ -990,10 +986,7 @@ static void *run(void *arg) {
           DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d",
                 my_shm_desc->cmd, my_shm_desc->fd, my_shm_desc->len);
           epollfd = epollfd_limited[instance_no];
-          if (!run_on_host)
-            ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
-          else
-            doorbell_fd(instance_no, ioctl_data.int_no);
+          doorbell(instance_no, &ioctl_data);
           break;
         }
       } /* end of incoming data processing EPOLLIN*/
@@ -1023,11 +1016,7 @@ static void *run(void *arg) {
           /* Output buffer is busy. Accept only the events
              that don't use it */
           epollfd = epollfd_limited[instance_no];
-          if (!run_on_host)
-            ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
-          else
-            doorbell_fd(instance_no, ioctl_data.int_no);
-
+          doorbell(instance_no, &ioctl_data);
         } else { /* unlock output buffer */
           ERROR("Attempt to close invalid fd %d", current_event->data.fd);
           if (!run_on_host)
