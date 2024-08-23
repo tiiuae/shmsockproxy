@@ -928,8 +928,8 @@ static void *run(void *arg) {
             FATAL("Invalid response");
           } else if (rv != sizeof(kick))
             ERROR("Invalid read data length %d", rv);
-          doorbell(instance_no, &ioctl_data);
         }
+        doorbell(instance_no, &ioctl_data);
         event_handled = 1;
       } /* End of "data arrived from the peer via shared memory" */
 
