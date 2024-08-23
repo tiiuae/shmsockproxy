@@ -519,19 +519,16 @@ static void shmem_init(int instance_no) {
     shmem_fd[instance_no] = host_socket_fd;
     INFO("ivshmem shared memory fd: %d", shmem_fd[instance_no]);
   } else {
+    /* open shared memory device */
     shmem_fd[instance_no] = open(SHM_DEVICE_FN, O_RDWR);
     if (shmem_fd[instance_no] < 0) {
       FATAL("Open " SHM_DEVICE_FN);
     }
     INFO("shared memory fd: %d", shmem_fd[instance_no]);
-    /* Store instance number inside driver */
-    // TODO: it's own vm id. It should be peer vm id
-    // check: TODO: check interrupt numbering
-    // check: it's own vm id. It should be peer vm id
     ioctl(shmem_fd[instance_no], SHMEM_IOCSETINSTANCENO, instance_no);
   }
 
-  /* Get shared memory */
+  /* Get shared memory: check size and mmap it */
   shmem_size = get_shmem_size(instance_no);
   if (shmem_size <= 0) {
     FATAL("No shared memory detected");
@@ -575,7 +572,7 @@ static void shmem_init(int instance_no) {
     vm_control->server_data[instance_no].server_vmid = UNKNOWN_PEER;
   }
   *my_vmid = vm_id;
-  INFO("My VM id = %d. Running as a ", *my_vmid);
+  INFO("My VM id = 0x%x. Running as a ", *my_vmid);
   if (run_as_server) {
     INFO("%s", "server");
   } else {
@@ -671,7 +668,7 @@ static void thread_init(int instance_no) {
     ioctl_data.fd = my_shm_data[instance_no]->fd;
     ioctl_data.len = my_shm_data[instance_no]->len;
 #endif
-    INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no); // TODO
+    INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no);
     res = doorbell(instance_no, &ioctl_data);
 
     DEBUG("Sent login vmid: %d ioctl result=%d --> vm_id=%d", *my_vmid, res,
@@ -790,7 +787,7 @@ static void *run(void *arg) {
         }
         /* as the local is free, start to handle all events */
         epollfd = epollfd_full[instance_no];
-        event_handled = 1; // TODO: is it needed?
+        event_handled = 1;
       }
 
       /* Handle the new connection on the socket */
@@ -822,7 +819,7 @@ static void *run(void *arg) {
         epollfd = epollfd_limited[instance_no];
         doorbell(instance_no, &ioctl_data);
         DEBUG("Doorbell to add the new client on fd %d", connected_app_fd);
-        event_handled = 1; // TODO: change to continue???
+        event_handled = 1;
       }
 
       /*
@@ -852,10 +849,6 @@ static void *run(void *arg) {
           DEBUG("Received login request from 0x%x", peer_shm_desc->fd);
           /* If the peer VM starts again, close all opened file handles */
           close_peer_vm(instance_no);
-          // TODO: check interrupt numbering
-          // now were are sending self addrressed interrupts
-          // shouldn't instance_no be replaced with our vmid?
-          //
           local_rr_int_no[instance_no] = peer_shm_desc->fd |
                                          (instance_no << 1) |
                                          LOCAL_RESOURCE_READY_INT_VEC;
@@ -920,16 +913,14 @@ static void *run(void *arg) {
           ioctl_data.fd = 0;
           ioctl_data.len = 0;
 #endif
-          // TODO:
-          //          ioctl(shm_buffer_fd.fd, SHMEM_IOCDORBELL, &ioctl_data);
         } else {
           rv = read(fd_int_data_ready, &kick, sizeof(kick));
           if (rv < 0) {
             FATAL("Invalid response");
           } else if (rv != sizeof(kick))
             ERROR("Invalid read data length %d", rv);
-          doorbell(instance_no, &ioctl_data);
         }
+        doorbell(instance_no, &ioctl_data);
         event_handled = 1;
       } /* End of "data arrived from the peer via shared memory" */
 
@@ -1028,11 +1019,11 @@ static void *run(void *arg) {
           ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", current_event->data.fd);
         }
         close(current_event->data.fd);
-        /* If the buffer is busy, don't proceed any further events */
+        /* If the shared memory buffer is busy, don't proceed any further events */
         if (epollfd == epollfd_limited[instance_no])
           break;
       } /* Handling connection close */
-    } /* for */
+    } /* for n = 0..nfds */
   } /* while(1) */
   return 0;
 }
