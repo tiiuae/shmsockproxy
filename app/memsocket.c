@@ -783,14 +783,14 @@ static void *run(void *arg) {
           if (rv < 0) {
             FATAL("Exiting");
           } else if (rv != sizeof(kick))
-            ERROR("Invalid read data lenght %d", rv);
+            ERROR("Invalid read data length %d", rv);
         }
-        /* as the local is free, start to handle all events */
+        /* as the local buffer is available, start to handle all events */
         epollfd = epollfd_full[instance_no];
         event_handled = 1;
       }
 
-      /* Handle the new connection on the socket */
+      /* Handle the new connection event on the socket */
       if (current_event->events & EPOLLIN && run_as_server &&
           current_event->data.fd == server_socket) {
         connected_app_fd =
@@ -814,17 +814,18 @@ static void *run(void *arg) {
         ioctl_data.fd = my_shm_desc->fd;
         ioctl_data.len = my_shm_desc->len;
 #endif
-        /* Buffer is busy now. Switch to waiting for doorbell ACK from
-           the peer  */
+        /* Buffer is busy since now. Switch to waiting for the doorbell ACK
+           from the peer */
         epollfd = epollfd_limited[instance_no];
+        /* Signal the peer that the data is ready */
         doorbell(instance_no, &ioctl_data);
         DEBUG("Doorbell to add the new client on fd %d", connected_app_fd);
         event_handled = 1;
       }
 
       /*
-       * Client and server: Received INT from peer VM - there is incoming data
-       * in the shared memory - EPOLLIN
+       * Client and server: Received interrupt from peer VM - there is incoming
+       * data in the shared memory - EPOLLIN
        */
       INFO("Possible incoming data: current_event->events=0x%x "
            "current_event->data.fd=%d "
@@ -878,7 +879,7 @@ static void *run(void *arg) {
           if (peer_shm_desc->cmd == CMD_DATA) {
             break;
           }
-          /* no break if we need to the the fd */
+          /* no break if we also need to close the file descriptor */
         case CMD_CLOSE:
           if (run_as_server) {
             connected_app_fd = peer_shm_desc->fd;
@@ -903,7 +904,7 @@ static void *run(void *arg) {
           break;
         } /* switch peer_shm_desc->cmd */
 
-        /* Signal the other side that its buffer has been processed */
+        /* Signal the other side that the data buffer has been processed */
         DEBUG("%s", "Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC");
         peer_shm_desc->cmd = -1;
         ioctl_data.int_no = remote_rc_int_no[instance_no];
@@ -1019,7 +1020,8 @@ static void *run(void *arg) {
           ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", current_event->data.fd);
         }
         close(current_event->data.fd);
-        /* If the shared memory buffer is busy, don't proceed any further events */
+        /* If the shared memory buffer is busy, don't proceed any further events
+         */
         if (epollfd == epollfd_limited[instance_no])
           break;
       } /* Handling connection close */

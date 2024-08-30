@@ -1,7 +1,7 @@
 #  Copyright 2022-2023 TII (SSRC) and the Ghaf contributors
 #  SPDX-License-Identifier: Apache-2.0
 
-CPPFLAGS = -Wformat-extra-args -Wformat-overflow -Wformat
+CPPFLAGS = -Wformat-extra-args -Wformat-overflow -Wformat -g
 
 memsocket: memsocket.c
 
