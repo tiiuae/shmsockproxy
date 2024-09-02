@@ -136,8 +136,10 @@ int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
 pthread_t server_threads[VM_COUNT];
 struct {
   volatile int client_vmid;
-  vm_data __attribute__((aligned(64))) client_data[VM_COUNT];
-  vm_data __attribute__((aligned(64))) server_data[VM_COUNT];
+  struct {
+    vm_data __attribute__((aligned(64))) client;
+    vm_data __attribute__((aligned(64))) server;
+  } data[VM_COUNT];
 } *vm_control;
 
 static const char usage_string[] = "Usage: memsocket { -c socket_path [-h "
@@ -546,11 +548,11 @@ static void shmem_init(int instance_no) {
   DEBUG("Shared memory at address %p 0x%lx bytes", vm_control, shmem_size);
 
   if (run_as_server) {
-    my_shm_data[instance_no] = &vm_control->server_data[instance_no];
-    peer_shm_data[instance_no] = &vm_control->client_data[instance_no];
+    my_shm_data[instance_no] = &vm_control->data[instance_no].server;
+    peer_shm_data[instance_no] = &vm_control->data[instance_no].client;
   } else {
-    my_shm_data[instance_no] = &vm_control->client_data[instance_no];
-    peer_shm_data[instance_no] = &vm_control->server_data[instance_no];
+    my_shm_data[instance_no] = &vm_control->data[instance_no].client;
+    peer_shm_data[instance_no] = &vm_control->data[instance_no].server;
   }
   DEBUG("vm_control=%p my_shm_data=%p peer_shm_data=%p", vm_control,
         my_shm_data[instance_no], peer_shm_data[instance_no]);
@@ -566,10 +568,10 @@ static void shmem_init(int instance_no) {
     vm_id = tmp << 16;
   }
   if (run_as_server) {
-    my_vmid = &vm_control->server_data[instance_no].server_vmid;
+    my_vmid = &vm_control->data[instance_no].server.server_vmid;
   } else {
     my_vmid = &vm_control->client_vmid;
-    vm_control->server_data[instance_no].server_vmid = UNKNOWN_PEER;
+    vm_control->data[instance_no].server.server_vmid = UNKNOWN_PEER;
   }
   *my_vmid = vm_id;
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
