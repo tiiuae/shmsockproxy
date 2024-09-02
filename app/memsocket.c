@@ -671,7 +671,7 @@ static void thread_init(int instance_no) {
     INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no);
     res = doorbell(instance_no, &ioctl_data);
 
-    DEBUG("Sent login vmid: %d ioctl result=%d --> vm_id=%d", *my_vmid, res,
+    DEBUG("Sent login vmid: %d ioctl result=%d --> vm_id=0x%x", *my_vmid, res,
           vm_control->client_vmid);
   }
 }
