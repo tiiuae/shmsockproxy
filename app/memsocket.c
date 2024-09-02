@@ -781,11 +781,11 @@ static void *run(void *arg) {
           ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
                 (LOCAL_RESOURCE_READY_INT_VEC << 8) + 0);
         } else {
-          rv = recv(fd_int_data_ack, &kick, sizeof(kick), MSG_NOSIGNAL);
+          rv = read(fd_int_data_ack, &kick, sizeof(kick));
           if (rv < 0) {
             FATAL("Exiting");
           } else if (rv != sizeof(kick))
-            ERROR("Invalid recv data length %d", rv);
+            ERROR("Invalid read data length %d", rv);
         }
         /* as the local buffer is available, start to handle all events */
         epollfd = epollfd_full[instance_no];
@@ -917,11 +917,11 @@ static void *run(void *arg) {
           ioctl_data.len = 0;
 #endif
         } else {
-          rv = recv(fd_int_data_ready, &kick, sizeof(kick), MSG_NOSIGNAL);
+          rv = read(fd_int_data_ready, &kick, sizeof(kick));
           if (rv < 0) {
             FATAL("Invalid response");
           } else if (rv != sizeof(kick))
-            ERROR("Invalid recv data length %d", rv);
+            ERROR("Invalid read data length %d", rv);
         }
         doorbell(instance_no, &ioctl_data);
         event_handled = 1;
