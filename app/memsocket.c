@@ -195,7 +195,7 @@ static void read_msg(int ivshmem_fd, long int *buf, int *fd, int instance_no) {
   msg.msg_control = &msg_ctl;
   msg.msg_controllen = sizeof(msg_ctl);
 
-  rv = recvmsg(ivshmem_fd, &msg, 0);
+  rv = recvmsg(ivshmem_fd, &msg, MSG_NOSIGNAL);
   if (!rv)
     FATAL("ivshmem server socket: connection closed")
   if (rv < sizeof(buf))
@@ -779,11 +779,11 @@ static void *run(void *arg) {
           ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
                 (LOCAL_RESOURCE_READY_INT_VEC << 8) + 0);
         } else {
-          rv = read(fd_int_data_ack, &kick, sizeof(kick));
+          rv = recv(fd_int_data_ack, &kick, sizeof(kick), MSG_NOSIGNAL);
           if (rv < 0) {
             FATAL("Exiting");
           } else if (rv != sizeof(kick))
-            ERROR("Invalid read data length %d", rv);
+            ERROR("Invalid recv data length %d", rv);
         }
         /* as the local buffer is available, start to handle all events */
         epollfd = epollfd_full[instance_no];
@@ -869,7 +869,7 @@ static void *run(void *arg) {
               connected_app_fd,
               cksum((unsigned char *)peer_shm_desc->data, peer_shm_desc->len));
           rv = send(connected_app_fd, (const void *)peer_shm_desc->data,
-                    peer_shm_desc->len, 0);
+                    peer_shm_desc->len, MSG_NOSIGNAL);
           if (rv != peer_shm_desc->len) {
             ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
                   connected_app_fd);
@@ -915,11 +915,11 @@ static void *run(void *arg) {
           ioctl_data.len = 0;
 #endif
         } else {
-          rv = read(fd_int_data_ready, &kick, sizeof(kick));
+          rv = recv(fd_int_data_ready, &kick, sizeof(kick), MSG_NOSIGNAL);
           if (rv < 0) {
             FATAL("Invalid response");
           } else if (rv != sizeof(kick))
-            ERROR("Invalid read data length %d", rv);
+            ERROR("Invalid recv data length %d", rv);
         }
         doorbell(instance_no, &ioctl_data);
         event_handled = 1;
@@ -936,12 +936,12 @@ static void *run(void *arg) {
           connected_app_fd = current_event->data.fd;
         }
         DEBUG("%s", "Reading from wayland/waypipe socket");
-        read_count = read(current_event->data.fd, (void *)my_shm_desc->data,
-                          sizeof(my_shm_desc->data));
+        read_count = recv(current_event->data.fd, (void *)my_shm_desc->data,
+                          sizeof(my_shm_desc->data), MSG_NOSIGNAL);
 
         if (read_count <= 0) {
           if (read_count < 0)
-            ERROR("read from wayland/waypipe socket failed fd=%d",
+            ERROR("recv from wayland/waypipe socket failed fd=%d",
                   current_event->data.fd);
           if (!run_on_host)
             /* Release output buffer */
@@ -949,7 +949,7 @@ static void *run(void *arg) {
                   (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
 
         } else { /* read_count > 0 */
-          DEBUG("Read & sent %d bytes on fd#%d sent to %d checksum=0x%x",
+          DEBUG("Read %d bytes on fd#%d to be sent to #%d checksum=0x%x",
                 read_count, current_event->data.fd, connected_app_fd,
                 cksum((unsigned char *)my_shm_desc->data, read_count));
 
@@ -962,6 +962,7 @@ static void *run(void *arg) {
               get_remote_socket(instance_no, current_event->data.fd, CLOSE_FD,
                                 IGNORE_ERROR);
             /* close local fd*/
+            DEBUG("Close fd %d", current_event->data.fd);
             close(current_event->data.fd);
           } else
             my_shm_desc->cmd = CMD_DATA;
