@@ -707,8 +707,8 @@ static void *run(void *arg) {
   int epollfd;
   vm_data *peer_shm_desc, *my_shm_desc;
   int data_ack, data_in;
-  int fd_int_data_ack /* peer has consumed our data */;
-  int fd_int_data_ready; /* signal the peer that there is data ready */
+  int fd_int_data_ack = -1; /* peer has consumed our data */;
+  int fd_int_data_ready = -1; /* signal the peer that there is data ready */
   long long int kick;
 
   if (instance_no >= VM_COUNT || instance_no < 0) {
