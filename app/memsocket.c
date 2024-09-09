@@ -36,7 +36,6 @@
 #define CLOSE_FD (1)
 #define IGNORE_ERROR (1)
 #define PAGE_SIZE (4096)
-#define DEBUG_ON /* TODO: debug only */
 #define DBG(fmt, ...)                                                          \
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
