@@ -5,7 +5,7 @@ obj-m := kvm_ivshmem.o
 
 # KDIR definition to be used under NixOS
 # KDIR  := /run/current-system/sw/lib/modules/$(shell uname -r)/build/
-KDIR  := /lib/modules/$(shell uname -r)/build/
+KDIR  ?= /lib/modules/$(shell uname -r)/build/
 PWD   := $(shell pwd)
 
 default:
