@@ -753,7 +753,7 @@ static void *run(void *arg) {
   }
 
   if (run_as_server)
-    wait_client_ready();
+    wait_client_ready(instance_no);
 
   while (1) {
 #ifdef DEBUG_ON
