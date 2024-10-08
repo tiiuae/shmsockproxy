@@ -581,7 +581,7 @@ static void shmem_init(int instance_no) {
     my_vmid = &vm_control->data[instance_no].server.server_vmid;
   } else {
     my_vmid = &vm_control->client_vmid;
-    vm_control->data[instance_no].server.server_vmid = UNKNOWN_PEER;
+    // vm_control->data[instance_no].server.server_vmid = UNKNOWN_PEER;
   }
   *my_vmid = vm_id;
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
