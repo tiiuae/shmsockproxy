@@ -694,7 +694,7 @@ static int cksum(unsigned char *buf, int len) {
   return res;
 }
 
-static void wait_client_ready()
+static void wait_client_ready(int instance_no)
 {
   do {
     /* check if the main client has started */
