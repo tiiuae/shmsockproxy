@@ -694,15 +694,13 @@ static int cksum(unsigned char *buf, int len) {
   return res;
 }
 
-void wait_client_ready()
+static void wait_client_ready()
 {
   do {
     /* check if the main client has started */
-    if (vm_control->client_vmid)
-      return;
     DEBUG("%s", "Waiting for client to be ready");
     sleep(2);
-  }
+  } while(!vm_control->client_vmid);
 }
 
 static void *run(void *arg) {
