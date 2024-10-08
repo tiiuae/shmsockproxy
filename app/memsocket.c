@@ -381,6 +381,15 @@ static void *host_run(void *arg) {
   } while (1);
 }
 
+static void wait_client_ready(int instance_no)
+{
+  do {
+    /* check if the main client has started */
+    DEBUG("%s", "Waiting for client to be ready");
+    sleep(2);
+  } while(!vm_control->client_vmid);
+}
+
 static void server_init(int instance_no) {
 
   struct sockaddr_un socket_name;
@@ -415,6 +424,8 @@ static void server_init(int instance_no) {
       -1) {
     FATAL("server_init: epoll_ctl: server_socket");
   }
+
+  wait_client_ready(instance_no);
 
   INFO("%s", "server initialized");
 }
@@ -694,15 +705,6 @@ static int cksum(unsigned char *buf, int len) {
   return res;
 }
 
-static void wait_client_ready(int instance_no)
-{
-  do {
-    /* check if the main client has started */
-    DEBUG("%s", "Waiting for client to be ready");
-    sleep(2);
-  } while(!vm_control->client_vmid);
-}
-
 static void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
@@ -751,9 +753,6 @@ static void *run(void *arg) {
     INFO("fd_int_data_ack=%d fd_int_data_ready=%d", fd_int_data_ack,
          fd_int_data_ready)
   }
-
-  if (run_as_server)
-    wait_client_ready(instance_no);
 
   while (1) {
 #ifdef DEBUG_ON
