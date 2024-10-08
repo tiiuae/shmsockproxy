@@ -624,6 +624,29 @@ static void shmem_init(int instance_no) {
   }
   INFO("%s", "shared memory initialized");
 }
+static void send_login(int instance_no) 
+{
+  int res;
+  struct ioctl_data ioctl_data;
+  /*
+   * Send LOGIN cmd to the client. Supply my_vmid
+   */
+  my_shm_data[instance_no]->cmd = CMD_LOGIN;
+  my_shm_data[instance_no]->fd = *my_vmid;
+  my_shm_data[instance_no]->len = 0;
+
+  ioctl_data.int_no = local_rr_int_no[instance_no];
+#ifdef DEBUG_IOCTL
+  ioctl_data.cmd = my_shm_data[instance_no]->cmd;
+  ioctl_data.fd = my_shm_data[instance_no]->fd;
+  ioctl_data.len = my_shm_data[instance_no]->len;
+#endif
+  INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no);
+  res = doorbell(instance_no, &ioctl_data);
+
+  DEBUG("Sent login vmid: %d ioctl result=%d --> vm_id=0x%x", *my_vmid, res,
+        vm_control->client_vmid);
+}
 
 static void thread_init(int instance_no) {
 
@@ -656,24 +679,7 @@ static void thread_init(int instance_no) {
     remote_rc_int_no[instance_no] = vm_control->client_vmid |
                                     (instance_no << 1) |
                                     PEER_RESOURCE_CONSUMED_INT_VEC;
-    /*
-     * Send LOGIN cmd to the client. Supply my_vmid
-     */
-    my_shm_data[instance_no]->cmd = CMD_LOGIN;
-    my_shm_data[instance_no]->fd = *my_vmid;
-    my_shm_data[instance_no]->len = 0;
-
-    ioctl_data.int_no = local_rr_int_no[instance_no];
-#ifdef DEBUG_IOCTL
-    ioctl_data.cmd = my_shm_data[instance_no]->cmd;
-    ioctl_data.fd = my_shm_data[instance_no]->fd;
-    ioctl_data.len = my_shm_data[instance_no]->len;
-#endif
-    INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no);
-    res = doorbell(instance_no, &ioctl_data);
-
-    DEBUG("Sent login vmid: %d ioctl result=%d --> vm_id=0x%x", *my_vmid, res,
-          vm_control->client_vmid);
+    send_login(instance_no);
   }
 }
 
@@ -706,6 +712,7 @@ static void *run(void *arg) {
   struct ioctl_data ioctl_data;
   unsigned int tmp;
   int epollfd;
+  int timeout = 1000; /* initial timeout used for polling for server to be ready */
   vm_data *peer_shm_desc, *my_shm_desc;
   int data_ack, data_in;
   int fd_int_data_ack = -1; /* peer has consumed our data */;
@@ -751,7 +758,11 @@ static void *run(void *arg) {
       DEBUG("%s", "Waiting for ACK");
     }
 #endif
-    nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
+    nfds = epoll_wait(epollfd, events, MAX_EVENTS, timeout);
+    if (!nfds) {
+      send_login(instance_no);
+      continue;
+    }
     if (nfds == -1) {
       FATAL("epoll_wait");
     }
@@ -775,6 +786,7 @@ static void *run(void *arg) {
                    current_event->data.fd == fd_int_data_ack;
       if (data_ack) {
         DEBUG("%s", "Received remote ACK");
+        timeout = -1; /* turn off polling for login completion */
         /* Notify the driver that we reserve the local buffer */
         if (!run_on_host) {
           ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
