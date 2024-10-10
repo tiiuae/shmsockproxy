@@ -9,8 +9,8 @@ default:
 	cp ../drivers/char/ivshmem/kvm_ivshmem.c .
 	cp ../drivers/char/ivshmem/kvm_ivshmem.h .
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
-	# mkdir -p $(MODULEDIR)
-	# install kvm_ivshmem.ko $(MODULEDIR)
+	mkdir -p $(MODULEDIR)
+	install kvm_ivshmem.ko $(MODULEDIR)
 
 # install:
 # 	echo cp kvm_ivshmem.ko $out/lib/modules/$(shell uname -r)/kernel/drivers/char
