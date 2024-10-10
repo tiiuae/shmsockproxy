@@ -2,6 +2,12 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 obj-m := kvm_ivshmem.o 
+
+# KDIR definition to be used under NixOS
+#KDIR  := /run/current-system/sw/lib/modules/$(shell uname -r)/build/
+# KDIR definition to be used under non-NixOS
+#KDIR  := /lib/modules/$(shell uname -r)/build/
+#MODULEDIR := /lib/modules/$(shell uname -r)/kernel/drivers/char
 PWD   := $(shell pwd)
 
 default:
