@@ -359,7 +359,8 @@ static void *host_run(void *arg) {
           if (peer->fd_count == VM_COUNT * 2 && !peer_idx) {
             INFO("%s", "Host configuration ready");
             pthread_cond_signal(&host_cond);
-            INFO("my physical vm id=%d", vm_id);
+            pthread_mutex_unlock(&host_fd_mutex);
+            INFO("my physical vm id=0x%x", vm_id);
           }
         } else
           ERROR("Ignored re-using peer's %d interrupt[%d] fd: %d", peer_idx,
