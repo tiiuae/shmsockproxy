@@ -118,7 +118,7 @@ void receive_file(char *socket_path) {
     };
     r_time_end = times(&time_end);
     time_report(&time_start, &time_end, r_time_start, r_time_end, read_count+1);
-    printf("Read %d bytes.", read_count);
+    printf("Read %ld bytes.", read_count);
     if (crc == CRC8_RESIDUE) 
       printf(" CRC OK\n");
     else
