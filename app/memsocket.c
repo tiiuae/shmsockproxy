@@ -16,6 +16,7 @@
 #include <sys/poll.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -258,6 +259,7 @@ int peer_index_op(int op, int vmid, int instance_no) {
     ERROR("vmid %d not found", vmid);
     FATAL("Exiting.")
   }
+  return -1;
 }
 
 int doorbell(int instance_no, struct ioctl_data *ioctl_data) {
@@ -289,6 +291,8 @@ static void *host_run(void *arg) {
   struct peer *peer;
   int peer_idx;
   struct sockaddr_un socket_name;
+
+  pthread_mutex_lock(&host_fd_mutex);
 
   /* Set up socket connection */
   ivshmemsrv_fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -326,8 +330,6 @@ static void *host_run(void *arg) {
     host_socket_fd = shm_fd;
   } else {
     DEBUG("tmp=%ld fd=%d", tmp, shm_fd);
-    if (shm_fd > 0)
-      close(shm_fd);
     FATAL("invalid ivshmem server response");
   }
   /* Process messages */
@@ -357,7 +359,6 @@ static void *host_run(void *arg) {
           if (peer->fd_count == VM_COUNT * 2 && !peer_idx) {
             INFO("%s", "Host configuration ready");
             pthread_cond_signal(&host_cond);
-            pthread_mutex_unlock(&host_fd_mutex);
             INFO("my physical vm id=%d", vm_id);
           }
         } else
@@ -394,10 +395,21 @@ static void server_init(int instance_no) {
 
   struct sockaddr_un socket_name;
   struct epoll_event ev;
+  struct stat socket_stat;
 
   /* Remove socket file if exists */
-  if (access(socket_path, F_OK) == 0) {
-    remove(socket_path);
+  if (stat(socket_path, &socket_stat) == 0) {
+    if (S_ISSOCK(socket_stat.st_mode)) {
+      if (unlink(socket_path))
+      {
+        ERROR("Socket %s already exists and cannot be deleted", socket_path);
+        FATAL("Exiting");    
+      }
+    }
+    else {
+      ERROR("Socket %s cannot be created as it already exists", socket_path);
+      FATAL("Exiting");    
+    }
   }
 
   server_socket = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -735,23 +747,14 @@ static void *run(void *arg) {
   epollfd = epollfd_full[instance_no];
 
   if (run_on_host) {
-    if (!run_as_server) {
-      fd_int_data_ack =
-          peers_on_host[0]
-              .interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
-      fd_int_data_ready =
-          peers_on_host[0]
-              .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
-    } else {
-      fd_int_data_ack =
-          peers_on_host[0]
-              .interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
-      fd_int_data_ready =
-          peers_on_host[0]
-              .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
-    }
+    fd_int_data_ack =
+        peers_on_host[0]
+            .interrupt_fd[instance_no << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
+    fd_int_data_ready =
+        peers_on_host[0]
+            .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
     INFO("fd_int_data_ack=%d fd_int_data_ready=%d", fd_int_data_ack,
-         fd_int_data_ready)
+        fd_int_data_ready)
   }
 
   while (1) {
@@ -880,14 +883,15 @@ static void *run(void *arg) {
               "shmem: received %d bytes for %d cksum=0x%x", peer_shm_desc->len,
               connected_app_fd,
               cksum((unsigned char *)peer_shm_desc->data, peer_shm_desc->len));
-          rv = send(connected_app_fd, (const void *)peer_shm_desc->data,
-                    peer_shm_desc->len, MSG_NOSIGNAL);
-          if (rv != peer_shm_desc->len) {
-            DEBUG("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
-                  connected_app_fd);
+          if (connected_app_fd > 0) {
+            rv = send(connected_app_fd, (const void *)peer_shm_desc->data,
+                      peer_shm_desc->len, MSG_NOSIGNAL);
+            if (rv != peer_shm_desc->len) {
+              DEBUG("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
+                    connected_app_fd);
+            }
+            DEBUG("%s", "Received data has been sent");
           }
-          DEBUG("%s", "Received data has been sent");
-
           if (peer_shm_desc->cmd == CMD_DATA) {
             break;
           }
@@ -1103,7 +1107,6 @@ int main(int argc, char **argv) {
     if (res) {
       FATAL("Cannot initialize the mutex");
     }
-    pthread_mutex_lock(&host_fd_mutex);
     res = pthread_create(&host_thread, NULL, host_run, (void *)(intptr_t)i);
     if (res) {
       FATAL("Cannot create the host thread");
