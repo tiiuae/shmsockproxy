@@ -383,13 +383,12 @@ static void *host_run(void *arg) {
   } while (1);
 }
 
-static void wait_client_ready(int instance_no)
-{
+static void wait_client_ready(int instance_no) {
   do {
     /* check if the main client has started */
     DEBUG("%s", "Waiting for client to be ready");
     sleep(2);
-  } while(!vm_control->client_vmid);
+  } while (!vm_control->client_vmid);
 }
 
 static void server_init(int instance_no) {
@@ -401,15 +400,13 @@ static void server_init(int instance_no) {
   /* Remove socket file if exists */
   if (stat(socket_path, &socket_stat) == 0) {
     if (S_ISSOCK(socket_stat.st_mode)) {
-      if (unlink(socket_path))
-      {
+      if (unlink(socket_path)) {
         ERROR("Socket %s already exists and cannot be deleted", socket_path);
-        FATAL("Exiting");    
+        FATAL("Exiting");
       }
-    }
-    else {
+    } else {
       ERROR("Socket %s cannot be created as it already exists", socket_path);
-      FATAL("Exiting");    
+      FATAL("Exiting");
     }
   }
 
@@ -732,7 +729,8 @@ static void *run(void *arg) {
   int epollfd;
   vm_data *peer_shm_desc, *my_shm_desc;
   int data_ack, data_in;
-  int fd_int_data_ack = -1; /* peer has consumed our data */;
+  int fd_int_data_ack = -1; /* peer has consumed our data */
+  ;
   int fd_int_data_ready = -1; /* signal the peer that there is data ready */
   long long int kick;
 
@@ -755,7 +753,7 @@ static void *run(void *arg) {
         peers_on_host[0]
             .interrupt_fd[instance_no << 1 | LOCAL_RESOURCE_READY_INT_VEC];
     INFO("fd_int_data_ack=%d fd_int_data_ready=%d", fd_int_data_ack,
-        fd_int_data_ready)
+         fd_int_data_ready)
   }
 
   while (1) {
