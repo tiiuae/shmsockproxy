@@ -26,14 +26,14 @@
 #include <linux/uio.h>
 #include <linux/version.h>
 
-#ifndef CONFIG_KVM_IVSHMEM_VM_COUNT
-#warning CONFIG_KVM_IVSHMEM_VM_COUNT not defined. Assuming 5.
-#define CONFIG_KVM_IVSHMEM_VM_COUNT (5)
+#ifndef CONFIG_KVM_IVSHMEM_SHM_SLOTS
+#warning CONFIG_KVM_IVSHMEM_SHM_SLOTS not defined. Assuming 5.
+#define CONFIG_KVM_IVSHMEM_SHM_SLOTS (5)
 #endif
 
 DEFINE_SPINLOCK(rawhide_irq_lock);
-#define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
-#define VECTORS_COUNT (2 * VM_COUNT)
+#define SHM_SLOTS (CONFIG_KVM_IVSHMEM_SHM_SLOTS)
+#define VECTORS_COUNT (2 * SHM_SLOTS)
 
 #undef DEBUG
 #ifdef DEBUG
@@ -72,12 +72,13 @@ typedef struct kvm_ivshmem_device {
   int nvectors;
 } kvm_ivshmem_device;
 
-static int irq_incoming_data[VM_COUNT];
-static int irq_ack[VM_COUNT];
-static int local_resource_count[VM_COUNT];
-static int peer_resource_count[VM_COUNT];
-static wait_queue_head_t local_data_ready_wait_queue[VM_COUNT];
-static wait_queue_head_t peer_data_ready_wait_queue[VM_COUNT];
+static int irq_incoming_data[SHM_SLOTS];
+static int irq_ack[SHM_SLOTS];
+static int local_resource_count[SHM_SLOTS];
+static int peer_resource_count[SHM_SLOTS];
+static wait_queue_head_t local_data_ready_wait_queue[SHM_SLOTS];
+static wait_queue_head_t peer_data_ready_wait_queue[SHM_SLOTS];
+static char slots_enabled[SHM_SLOTS];
 
 static kvm_ivshmem_device kvm_ivshmem_dev;
 
@@ -116,7 +117,6 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
 static uint64_t flataddr = 0x0;
 module_param_named(flataddr, flataddr, ullong, S_IRUGO);
 
-// TODO: debug
 static int in_counter = 0, out_counter = 0;
 
 MODULE_DEVICE_TABLE(pci, kvm_ivshmem_id_table);
@@ -135,7 +135,6 @@ static struct pci_driver kvm_ivshmem_pci_driver = {
 static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                               unsigned long arg) {
 
-
   int rv = 0;
   unsigned long flags;
   uint32_t msg;
@@ -143,10 +142,10 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx",
                       (unsigned long int)filp->private_data, cmd, arg);
-  if ((unsigned long int)filp->private_data >= VM_COUNT &&
-      cmd != SHMEM_IOCSETINSTANCENO) {
-    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld > VM_COUNT=%d",
-           (unsigned long int)filp->private_data, VM_COUNT);
+  if ((unsigned long int)filp->private_data >= SHM_SLOTS &&
+      cmd != SHMEM_IOCSETINSTANCENO && cmd != SHMEM_IOCIVPOSN) {
+    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid slot no %ld > SHM_SLOTS=%d",
+           (unsigned long int)filp->private_data, SHM_SLOTS);
     return -EINVAL;
   }
   switch (cmd) {
@@ -202,20 +201,25 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCSETINSTANCENO:
     spin_lock_irqsave(&rawhide_irq_lock, flags);
-    if (arg >= VM_COUNT) {
-      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", arg);
+    if (arg >= SHM_SLOTS) {
+      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid slot no %ld", arg);
       rv = -EINVAL;
       goto unlock;
     }
+    if (slots_enabled[arg]) {
+      printk(KERN_ERR "KVM_IVSHMEM: ioctl: slot #%ld already opened", arg);
+      rv = -EBUSY; /* was: 0. return -EBUSY cased app SIGSEG crash */
+      goto unlock;
+    }
     filp->private_data = (void *)arg;
-    printk(KERN_INFO
-           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
+    printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set slot no %ld",
            arg);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);
     init_waitqueue_head(&peer_data_ready_wait_queue[arg]);
     local_resource_count[arg] = 1;
     peer_resource_count[arg] = 0;
+    slots_enabled[arg] = 1;
   unlock:
     spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     break;
@@ -312,7 +316,8 @@ static ssize_t kvm_ivshmem_read(struct file *filp, char *buffer, size_t len,
   if (len == 0)
     return 0;
 
-  bytes_read = copy_to_user(buffer, (void*)  kvm_ivshmem_dev.base_addr + offset, len);
+  bytes_read =
+      copy_to_user(buffer, (void *)kvm_ivshmem_dev.base_addr + offset, len);
   if (bytes_read > 0) {
     return -EFAULT;
   }
@@ -370,7 +375,7 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
     return 0;
 
   bytes_written =
-      copy_from_user((void*)  kvm_ivshmem_dev.base_addr + offset, buffer, len);
+      copy_from_user((void *)kvm_ivshmem_dev.base_addr + offset, buffer, len);
   if (bytes_written > 0) {
     return -EFAULT;
   }
@@ -392,8 +397,8 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   }
 
   KVM_IVSHMEM_DPRINTK("irq %d", irq);
-  for (i = 0; i < VM_COUNT; i++) {
-    if (irq == irq_incoming_data[i]) {
+  for (i = 0; i < SHM_SLOTS; i++) {
+    if (irq == irq_incoming_data[i] && slots_enabled[i]) {
       out_counter++;
       KVM_IVSHMEM_DPRINTK("%d wake up peer_data_ready_wait_queue count=%d", i,
                           out_counter);
@@ -407,7 +412,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       wake_up_interruptible(&peer_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
-    if (irq == irq_ack[i]) {
+    if (irq == irq_ack[i] && slots_enabled[i]) {
       in_counter++;
       KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue count=%d", i,
                           in_counter);
@@ -471,7 +476,7 @@ static int request_msix_vectors(struct kvm_ivshmem_device *ivs_info,
       irq_incoming_data[i >> 1] = n;
       KVM_IVSHMEM_DPRINTK("Using interrupt #%d for incoming data for vm %d", n,
                           i >> 1);
-    // vector 0 is used for for sending acknowledgments
+      // vector 0 is used for for sending acknowledgments
     } else {
       irq_ack[i >> 1] = n;
       KVM_IVSHMEM_DPRINTK("Using interrupt #%d for ACKs for vm %d", n, i >> 1);
@@ -507,13 +512,14 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   kvm_ivshmem_dev.ioaddr_size = pci_resource_len(pdev, 2);
 
   if (flataddr) {
-    kvm_ivshmem_dev.base_addr = memremap(flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
-    printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p", flataddr,
-       kvm_ivshmem_dev.base_addr);
-  }
-  else {
+    kvm_ivshmem_dev.base_addr =
+        memremap(flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
+    printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p",
+           flataddr, kvm_ivshmem_dev.base_addr);
+  } else {
     kvm_ivshmem_dev.base_addr = pci_iomap(pdev, 2, 0);
-    printk(KERN_INFO "KVM_IVSHMEM: using PCI iomap base = 0x%p", kvm_ivshmem_dev.base_addr);
+    printk(KERN_INFO "KVM_IVSHMEM: using PCI iomap base = 0x%p",
+           kvm_ivshmem_dev.base_addr);
   }
 
   if (!kvm_ivshmem_dev.base_addr) {
@@ -522,8 +528,10 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
     goto pci_release;
   }
 
-  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr = %p flataddr = 0x%llx",
-         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, flataddr);
+  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr "
+                   "= %p flataddr = 0x%llx",
+         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size,
+         kvm_ivshmem_dev.base_addr, flataddr);
 
   /* Clear the the shared memory*/
   memset_io(kvm_ivshmem_dev.base_addr, kvm_ivshmem_dev.ioaddr_size, 0);
@@ -554,8 +562,8 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   return 0;
 
 reg_release:
-if (!flataddr)
-  pci_iounmap(pdev, kvm_ivshmem_dev.base_addr);
+  if (!flataddr)
+    pci_iounmap(pdev, kvm_ivshmem_dev.base_addr);
 pci_release:
   pci_release_regions(pdev);
   if (flataddr)
@@ -605,11 +613,12 @@ static int __init kvm_ivshmem_init_module(void) {
     goto error;
   }
 
-  for (i = 0; i < VM_COUNT; i++) {
+  for (i = 0; i < SHM_SLOTS; i++) {
     init_waitqueue_head(&local_data_ready_wait_queue[i]);
     init_waitqueue_head(&peer_data_ready_wait_queue[i]);
     local_resource_count[i] = 1;
     peer_resource_count[i] = 0;
+    slots_enabled[i] = 0;
   }
   return 0;
 
@@ -619,12 +628,16 @@ error:
 }
 
 static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
-  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device. Using memory @ %p", kvm_ivshmem_dev.base_addr);
+  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device. Using memory @ %p",
+         kvm_ivshmem_dev.base_addr);
   filp->private_data = (void *)(unsigned long)-1;
   return 0;
 }
 
 static int kvm_ivshmem_release(struct inode *inode, struct file *filp) {
+  if ((unsigned long int)filp->private_data < SHM_SLOTS) {
+    slots_enabled[(unsigned long int)filp->private_data] = 0;
+  }
   return 0;
 }
 
@@ -635,7 +648,7 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
   uint64_t start;
 
   off = vma->vm_pgoff << PAGE_SHIFT;
-  start = flataddr? flataddr:(uint64_t)kvm_ivshmem_dev.ioaddr;
+  start = flataddr ? flataddr : (uint64_t)kvm_ivshmem_dev.ioaddr;
 
   len = PAGE_ALIGN((start & ~PAGE_MASK) + kvm_ivshmem_dev.ioaddr_size);
   start &= PAGE_MASK;
@@ -653,14 +666,14 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   off += start;
   vma->vm_pgoff = off >> PAGE_SHIFT;
-  #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,3,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
   vm_flags_mod(vma, VM_SHARED, 0);
-  #else
+#else
   vma->vm_flags |= VM_SHARED;
-  #endif
+#endif
 
   if (remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
-                         vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
+                      vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
     KVM_IVSHMEM_DPRINTK("%ld mmap failed",
                         (unsigned long int)filp->private_data);
     return -ENXIO;
