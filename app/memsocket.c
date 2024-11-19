@@ -32,7 +32,7 @@
 #define SHM_DEVICE_FN "/dev/ivshmem"
 
 #define MAX_EVENTS (1024)
-#define MAX_FDS (10)
+#define MAX_FDS (100)
 #define SHMEM_POLL_TIMEOUT (3000)
 #define SHMEM_BUFFER_SIZE (512 * 1024)
 #define UNKNOWN_PEER (-1)
@@ -91,6 +91,19 @@
 #define FATAL(msg, ...)                                                        \
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
+                                                                               \
+    if (vm_control) {                                                          \
+      if (!run_as_client) {                                                    \
+        int i;                                                                 \
+        for (i = 0; i < SHM_SLOTS; i++) {                                      \
+          if (client_listen_mask & 1 << i) {                                   \
+            vm_control->data[i].server.vmid = 0;                               \
+          }                                                                    \
+        }                                                                      \
+      } else {                                                                 \
+        vm_control->data[slot].client.vmid = 0;                                \
+      }                                                                        \
+    }                                                                          \
     snprintf(tmp2, sizeof(tmp2), msg);                                         \
     snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d]: %s\n", slot, __FUNCTION__,     \
              __LINE__, tmp2);                                                  \
@@ -142,6 +155,7 @@ volatile int *my_vmid = NULL;
 int vm_id = -1;
 vm_data *my_shm_data[SHM_SLOTS], *peer_shm_data[SHM_SLOTS];
 int run_as_client = -1;
+int force_vmid = 0;
 int local_rr_int_no[SHM_SLOTS], remote_rc_int_no[SHM_SLOTS];
 pthread_t server_threads[SHM_SLOTS];
 long long int client_listen_mask = 0;
@@ -153,8 +167,11 @@ struct {
   } data[SHM_SLOTS];
 } *vm_control;
 
+static const char warning_other_instance[] = "Exiting if the '-f' flag was "
+                                             "not used";
 static const char usage_string[] =
-    "Usage: memsocket [-h <host_ivshmem_socket_path>] { -s <sink_socket_path> "
+    "Usage: memsocket [-h <host_ivshmem_socket_path>] [-f] { -s "
+    "<sink_socket_path> "
     "-l <slot_list> | -c <source_socket_path> <slot> }\n\n"
     "Options:\n"
     "  -s <sink_socket_path>\n"
@@ -172,6 +189,8 @@ static const char usage_string[] =
     "      Specify the ivshmem socket path (shared memory interface) to be "
     "used\n"
     "      when running on the host system.\n\n"
+    "  -f\n"
+    "      Force run when other instance exited unclearly\n\n"
     "Examples:\n"
     "  1. Start socket receiving for slots 2 and 3:\n"
     "       memsocket -s /run/user/1000/pipewire-0 -l 2,3\n\n"
@@ -483,7 +502,7 @@ static int wayland_connect(int slot) {
 
   struct sockaddr_un socket_name;
   struct epoll_event ev;
-  int wayland_fd;
+  int wayland_fd, res;
 
   wayland_fd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (wayland_fd < 0) {
@@ -497,7 +516,9 @@ static int wayland_connect(int slot) {
   strncpy(socket_name.sun_path, socket_path, sizeof(socket_name.sun_path) - 1);
   if (connect(wayland_fd, (struct sockaddr *)&socket_name,
               sizeof(socket_name)) < 0) {
-    FATAL("connect");
+    res = -errno;
+    ERROR("%s", "cannot connect to the sink socket");
+    return res;
   }
 
   ev.events = EPOLLIN;
@@ -510,19 +531,22 @@ static int wayland_connect(int slot) {
   return wayland_fd;
 }
 
-static void make_wayland_connection(int slot, int peer_fd) {
+static int make_wayland_connection(int slot, int peer_fd) {
 
-  int i;
+  int i, tmp;
 
   for (i = 0; i < MAX_FDS; i++) {
     if (fd_map[slot][i].my_fd == -1) {
-      fd_map[slot][i].my_fd = wayland_connect(slot);
-      fd_map[slot][i].remote_fd = peer_fd;
-      return;
+      tmp = wayland_connect(slot);
+      if (tmp > 0) {
+        fd_map[slot][i].my_fd = tmp;
+        fd_map[slot][i].remote_fd = peer_fd;
+      }
+      return tmp;
     }
   }
-  ERROR("FAILED fd#%d", peer_fd);
-  FATAL("fd_map table full");
+  ERROR("fd_map table full. Failed fd#%d", peer_fd);
+  return -1;
 }
 
 static int map_peer_fd(int slot, int peer_fd, int close_fd) {
@@ -585,7 +609,10 @@ static void shmem_init(int slot) {
       FATAL("Open " SHM_DEVICE_FN);
     }
     INFO("shared memory fd: %d", shmem_fd[slot]);
-    ioctl(shmem_fd[slot], SHMEM_IOCSETINSTANCENO, slot);
+    res = ioctl(shmem_fd[slot], SHMEM_IOCSETINSTANCENO, slot);
+    if (res) {
+      FATAL("Setting instance id failed");
+    }
   }
 
   /* Get shared memory: check size and mmap it */
@@ -629,21 +656,22 @@ static void shmem_init(int slot) {
     my_vmid = &vm_control->data[slot].client.vmid;
   } else {
     my_vmid = &vm_control->data[slot].server.vmid;
-    /* Clear the vm_id and wait longer then timeout in order to let clients
-    know the server has restarted */
-    for (int i = 0; i < SHM_SLOTS; i++) {
-      if (client_listen_mask & 1 << i) {
-        vm_control->data[i].server.vmid = 0;
-      }
-    }
-    sleep(3 * SHMEM_POLL_TIMEOUT / 2 / 1000);
-    for (int i = 0; i < SHM_SLOTS; i++) {
-      if (client_listen_mask & 1 << i) {
-        vm_control->data[i].server.vmid = vm_id;
-      }
+  }
+  if (*my_vmid) {
+    ERROR("Another client/server from VM 0x%x may be running ", *my_vmid);
+    if (force_vmid) {
+      ERROR("%s", warning_other_instance);
+    } else {
+      FATAL(warning_other_instance);
     }
   }
   *my_vmid = vm_id;
+  if (!run_as_client) { /* Clear the vm_id and wait longer then client's timeout
+                     in order to let it know the server has restarted */
+    vm_control->data[slot].server.vmid = 0;
+    sleep(3 * SHMEM_POLL_TIMEOUT / 2 / 1000);
+    vm_control->data[slot].server.vmid = vm_id;
+  }
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
   if (run_as_client) {
     INFO("%s", "client");
@@ -696,6 +724,7 @@ static void thread_init(int slot) {
 
   int res;
   struct ioctl_data ioctl_data;
+  struct stat server_socket_stat;
 
   fd_map_clear(slot);
 
@@ -754,6 +783,10 @@ static void thread_init(int slot) {
 
     DBG("Sent login vmid: 0x%x ioctl result=%d to server_vm_id=0x%x", *my_vmid,
         res, peer_shm_data[slot]->vmid);
+  } else { /* run as server */
+    if (stat(socket_path, &server_socket_stat)) {
+      ERROR("Sink socket %s doesn't exist", socket_path);
+    }
   }
 }
 
@@ -778,7 +811,7 @@ static void send_logout(int slot, vm_data *my_shm_desc) {
   struct ioctl_data ioctl_data;
 
   my_shm_desc->cmd = CMD_LOGOUT;
-  my_shm_desc->fd = 0;
+  my_shm_desc->fd = *my_vmid;
   my_shm_desc->len = 0;
   ioctl_data.int_no = local_rr_int_no[slot];
 
@@ -840,7 +873,7 @@ static void *run(void *arg) {
       FATAL("epoll_wait");
     }
     if (vm_control->data[slot].server.vmid == 0) {
-      FATAL("memsocket server died");
+      FATAL("memsocket server died/restarted or another instance is running");
     }
     if (nfds == 0) { /* timeout */
       continue;
@@ -862,17 +895,8 @@ static void *run(void *arg) {
         struct signalfd_siginfo siginfo;
         read(signal_fd, &siginfo, sizeof(siginfo)); // Read the signal info
         if (siginfo.ssi_signo == SIGINT) {
-          DBG("%s", "SIGINT: exiting.");
           send_logout(slot, my_shm_desc);
-          if (!run_as_client) {
-            int i;
-            for (i = 0; i < SHM_SLOTS; i++) {
-              if (client_listen_mask & 1 << i) {
-                vm_control->data[i].server.vmid = 0;
-              }
-            }
-          }
-          exit(EXIT_FAILURE);
+          FATAL("SIGINT: exiting.");
         }
       }
 
@@ -885,6 +909,19 @@ static void *run(void *arg) {
                    current_event->data.fd == fd_int_data_ack;
       if (data_ack) {
         DEBUG("%s", "Received remote ACK");
+        if (my_shm_desc->cmd == CMD_LOGIN && run_as_client) {
+          DBG("%s", "Connected to the server");
+        }
+        if (my_shm_desc->fd < 0) {
+          errno = -my_shm_desc->fd;
+          ERROR("Server error 0x%x for the command #%d", my_shm_desc->fd,
+                my_shm_desc->cmd);
+          if (my_shm_desc->cmd == CMD_CONNECT) {
+            ERROR("Closing fd #%d due to error on server site",
+                  connected_app_fd);
+            close(connected_app_fd);
+          }
+        }
         /* Notify the driver that we reserve the local buffer */
         if (!run_on_host) {
           ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
@@ -935,8 +972,8 @@ static void *run(void *arg) {
       }
 
       /*
-       * Server and client: Received interrupt from peer VM - there is incoming
-       * data in the shared memory - EPOLLIN
+       * Server and client: Received interrupt from peer VM - there is
+       * incoming data in the shared memory - EPOLLIN
        */
       INFO("Possible incoming data: current_event->events=0x%x "
            "current_event->data.fd=%d "
@@ -966,7 +1003,7 @@ static void *run(void *arg) {
           remote_rc_int_no[slot] =
               peer_shm_desc->fd | (slot << 1) | PEER_RESOURCE_CONSUMED_INT_VEC;
 
-          peer_shm_desc->fd = -1;
+          peer_shm_desc->fd = 0; /* result */
           break;
         case CMD_LOGOUT:
           DBG("Received logout request from 0x%x", peer_shm_desc->fd);
@@ -974,8 +1011,10 @@ static void *run(void *arg) {
           close_fds(slot);
           if (run_as_client) {
             DBG("%s", "Server has terminated. Exiting.");
+            peer_shm_desc->fd = -1;
             return NULL;
           }
+          peer_shm_desc->fd = 0; /* result */
           break;
         case CMD_DATA:
         case CMD_DATA_CLOSE:
@@ -990,10 +1029,13 @@ static void *run(void *arg) {
             rv = send(connected_app_fd, (const void *)peer_shm_desc->data,
                       peer_shm_desc->len, MSG_NOSIGNAL);
             if (rv != peer_shm_desc->len) {
-              DEBUG("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
+              ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
                     connected_app_fd);
             }
             DEBUG("%s", "Received data has been sent");
+            peer_shm_desc->fd = rv;
+          } else {
+            peer_shm_desc->fd = -1;
           }
           if (peer_shm_desc->cmd == CMD_DATA) {
             break;
@@ -1013,24 +1055,25 @@ static void *run(void *arg) {
               ERROR0("epoll_ctl: EPOLL_CTL_DEL");
             }
             close(connected_app_fd);
+            peer_shm_desc->fd = 0; /* result */
+          } else {
+            peer_shm_desc->fd = -1; /* result */
           }
           break;
         case CMD_CONNECT:
-          make_wayland_connection(slot, peer_shm_desc->fd);
+          peer_shm_desc->fd = make_wayland_connection(slot, peer_shm_desc->fd);
           break;
         default:
           ERROR("Invalid CMD 0x%x from peer!", peer_shm_desc->cmd);
+          peer_shm_desc->fd = -1;
           break;
         } /* switch peer_shm_desc->cmd */
 
         /* Signal the other side that the data buffer has been processed */
         DEBUG("%s", "Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC");
-        peer_shm_desc->cmd = -1;
         ioctl_data.int_no = remote_rc_int_no[slot];
         if (!run_on_host) {
 #ifdef DEBUG_IOCTL
-          ioctl_data.cmd = -1;
-          ioctl_data.fd = 0;
           ioctl_data.len = 0;
 #endif
         } else {
@@ -1140,7 +1183,8 @@ static void *run(void *arg) {
           ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", current_event->data.fd);
         }
         close(current_event->data.fd);
-        /* If the shared memory buffer is busy, don't proceed any further events
+        /* If the shared memory buffer is busy, don't proceed any further
+         * events
          */
         if (epollfd == epollfd_limited[slot])
           break;
@@ -1163,7 +1207,7 @@ int main(int argc, char **argv) {
   int run_mode = 0;
   pthread_t threads[SHM_SLOTS], host_thread;
 
-  while ((opt = getopt(argc, argv, "c:s:h:l:")) != -1) {
+  while ((opt = getopt(argc, argv, "c:s:h:l:f")) != -1) {
     switch (opt) {
     case 's':
       run_as_client = 0;
@@ -1175,13 +1219,6 @@ int main(int argc, char **argv) {
       run_as_client = 1;
       socket_path = optarg;
       run_mode++;
-      if (optind >= argc)
-        goto wrong_args;
-      if (strspn(argv[optind], "0123456789") != strlen(argv[optind])) {
-        fprintf(stderr, "-c: invalid vm_id value %s\n", argv[optind]);
-        goto wrong_args;
-      }
-      slot = atoi(argv[optind]);
       break;
 
     case 'h':
@@ -1197,7 +1234,7 @@ int main(int argc, char **argv) {
           goto invalid_value;
         }
         int value = atoi(token);
-        if (value >= SHM_SLOTS) {
+        if (value >= SHM_SLOTS || value < -1) {
           goto invalid_value;
         }
         if (value == -1) {
@@ -1208,12 +1245,29 @@ int main(int argc, char **argv) {
         continue;
       invalid_value:
         fprintf(stderr, "-l: invalid value %s\n", token);
-        goto wrong_args;
+        goto exit;
       }
+      break;
+
+    case 'f':
+      force_vmid = 1;
       break;
 
     default: /* '?' */
       goto wrong_args;
+    }
+  }
+
+  if (argc > optind) {
+    if (run_as_client) { /* extract positional parameter - client id*/
+      if (strspn(argv[optind], "0123456789") != strlen(argv[optind])) {
+        fprintf(stderr, "-c: invalid vm_id value %s\n", argv[optind]);
+        goto exit;
+      }
+      slot = atoi(argv[optind]);
+    } else {
+      fprintf(stderr, "Ignored extra parameter(s): %s\n", argv[optind]);
+      goto exit;
     }
   }
 
@@ -1300,5 +1354,6 @@ int main(int argc, char **argv) {
   return 0;
 wrong_args:
   print_usage_and_exit();
+exit:
   return 1;
 }

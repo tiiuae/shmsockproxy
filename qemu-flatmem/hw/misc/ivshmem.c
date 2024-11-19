@@ -525,10 +525,9 @@ static void process_msg_shmem(IVShmemState *s, int fd, Error **errp)
     }
 
     /* mmap the region and map into the BAR2 */
-    memory_region_init_ram_from_fd(&s->server_bar2, OBJECT(s), "ivshmem.bar2",
-                                   size, RAM_SHARED, fd, 0, &local_err);
-    if (local_err) {
-        error_propagate(errp, local_err);
+    if (!memory_region_init_ram_from_fd(&s->server_bar2, OBJECT(s),
+                                        "ivshmem.bar2", size, RAM_SHARED,
+                                        fd, 0, errp)) {
         return;
     }
     s->ivshmem_bar2 = &s->server_bar2;
@@ -862,6 +861,7 @@ static void ivshmem_write_config(PCIDevice *pdev, uint32_t address,
 
 static void ivshmem_common_realize(PCIDevice *dev, Error **errp)
 {
+    ERRP_GUARD();
     IVShmemState *s = IVSHMEM_COMMON(dev);
     Error *err = NULL;
     uint8_t *pci_conf;
@@ -931,8 +931,7 @@ static void ivshmem_common_realize(PCIDevice *dev, Error **errp)
     if (!ivshmem_is_master(s)) {
         error_setg(&s->migration_blocker,
                    "Migration is disabled when using feature 'peer mode' in device 'ivshmem'");
-        if (migrate_add_blocker(s->migration_blocker, errp) < 0) {
-            error_free(s->migration_blocker);
+        if (migrate_add_blocker(&s->migration_blocker, errp) < 0) {
             return;
         }
     }
@@ -950,10 +949,7 @@ static void ivshmem_exit(PCIDevice *dev)
     IVShmemState *s = IVSHMEM_COMMON(dev);
     int i;
 
-    if (s->migration_blocker) {
-        migrate_del_blocker(s->migration_blocker);
-        error_free(s->migration_blocker);
-    }
+    migrate_del_blocker(&s->migration_blocker);
 
     if (memory_region_is_mapped(s->ivshmem_bar2)) {
         if (!s->hostmem) {
@@ -1047,7 +1043,7 @@ static const VMStateDescription ivshmem_plain_vmsd = {
     .minimum_version_id = 0,
     .pre_load = ivshmem_pre_load,
     .post_load = ivshmem_post_load,
-    .fields = (VMStateField[]) {
+    .fields = (const VMStateField[]) {
         VMSTATE_PCI_DEVICE(parent_obj, IVShmemState),
         VMSTATE_UINT32(intrstatus, IVShmemState),
         VMSTATE_UINT32(intrmask, IVShmemState),
@@ -1101,7 +1097,7 @@ static const VMStateDescription ivshmem_doorbell_vmsd = {
     .minimum_version_id = 0,
     .pre_load = ivshmem_pre_load,
     .post_load = ivshmem_post_load,
-    .fields = (VMStateField[]) {
+    .fields = (const VMStateField[]) {
         VMSTATE_PCI_DEVICE(parent_obj, IVShmemState),
         VMSTATE_MSIX(parent_obj, IVShmemState),
         VMSTATE_UINT32(intrstatus, IVShmemState),

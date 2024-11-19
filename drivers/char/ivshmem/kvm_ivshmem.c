@@ -78,6 +78,7 @@ static int local_resource_count[SHM_SLOTS];
 static int peer_resource_count[SHM_SLOTS];
 static wait_queue_head_t local_data_ready_wait_queue[SHM_SLOTS];
 static wait_queue_head_t peer_data_ready_wait_queue[SHM_SLOTS];
+static char slots_enabled[SHM_SLOTS];
 
 static kvm_ivshmem_device kvm_ivshmem_dev;
 
@@ -142,7 +143,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx",
                       (unsigned long int)filp->private_data, cmd, arg);
   if ((unsigned long int)filp->private_data >= SHM_SLOTS &&
-      cmd != SHMEM_IOCSETINSTANCENO) {
+      cmd != SHMEM_IOCSETINSTANCENO && cmd != SHMEM_IOCIVPOSN) {
     printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid slot no %ld > SHM_SLOTS=%d",
            (unsigned long int)filp->private_data, SHM_SLOTS);
     return -EINVAL;
@@ -205,6 +206,11 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       rv = -EINVAL;
       goto unlock;
     }
+    if (slots_enabled[arg]) {
+      printk(KERN_ERR "KVM_IVSHMEM: ioctl: slot #%ld already opened", arg);
+      rv = -EBUSY; /* was: 0. return -EBUSY cased app SIGSEG crash */
+      goto unlock;
+    }
     filp->private_data = (void *)arg;
     printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set slot no %ld",
            arg);
@@ -213,6 +219,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     init_waitqueue_head(&peer_data_ready_wait_queue[arg]);
     local_resource_count[arg] = 1;
     peer_resource_count[arg] = 0;
+    slots_enabled[arg] = 1;
   unlock:
     spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     break;
@@ -391,7 +398,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
 
   KVM_IVSHMEM_DPRINTK("irq %d", irq);
   for (i = 0; i < SHM_SLOTS; i++) {
-    if (irq == irq_incoming_data[i]) {
+    if (irq == irq_incoming_data[i] && slots_enabled[i]) {
       out_counter++;
       KVM_IVSHMEM_DPRINTK("%d wake up peer_data_ready_wait_queue count=%d", i,
                           out_counter);
@@ -405,7 +412,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
       wake_up_interruptible(&peer_data_ready_wait_queue[i]);
       return IRQ_HANDLED;
     }
-    if (irq == irq_ack[i]) {
+    if (irq == irq_ack[i] && slots_enabled[i]) {
       in_counter++;
       KVM_IVSHMEM_DPRINTK("%d wake up local_data_ready_wait_queue count=%d", i,
                           in_counter);
@@ -611,6 +618,7 @@ static int __init kvm_ivshmem_init_module(void) {
     init_waitqueue_head(&peer_data_ready_wait_queue[i]);
     local_resource_count[i] = 1;
     peer_resource_count[i] = 0;
+    slots_enabled[i] = 0;
   }
   return 0;
 
@@ -627,6 +635,9 @@ static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
 }
 
 static int kvm_ivshmem_release(struct inode *inode, struct file *filp) {
+  if ((unsigned long int)filp->private_data < SHM_SLOTS) {
+    slots_enabled[(unsigned long int)filp->private_data] = 0;
+  }
   return 0;
 }
 
