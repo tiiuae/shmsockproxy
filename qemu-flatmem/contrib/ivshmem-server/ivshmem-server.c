@@ -347,6 +347,7 @@ ivshmem_server_start(IvshmemServer *server)
 
     server->sock_fd = sock_fd;
     server->shm_fd = shm_fd;
+    server->cur_id = 1;
 
     return 0;
 
