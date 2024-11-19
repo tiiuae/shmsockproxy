@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,7 @@
 #include <sys/mman.h>
 #include <sys/poll.h>
 #include <sys/select.h>
+#include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -112,7 +114,7 @@ typedef struct {
 
 int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
 char *socket_path = NULL;
-int server_socket = -1, shmem_fd[VM_COUNT];
+int server_socket = -1, shmem_fd[VM_COUNT], signal_fd = -1;
 
 /* Variables related with running on host
    and talking to the ivshmem server */
@@ -134,6 +136,8 @@ vm_data *my_shm_data[VM_COUNT], *peer_shm_data[VM_COUNT];
 int run_as_server = -1;
 int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
 pthread_t server_threads[VM_COUNT];
+long long int client_listen_mask = 0;
+
 struct {
   volatile int client_vmid;
   struct {
@@ -142,8 +146,9 @@ struct {
   } data[VM_COUNT];
 } *vm_control;
 
-static const char usage_string[] = "Usage: memsocket { -c socket_path [-h "
-                                   "socket_path] | -s socket_path vmid }\n";
+static const char usage_string[] =
+    "Usage: memsocket { -c socket_path [-h "
+    "socket_path] -l vmid_1[,vmid_2][...]| -s socket_path vmid }\n";
 
 static void report(const char *msg, int terminate) {
 
@@ -662,6 +667,24 @@ static void thread_init(int instance_no) {
     FATAL("server_init: epoll_create1");
   }
 
+  /* Turn signal into file descriptor */
+  sigset_t mask;
+  struct epoll_event ev;
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGINT);
+  sigprocmask(SIG_BLOCK, &mask, NULL); // Block SIGINT signal
+  signal_fd = signalfd(-1, &mask, 0);  // Create fd for the SIGINT signal
+  ev.events = EPOLLIN;
+  ev.data.fd = signal_fd;
+  if (epoll_ctl(epollfd_limited[instance_no], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
+      -1) {
+    ERROR("%s", "epoll_ctl: -1");
+  }
+  if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
+      -1) {
+    ERROR("%s", "epoll_ctl: -1");
+  }
+
   shmem_init(instance_no);
 
   if (run_as_server) {
@@ -729,8 +752,7 @@ static void *run(void *arg) {
   int epollfd;
   vm_data *peer_shm_desc, *my_shm_desc;
   int data_ack, data_in;
-  int fd_int_data_ack = -1; /* peer has consumed our data */
-  ;
+  int fd_int_data_ack = -1;   /* peer has consumed our data */
   int fd_int_data_ready = -1; /* signal the peer that there is data ready */
   long long int kick;
 
@@ -779,6 +801,16 @@ static void *run(void *arg) {
       DBG("Event index=%d 0x%x on fd %d inout=%d-%d", n, current_event->events,
           current_event->data.fd, tmp & 0xffff, tmp >> 16);
 #endif
+      /* Check for Ctrl-C */
+      if (current_event->data.fd == signal_fd) {
+        struct signalfd_siginfo siginfo;
+        read(signal_fd, &siginfo, sizeof(siginfo)); // Read the signal info
+        if (siginfo.ssi_signo == SIGINT) {
+          INFO("SIGINT received. Exiting.")
+          exit(EXIT_FAILURE);
+        }
+      }
+
       /* Check for ACK from the peer via shared memory */
       if (!run_on_host)
         data_ack = current_event->events & EPOLLOUT &&
@@ -1059,7 +1091,7 @@ int main(int argc, char **argv) {
   int run_mode = 0;
   pthread_t threads[VM_COUNT], host_thread;
 
-  while ((opt = getopt(argc, argv, "c:s:h:")) != -1) {
+  while ((opt = getopt(argc, argv, "c:s:h:l:")) != -1) {
     switch (opt) {
     case 'c':
       run_as_server = 0;
@@ -1073,6 +1105,10 @@ int main(int argc, char **argv) {
       run_mode++;
       if (optind >= argc)
         goto wrong_args;
+      if (strspn(argv[optind], "0123456789") != strlen(argv[optind])) {
+        fprintf(stderr, "-s: invalid vm_id value %s\n", argv[optind]);
+        goto wrong_args;
+      }
       instance_no = atoi(argv[optind]);
       break;
 
@@ -1081,13 +1117,34 @@ int main(int argc, char **argv) {
       ivshmem_socket_path = optarg;
       break;
 
+    case 'l':
+      /* input is a list of integers */
+      char *token = strtok(optarg, ",");
+      while (token != NULL) {
+        if (strspn(token, "0123456789") != strlen(token)) {
+          goto invalid_value;
+        }
+        int value = atoi(token);
+        if (value >= VM_COUNT) {
+          goto invalid_value;
+        }
+        client_listen_mask |= 1 << value;
+        token = strtok(NULL, ",");
+        continue;
+      invalid_value:
+        fprintf(stderr, "-l: invalid value %s\n", token);
+        goto wrong_args;
+      }
+      break;
+
     default: /* '?' */
       goto wrong_args;
     }
   }
 
   if (run_mode > 1 || run_as_server < 0 ||
-      (instance_no < 0 && run_as_server > 0))
+      (instance_no < 0 && run_as_server > 0) ||
+      (!client_listen_mask && !run_as_server))
     goto wrong_args;
 
   for (i = 0; i < VM_COUNT; i++) {
@@ -1114,14 +1171,25 @@ int main(int argc, char **argv) {
 
   /* On client site start thread for each display VM */
   if (run_as_server == 0) {
+    printf("client_listen_mask=0x%llx\n", client_listen_mask); // TODO
     for (i = 0; i < VM_COUNT; i++) {
+      if (!(client_listen_mask & 1 << i)) {
+        continue;
+      }
+
+      printf("Client #%d\n", i); // TODO
       res = pthread_create(&threads[i], NULL, run, (void *)(intptr_t)i);
       if (res) {
         ERROR("Thread id=%d", i);
         FATAL("Cannot create a thread");
       }
     }
+
     for (i = 0; i < VM_COUNT; i++) {
+      if (!(client_listen_mask & 1 << i)) {
+        continue;
+      }
+
       res = pthread_join(threads[i], NULL);
       if (res) {
         ERROR("error %d waiting for the thread #%d", res, i);
