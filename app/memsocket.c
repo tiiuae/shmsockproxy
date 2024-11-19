@@ -32,7 +32,7 @@
 #define SHM_DEVICE_FN "/dev/ivshmem"
 
 #define MAX_EVENTS (1024)
-#define MAX_CLIENTS (10)
+#define MAX_FDS (10)
 #define SHMEM_POLL_TIMEOUT (3000)
 #define SHMEM_BUFFER_SIZE (512 * 1024)
 #define UNKNOWN_PEER (-1)
@@ -49,7 +49,8 @@
     report(tmp1, 0);                                                           \
   }
 
-#ifndef DEBUG_ON
+// TODO
+#ifndef DEBUG_OFF 
 #define DEBUG(fmt, ...)                                                        \
   {}
 #else
@@ -102,11 +103,11 @@ enum { CMD_LOGIN, CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_DATA_CLOSE };
 struct {
   int my_fd;
   int remote_fd;
-} fd_map[VM_COUNT][MAX_CLIENTS];
+} fd_map[VM_COUNT][MAX_FDS];
 
 typedef struct {
   volatile __attribute__((aligned(64))) unsigned char data[SHMEM_BUFFER_SIZE];
-  volatile int server_vmid;
+  volatile int vmid;
   volatile int cmd;
   volatile int fd;
   volatile int len;
@@ -139,7 +140,6 @@ pthread_t server_threads[VM_COUNT];
 long long int client_listen_mask = 0;
 
 struct {
-  volatile int client_vmid;
   struct {
     vm_data __attribute__((aligned(64))) client;
     vm_data __attribute__((aligned(64))) server;
@@ -177,7 +177,7 @@ static void fd_map_clear(int instance_no) {
 
   int i;
 
-  for (i = 0; i < MAX_CLIENTS; i++) {
+  for (i = 0; i < MAX_FDS; i++) {
     fd_map[instance_no][i].my_fd = -1;
     fd_map[instance_no][i].remote_fd = -1;
   }
@@ -393,7 +393,10 @@ static void wait_client_ready(int instance_no) {
     /* check if the main client has started */
     DEBUG("%s", "Waiting for client to be ready");
     sleep(2);
-  } while (!vm_control->client_vmid);
+  } while (!vm_control->data[instance_no].client.vmid ||
+           !vm_control->data[instance_no].client.vmid == UNKNOWN_PEER);
+  DEBUG("Client vmid=0x%x",
+        (unsigned)vm_control->data[instance_no].client.vmid);
 }
 
 static void server_init(int instance_no) {
@@ -481,7 +484,7 @@ static void make_wayland_connection(int instance_no, int peer_fd) {
 
   int i;
 
-  for (i = 0; i < MAX_CLIENTS; i++) {
+  for (i = 0; i < MAX_FDS; i++) {
     if (fd_map[instance_no][i].my_fd == -1) {
       fd_map[instance_no][i].my_fd = wayland_connect(instance_no);
       fd_map[instance_no][i].remote_fd = peer_fd;
@@ -496,7 +499,7 @@ static int map_peer_fd(int instance_no, int peer_fd, int close_fd) {
 
   int i, rv;
 
-  for (i = 0; i < MAX_CLIENTS; i++) {
+  for (i = 0; i < MAX_FDS; i++) {
     if (fd_map[instance_no][i].remote_fd == peer_fd) {
       rv = fd_map[instance_no][i].my_fd;
       if (close_fd)
@@ -513,7 +516,7 @@ static int get_remote_socket(int instance_no, int my_fd, int close_fd,
 
   int i;
 
-  for (i = 0; i < MAX_CLIENTS; i++) {
+  for (i = 0; i < MAX_FDS; i++) {
     if (fd_map[instance_no][i].my_fd == my_fd) {
       if (close_fd)
         fd_map[instance_no][i].my_fd = -1;
@@ -593,12 +596,19 @@ static void shmem_init(int instance_no) {
     vm_id = tmp << 16;
   }
   if (run_as_server) {
-    my_vmid = &vm_control->data[instance_no].server.server_vmid;
+    my_vmid = &vm_control->data[instance_no].server.vmid;
+    *my_vmid = vm_id;
   } else {
-    my_vmid = &vm_control->client_vmid;
-    // vm_control->data[instance_no].server.server_vmid = UNKNOWN_PEER;
+    // my_vmid = &vm_control->client_vmid; TODO: remove
+    for (int i = 0; i < VM_COUNT; i++) {
+      if (!(client_listen_mask & 1 << i)) {
+        continue;
+      }
+      vm_control->data[i].client.vmid = vm_id;
+    }
+    // *my_vmid = vm_id;
+    // vm_control->data[instance_no].server.vmid = UNKNOWN_PEER;
   }
-  *my_vmid = vm_id;
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
   if (run_as_server) {
     INFO("%s", "server");
@@ -693,11 +703,11 @@ static void thread_init(int instance_no) {
      */
     server_init(instance_no);
     /* interrupt/doorbell sent when the peer there is a data ready to process */
-    local_rr_int_no[instance_no] = vm_control->client_vmid |
+    local_rr_int_no[instance_no] = vm_control->data[instance_no].client.vmid |
                                    (instance_no << 1) |
                                    LOCAL_RESOURCE_READY_INT_VEC;
     /* interrupt/doorbell received when the peer has consumed our data */
-    remote_rc_int_no[instance_no] = vm_control->client_vmid |
+    remote_rc_int_no[instance_no] = vm_control->data[instance_no].client.vmid |
                                     (instance_no << 1) |
                                     PEER_RESOURCE_CONSUMED_INT_VEC;
     /*
@@ -724,7 +734,7 @@ static void thread_init(int instance_no) {
 static void close_peer_vm(int instance_no) {
   int i;
 
-  for (i = 0; i < MAX_CLIENTS; i++) {
+  for (i = 0; i < MAX_FDS; i++) {
     if (fd_map[instance_no][i].my_fd != -1)
       close(fd_map[instance_no][i].my_fd);
   }
@@ -752,6 +762,8 @@ static void *run(void *arg) {
   int epollfd;
   vm_data *peer_shm_desc, *my_shm_desc;
   int data_ack, data_in;
+
+  /* Variables used when run on host*/
   int fd_int_data_ack = -1;   /* peer has consumed our data */
   int fd_int_data_ready = -1; /* signal the peer that there is data ready */
   long long int kick;
