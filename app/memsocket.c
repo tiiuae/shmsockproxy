@@ -49,7 +49,7 @@
     report(tmp1, 0);                                                           \
   }
 
-#ifndef DEBUG_OFF 
+#ifndef DEBUG_OFF
 #define DEBUG(fmt, ...)                                                        \
   {}
 #else
@@ -114,7 +114,7 @@ typedef struct {
 
 int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
 char *socket_path = NULL;
-int listened_socket = -1, shmem_fd[VM_COUNT], signal_fd = -1;
+int endpoint_socket = -1, shmem_fd[VM_COUNT], signal_fd = -1;
 
 /* Variables related to running on the host and communicating
   with the ivshmem server */
@@ -128,7 +128,8 @@ struct peer {
   int interrupt_fd[VM_COUNT * 2];
   int fd_count;
 } peers_on_host[VM_COUNT];
-const long long int kick = 1; /* the value of '1' is defined by qemu ivshm app */
+const long long int kick =
+    1; /* the value of '1' is defined by qemu ivshm app */
 
 volatile int *my_vmid = NULL;
 int vm_id = -1;
@@ -146,16 +147,17 @@ struct {
 } *vm_control;
 
 static const char usage_string[] =
-    "Usage: memsocket [-h <host_ivshmem_socket_path>] { -c <sink_socket_path> -l "
-    "<vmid_list> | -s <source_socket_path> <vmid> }\n\n"
+    "Usage: memsocket [-h <host_ivshmem_socket_path>] { -s <sink_socket_path> "
+    "-l "
+    "<vmid_list> | -c <source_socket_path> <vmid> }\n\n"
     "Options:\n"
-    "  -c <sink_socket_path>\n"
+    "  -s <sink_socket_path>\n"
     "      Connect to an existing socket (e.g., created by Waypipe) and "
     "transfer data from VMIDs specified with the `-l` option.\n"
     "  -l <vmid_list>\n"
-    "      Comma-separated list of VMIDs (e.g., 1,2,3) to listen for data "
-    "transfer. Used with `-c`.\n"
-    "  -s <source_socket_path> <vmid>\n"
+    "      Comma-ceparated list of VMIDs (e.g., 1,2,3) to listen for data "
+    "transfer. Used with `-s`.\n"
+    "  -c <source_socket_path> <vmid>\n"
     "      Create a socket to forward all data to the connected peer’s sink "
     "socket.\n"
     "  -h <host_ivshmem_socket_path>\n"
@@ -163,13 +165,14 @@ static const char usage_string[] =
     "running on the host system.\n\n"
     "Examples:\n"
     "  1. Start socket receiving for slots 2 and 3:\n"
-    "       memsocket -c /run/user/1000/pipewire-0 -l 2,3\n\n"
+    "       memsocket -s /run/user/1000/pipewire-0 -l 2,3\n\n"
     "  2. Start socket forwarding on slots 2 and 3:\n"
     "       On Host:\n"
-    "         memsocket -h /tmp/ivshmem_socket -s /home/ghaf/pipewire-forward.socket "
+    "         memsocket -h /tmp/ivshmem_socket -c "
+    "/home/ghaf/pipewire-forward.socket "
     "2\n"
-    "       On VM1:\n"
-    "         memsocket -s /run/user/1000/pipewire-forward.socket 3\n";
+    "       On VM:\n"
+    "         memsocket -c /run/user/1000/pipewire-forward.socket 3\n";
 
 static void report(const char *msg, int terminate) {
 
@@ -259,7 +262,7 @@ int peer_index_op(int op, int vmid, int instance_no) {
 
     if (peer->vm_id == vmid) {
       switch (op) {
-      case 0: /* get the index for a vmid*/
+      case 0: /* get the index of a vmid*/
       case 3:
         return i;
         break;
@@ -439,29 +442,29 @@ static void client_init(int instance_no) {
     }
   }
 
-  listened_socket = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (listened_socket < 0) {
-    FATAL("listened socket");
+  endpoint_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (endpoint_socket < 0) {
+    FATAL("endpoint socket");
   }
 
-  DEBUG("listened socket: %d", listened_socket);
+  DEBUG("endpoint socket: %d", endpoint_socket);
 
   memset(&socket_name, 0, sizeof(socket_name));
   socket_name.sun_family = AF_UNIX;
   strncpy(socket_name.sun_path, socket_path, sizeof(socket_name.sun_path) - 1);
-  if (bind(listened_socket, (struct sockaddr *)&socket_name,
+  if (bind(endpoint_socket, (struct sockaddr *)&socket_name,
            sizeof(socket_name)) < 0) {
     FATAL("bind");
   }
 
-  if (listen(listened_socket, MAX_EVENTS) < 0)
+  if (listen(endpoint_socket, MAX_EVENTS) < 0)
     FATAL("listen");
 
   ev.events = EPOLLIN;
-  ev.data.fd = listened_socket;
-  if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, listened_socket, &ev) ==
-      -1) {
-    FATAL("client_init: epoll_ctl: listened_socket");
+  ev.data.fd = endpoint_socket;
+  if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, endpoint_socket,
+                &ev) == -1) {
+    FATAL("client_init: epoll_ctl: endpoint_socket");
   }
 
   wait_server_ready(instance_no);
@@ -720,11 +723,16 @@ static void thread_init(int instance_no) {
      * Add the socket fd to the epollfd_full
      */
     client_init(instance_no);
-    /* interrupt/doorbell sent when the peer there is a data ready to process */
+    /* Specifies the interrupt (doorbell) number used to notify the peer that
+       data is ready to be processed in the buffer
+    */
     local_rr_int_no[instance_no] = vm_control->data[instance_no].server.vmid |
                                    (instance_no << 1) |
                                    LOCAL_RESOURCE_READY_INT_VEC;
-    /* interrupt/doorbell received when the peer has consumed our data */
+    /* Specifies the interrupt (doorbell) number used to notify the peer that
+       the received remote data has been consumed, allowing it to reuse its
+       buffer
+    */
     remote_rc_int_no[instance_no] = vm_control->data[instance_no].server.vmid |
                                     (instance_no << 1) |
                                     PEER_RESOURCE_CONSUMED_INT_VEC;
@@ -868,9 +876,9 @@ static void *run(void *arg) {
 
       /* Handle the new connection event on the listeningsocket */
       if (current_event->events & EPOLLIN && run_as_client &&
-          current_event->data.fd == listened_socket) {
+          current_event->data.fd == endpoint_socket) {
         connected_app_fd =
-            accept(listened_socket, (struct sockaddr *)&caddr, &len);
+            accept(endpoint_socket, (struct sockaddr *)&caddr, &len);
         if (connected_app_fd == -1) {
           FATAL("accept");
         }
@@ -1123,20 +1131,20 @@ int main(int argc, char **argv) {
 
   while ((opt = getopt(argc, argv, "c:s:h:l:")) != -1) {
     switch (opt) {
-    case 'c':
+    case 's':
       run_as_client = 0;
       socket_path = optarg;
       run_mode++;
       break;
 
-    case 's':
+    case 'c':
       run_as_client = 1;
       socket_path = optarg;
       run_mode++;
       if (optind >= argc)
         goto wrong_args;
       if (strspn(argv[optind], "0123456789") != strlen(argv[optind])) {
-        fprintf(stderr, "-s: invalid vm_id value %s\n", argv[optind]);
+        fprintf(stderr, "-c: invalid vm_id value %s\n", argv[optind]);
         goto wrong_args;
       }
       instance_no = atoi(argv[optind]);
