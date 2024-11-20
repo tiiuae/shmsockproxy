@@ -133,7 +133,7 @@ const long long int kick = 1; /* the value of '1' is defined by qemu ivshm app *
 volatile int *my_vmid = NULL;
 int vm_id = -1;
 vm_data *my_shm_data[VM_COUNT], *peer_shm_data[VM_COUNT];
-int run_as_server = -1;
+int run_as_client = -1;
 int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
 pthread_t server_threads[VM_COUNT];
 long long int client_listen_mask = 0;
@@ -596,7 +596,7 @@ static void shmem_init(int instance_no) {
   }
   DEBUG("Shared memory at address %p 0x%lx bytes", vm_control, shmem_size);
 
-  if (run_as_server) {
+  if (run_as_client) {
     my_shm_data[instance_no] = &vm_control->data[instance_no].server;
     peer_shm_data[instance_no] = &vm_control->data[instance_no].XXXXXX;
   } else {
@@ -616,7 +616,7 @@ static void shmem_init(int instance_no) {
     }
     vm_id = tmp << 16;
   }
-  if (run_as_server) {
+  if (run_as_client) {
     my_vmid = &vm_control->data[instance_no].server.vmid;
     *my_vmid = vm_id;
   } else {
@@ -628,7 +628,7 @@ static void shmem_init(int instance_no) {
     }
   }
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
-  if (run_as_server) {
+  if (run_as_client) {
     INFO("%s", "server");
   } else {
     INFO("%s", "XXXXXX");
@@ -715,7 +715,7 @@ static void thread_init(int instance_no) {
 
   shmem_init(instance_no);
 
-  if (run_as_server) {
+  if (run_as_client) {
     /* Create socket that waypipe can write to
      * Add the socket fd to the epollfd_full
      */
@@ -867,7 +867,7 @@ static void *run(void *arg) {
       }
 
       /* Handle the new connection event on the listeningsocket */
-      if (current_event->events & EPOLLIN && run_as_server &&
+      if (current_event->events & EPOLLIN && run_as_client &&
           current_event->data.fd == listened_socket) {
         connected_app_fd =
             accept(listened_socket, (struct sockaddr *)&caddr, &len);
@@ -938,7 +938,7 @@ static void *run(void *arg) {
         case CMD_DATA:
         case CMD_DATA_CLOSE:
           connected_app_fd =
-              run_as_server ? peer_shm_desc->fd
+              run_as_client ? peer_shm_desc->fd
                             : map_peer_fd(instance_no, peer_shm_desc->fd, 0);
           DEBUG(
               "shmem: received %d bytes for %d cksum=0x%x", peer_shm_desc->len,
@@ -958,7 +958,7 @@ static void *run(void *arg) {
           }
           /* no break if we also need to close the file descriptor */
         case CMD_CLOSE:
-          if (run_as_server) {
+          if (run_as_client) {
             connected_app_fd = peer_shm_desc->fd;
             DEBUG("Closing %d", connected_app_fd);
           } else {
@@ -1005,7 +1005,7 @@ static void *run(void *arg) {
       /* Received an app data via connected socket. It needs to
          be sent to the shared memory peer */
       if ((current_event->events & EPOLLIN) && !event_handled) {
-        if (!run_as_server) {
+        if (!run_as_client) {
           connected_app_fd = get_remote_socket(
               instance_no, current_event->data.fd, 0, IGNORE_ERROR);
           DEBUG("get_remote_socket: %d", connected_app_fd);
@@ -1035,7 +1035,7 @@ static void *run(void *arg) {
             current_event->events &= ~EPOLLHUP;
 
             /* unmap local fd */
-            if (!run_as_server)
+            if (!run_as_client)
               get_remote_socket(instance_no, current_event->data.fd, CLOSE_FD,
                                 IGNORE_ERROR);
             /* close local fd*/
@@ -1065,7 +1065,7 @@ static void *run(void *arg) {
       if (current_event->events & (EPOLLHUP | EPOLLERR)) {
         DEBUG("Closing fd#%d", current_event->data.fd);
         my_shm_desc->cmd = CMD_CLOSE;
-        if (run_as_server)
+        if (run_as_client)
           my_shm_desc->fd = current_event->data.fd;
         else {
           DEBUG("get_remote_socket: %d",
@@ -1124,13 +1124,13 @@ int main(int argc, char **argv) {
   while ((opt = getopt(argc, argv, "c:s:h:l:")) != -1) {
     switch (opt) {
     case 'c':
-      run_as_server = 0;
+      run_as_client = 0;
       socket_path = optarg;
       run_mode++;
       break;
 
     case 's':
-      run_as_server = 1;
+      run_as_client = 1;
       socket_path = optarg;
       run_mode++;
       if (optind >= argc)
@@ -1172,9 +1172,9 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (run_mode > 1 || run_as_server < 0 ||
-      (instance_no < 0 && run_as_server > 0) ||
-      (!client_listen_mask && !run_as_server))
+  if (run_mode > 1 || run_as_client < 0 ||
+      (instance_no < 0 && run_as_client > 0) ||
+      (!client_listen_mask && !run_as_client))
     goto wrong_args;
 
   for (i = 0; i < VM_COUNT; i++) {
@@ -1200,7 +1200,7 @@ int main(int argc, char **argv) {
   }
 
   /* On XXXXXX site start a thread for each supported client */
-  if (run_as_server == 0) {
+  if (run_as_client == 0) {
     printf("client_listen_mask=0x%llx\n", client_listen_mask); // TODO
     for (i = 0; i < VM_COUNT; i++) {
       if (!(client_listen_mask & 1 << i)) {
