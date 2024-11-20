@@ -49,7 +49,6 @@
     report(tmp1, 0);                                                           \
   }
 
-// TODO
 #ifndef DEBUG_OFF 
 #define DEBUG(fmt, ...)                                                        \
   {}
@@ -117,8 +116,8 @@ int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
 char *socket_path = NULL;
 int server_socket = -1, shmem_fd[VM_COUNT], signal_fd = -1;
 
-/* Variables related with running on host
-   and talking to the ivshmem server */
+/* Variables related to running on the host and communicating
+  with the ivshmem server */
 int run_on_host = 0;
 char *ivshmem_socket_path = NULL;
 int host_socket_fd = -1; /* socket to ivshm server */
@@ -129,7 +128,7 @@ struct peer {
   int interrupt_fd[VM_COUNT * 2];
   int fd_count;
 } peers_on_host[VM_COUNT];
-const long long int kick = 1; /* defined by qemu ivshm */
+const long long int kick = 1; /* the value of '1' is defined by qemu ivshm */
 
 volatile int *my_vmid = NULL;
 int vm_id = -1;
@@ -138,7 +137,7 @@ int run_as_server = -1;
 int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
 pthread_t server_threads[VM_COUNT];
 long long int client_listen_mask = 0;
-
+/* End of host related variables */
 struct {
   struct {
     vm_data __attribute__((aligned(64))) client;
@@ -147,8 +146,30 @@ struct {
 } *vm_control;
 
 static const char usage_string[] =
-    "Usage: memsocket { -c socket_path [-h "
-    "socket_path] -l vmid_1[,vmid_2][...]| -s socket_path vmid }\n";
+    "Usage: %s [-h <host_ivshmem_socket_path>] { -c <sink_socket_path> -l "
+    "<vmid_list> | -s <source_socket_path> <vmid> }\n\n"
+    "Options:\n"
+    "  -c <sink_socket_path>\n"
+    "      Connect to an existing socket (e.g., created by Waypipe) and "
+    "transfer data from VMIDs specified with the `-l` option.\n"
+    "  -l <vmid_list>\n"
+    "      Comma-separated list of VMIDs (e.g., 1,2,3) to listen for data "
+    "transfer. Used with `-c`.\n"
+    "  -s <source_socket_path> <vmid>\n"
+    "      Create a socket to forward all data to the connected peer’s sink "
+    "socket.\n"
+    "  -h <host_ivshmem_socket_path>\n"
+    "      Specify the ivshmem socket path (shared memory interface) used when "
+    "running on the host system.\n\n"
+    "Examples:\n"
+    "  1. Start socket receiving for slots 2 and 3:\n"
+    "       %s -c /run/user/1000/pipewire-0 -l 2,3\n\n"
+    "  2. Start socket forwarding on slots 2 and 3:\n"
+    "       On Host:\n"
+    "         %s -h /tmp/ivshmem_socket -s /home/ghaf/pipewire-forward.socket "
+    "2\n"
+    "       On VM1:\n"
+    "         %s -s /run/user/1000/pipewire-forward.socket 3\n";
 
 static void report(const char *msg, int terminate) {
 
@@ -238,7 +259,7 @@ int peer_index_op(int op, int vmid, int instance_no) {
 
     if (peer->vm_id == vmid) {
       switch (op) {
-      case 0: /* get index */
+      case 0: /* get the index for a vmid*/
       case 3:
         return i;
         break;
@@ -599,15 +620,12 @@ static void shmem_init(int instance_no) {
     my_vmid = &vm_control->data[instance_no].server.vmid;
     *my_vmid = vm_id;
   } else {
-    // my_vmid = &vm_control->client_vmid; TODO: remove
     for (int i = 0; i < VM_COUNT; i++) {
       if (!(client_listen_mask & 1 << i)) {
         continue;
       }
       vm_control->data[i].client.vmid = vm_id;
     }
-    // *my_vmid = vm_id;
-    // vm_control->data[instance_no].server.vmid = UNKNOWN_PEER;
   }
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
   if (run_as_server) {
@@ -1090,8 +1108,8 @@ static void *run(void *arg) {
   return 0;
 }
 
-static void print_usage_and_exit() {
-  fprintf(stderr, usage_string);
+static void print_usage_and_exit(char *cmd_name) {
+  fprintf(stderr, usage_string, cmd_name, cmd_name, cmd_name, cmd_name);
   exit(1);
 }
 
@@ -1228,6 +1246,6 @@ int main(int argc, char **argv) {
 
   return 0;
 wrong_args:
-  print_usage_and_exit();
+  print_usage_and_exit(argv[0]);
   return 1;
 }
