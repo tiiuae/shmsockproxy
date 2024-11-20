@@ -120,7 +120,7 @@ int server_socket = -1, shmem_fd[VM_COUNT], signal_fd = -1;
   with the ivshmem server */
 int run_on_host = 0;
 char *ivshmem_socket_path = NULL;
-int host_socket_fd = -1; /* socket to ivshm server */
+int host_socket_fd = -1; /* on-host ivshm server socket path*/
 pthread_mutex_t host_fd_mutex;
 pthread_cond_t host_cond;
 struct peer {
@@ -128,7 +128,7 @@ struct peer {
   int interrupt_fd[VM_COUNT * 2];
   int fd_count;
 } peers_on_host[VM_COUNT];
-const long long int kick = 1; /* the value of '1' is defined by qemu ivshm */
+const long long int kick = 1; /* the value of '1' is defined by qemu ivshm app */
 
 volatile int *my_vmid = NULL;
 int vm_id = -1;
@@ -140,13 +140,13 @@ long long int client_listen_mask = 0;
 /* End of host related variables */
 struct {
   struct {
-    vm_data __attribute__((aligned(64))) client;
+    vm_data __attribute__((aligned(64))) XXXXXX;
     vm_data __attribute__((aligned(64))) server;
   } data[VM_COUNT];
 } *vm_control;
 
 static const char usage_string[] =
-    "Usage: %s [-h <host_ivshmem_socket_path>] { -c <sink_socket_path> -l "
+    "Usage: memsocket [-h <host_ivshmem_socket_path>] { -c <sink_socket_path> -l "
     "<vmid_list> | -s <source_socket_path> <vmid> }\n\n"
     "Options:\n"
     "  -c <sink_socket_path>\n"
@@ -163,13 +163,13 @@ static const char usage_string[] =
     "running on the host system.\n\n"
     "Examples:\n"
     "  1. Start socket receiving for slots 2 and 3:\n"
-    "       %s -c /run/user/1000/pipewire-0 -l 2,3\n\n"
+    "       memsocket -c /run/user/1000/pipewire-0 -l 2,3\n\n"
     "  2. Start socket forwarding on slots 2 and 3:\n"
     "       On Host:\n"
-    "         %s -h /tmp/ivshmem_socket -s /home/ghaf/pipewire-forward.socket "
+    "         memsocket -h /tmp/ivshmem_socket -s /home/ghaf/pipewire-forward.socket "
     "2\n"
     "       On VM1:\n"
-    "         %s -s /run/user/1000/pipewire-forward.socket 3\n";
+    "         memsocket -s /run/user/1000/pipewire-forward.socket 3\n";
 
 static void report(const char *msg, int terminate) {
 
@@ -409,15 +409,15 @@ static void *host_run(void *arg) {
   } while (1);
 }
 
-static void wait_client_ready(int instance_no) {
+static void wait_XXXXXX_ready(int instance_no) {
   do {
-    /* check if the main client has started */
-    DEBUG("%s", "Waiting for client to be ready");
+    /* check if the XXXXXX has started */
+    DEBUG("%s", "Waiting for XXXXXX to be ready");
     sleep(2);
-  } while (!vm_control->data[instance_no].client.vmid ||
-           !vm_control->data[instance_no].client.vmid == UNKNOWN_PEER);
-  DEBUG("Client vmid=0x%x",
-        (unsigned)vm_control->data[instance_no].client.vmid);
+  } while (!vm_control->data[instance_no].XXXXXX.vmid ||
+           !vm_control->data[instance_no].XXXXXX.vmid == UNKNOWN_PEER);
+  DEBUG("XXXXXX vmid=0x%x",
+        (unsigned)vm_control->data[instance_no].XXXXXX.vmid);
 }
 
 static void server_init(int instance_no) {
@@ -464,7 +464,7 @@ static void server_init(int instance_no) {
     FATAL("server_init: epoll_ctl: server_socket");
   }
 
-  wait_client_ready(instance_no);
+  wait_XXXXXX_ready(instance_no);
 
   INFO("%s", "server initialized");
 }
@@ -497,7 +497,7 @@ static int wayland_connect(int instance_no) {
     FATAL("epoll_ctl: wayland_fd");
   }
 
-  INFO("%s", "client initialized");
+  INFO("%s", "XXXXXX initialized");
   return wayland_fd;
 }
 
@@ -598,9 +598,9 @@ static void shmem_init(int instance_no) {
 
   if (run_as_server) {
     my_shm_data[instance_no] = &vm_control->data[instance_no].server;
-    peer_shm_data[instance_no] = &vm_control->data[instance_no].client;
+    peer_shm_data[instance_no] = &vm_control->data[instance_no].XXXXXX;
   } else {
-    my_shm_data[instance_no] = &vm_control->data[instance_no].client;
+    my_shm_data[instance_no] = &vm_control->data[instance_no].XXXXXX;
     peer_shm_data[instance_no] = &vm_control->data[instance_no].server;
   }
   DEBUG("vm_control=%p my_shm_data=%p peer_shm_data=%p", vm_control,
@@ -624,14 +624,14 @@ static void shmem_init(int instance_no) {
       if (!(client_listen_mask & 1 << i)) {
         continue;
       }
-      vm_control->data[i].client.vmid = vm_id;
+      vm_control->data[i].XXXXXX.vmid = vm_id;
     }
   }
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
   if (run_as_server) {
     INFO("%s", "server");
   } else {
-    INFO("%s", "client");
+    INFO("%s", "XXXXXX");
   }
 
   if (!run_on_host) {
@@ -721,15 +721,15 @@ static void thread_init(int instance_no) {
      */
     server_init(instance_no);
     /* interrupt/doorbell sent when the peer there is a data ready to process */
-    local_rr_int_no[instance_no] = vm_control->data[instance_no].client.vmid |
+    local_rr_int_no[instance_no] = vm_control->data[instance_no].XXXXXX.vmid |
                                    (instance_no << 1) |
                                    LOCAL_RESOURCE_READY_INT_VEC;
     /* interrupt/doorbell received when the peer has consumed our data */
-    remote_rc_int_no[instance_no] = vm_control->data[instance_no].client.vmid |
+    remote_rc_int_no[instance_no] = vm_control->data[instance_no].XXXXXX.vmid |
                                     (instance_no << 1) |
                                     PEER_RESOURCE_CONSUMED_INT_VEC;
     /*
-     * Send LOGIN cmd to the client. Supply my_vmid
+     * Send LOGIN cmd to the XXXXXX. Supply my_vmid
      */
     my_shm_data[instance_no]->cmd = CMD_LOGIN;
     my_shm_data[instance_no]->fd = *my_vmid;
@@ -745,7 +745,7 @@ static void thread_init(int instance_no) {
     res = doorbell(instance_no, &ioctl_data);
 
     DEBUG("Sent login vmid: %d ioctl result=%d --> vm_id=0x%x", *my_vmid, res,
-          vm_control->client_vmid);
+          vm_control->XXXXXX_vmid);
   }
 }
 
@@ -770,7 +770,7 @@ static void *run(void *arg) {
 
   int instance_no = (intptr_t)arg;
   int connected_app_fd, rv, nfds, n, read_count, event_handled;
-  struct sockaddr_un caddr;      /* client address */
+  struct sockaddr_un caddr;      /* XXXXXX address */
   socklen_t len = sizeof(caddr); /* address length could change */
   struct pollfd shm_buffer_fd = {.events = POLLOUT};
   struct epoll_event ev, *current_event;
@@ -866,7 +866,7 @@ static void *run(void *arg) {
         event_handled = 1;
       }
 
-      /* Handle the new connection event on the socket */
+      /* Handle the new connection event on the listeningsocket */
       if (current_event->events & EPOLLIN && run_as_server &&
           current_event->data.fd == server_socket) {
         connected_app_fd =
@@ -900,7 +900,7 @@ static void *run(void *arg) {
       }
 
       /*
-       * Client and server: Received interrupt from peer VM - there is incoming
+       * XXXXXX and server: Received interrupt from peer VM - there is incoming
        * data in the shared memory - EPOLLIN
        */
       INFO("Possible incoming data: current_event->events=0x%x "
@@ -1108,8 +1108,8 @@ static void *run(void *arg) {
   return 0;
 }
 
-static void print_usage_and_exit(char *cmd_name) {
-  fprintf(stderr, usage_string, cmd_name, cmd_name, cmd_name, cmd_name);
+static void print_usage_and_exit() {
+  fprintf(stderr, usage_string);
   exit(1);
 }
 
@@ -1199,7 +1199,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  /* On client site start thread for each display VM */
+  /* On XXXXXX site start a thread for each supported client */
   if (run_as_server == 0) {
     printf("client_listen_mask=0x%llx\n", client_listen_mask); // TODO
     for (i = 0; i < VM_COUNT; i++) {
@@ -1246,6 +1246,6 @@ int main(int argc, char **argv) {
 
   return 0;
 wrong_args:
-  print_usage_and_exit(argv[0]);
+  print_usage_and_exit();
   return 1;
 }
