@@ -114,7 +114,7 @@ typedef struct {
 
 int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
 char *socket_path = NULL;
-int server_socket = -1, shmem_fd[VM_COUNT], signal_fd = -1;
+int listened_socket = -1, shmem_fd[VM_COUNT], signal_fd = -1;
 
 /* Variables related to running on the host and communicating
   with the ivshmem server */
@@ -439,29 +439,29 @@ static void server_init(int instance_no) {
     }
   }
 
-  server_socket = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (server_socket < 0) {
-    FATAL("server socket");
+  listened_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (listened_socket < 0) {
+    FATAL("listened socket");
   }
 
-  DEBUG("server socket: %d", server_socket);
+  DEBUG("listened socket: %d", listened_socket);
 
   memset(&socket_name, 0, sizeof(socket_name));
   socket_name.sun_family = AF_UNIX;
   strncpy(socket_name.sun_path, socket_path, sizeof(socket_name.sun_path) - 1);
-  if (bind(server_socket, (struct sockaddr *)&socket_name,
+  if (bind(listened_socket, (struct sockaddr *)&socket_name,
            sizeof(socket_name)) < 0) {
     FATAL("bind");
   }
 
-  if (listen(server_socket, MAX_EVENTS) < 0)
+  if (listen(listened_socket, MAX_EVENTS) < 0)
     FATAL("listen");
 
   ev.events = EPOLLIN;
-  ev.data.fd = server_socket;
-  if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, server_socket, &ev) ==
+  ev.data.fd = listened_socket;
+  if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, listened_socket, &ev) ==
       -1) {
-    FATAL("server_init: epoll_ctl: server_socket");
+    FATAL("server_init: epoll_ctl: listened_socket");
   }
 
   wait_XXXXXX_ready(instance_no);
@@ -868,9 +868,9 @@ static void *run(void *arg) {
 
       /* Handle the new connection event on the listeningsocket */
       if (current_event->events & EPOLLIN && run_as_server &&
-          current_event->data.fd == server_socket) {
+          current_event->data.fd == listened_socket) {
         connected_app_fd =
-            accept(server_socket, (struct sockaddr *)&caddr, &len);
+            accept(listened_socket, (struct sockaddr *)&caddr, &len);
         if (connected_app_fd == -1) {
           FATAL("accept");
         }
