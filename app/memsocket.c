@@ -420,7 +420,7 @@ static void wait_XXXXXX_ready(int instance_no) {
         (unsigned)vm_control->data[instance_no].XXXXXX.vmid);
 }
 
-static void server_init(int instance_no) {
+static void client_init(int instance_no) {
 
   struct sockaddr_un socket_name;
   struct epoll_event ev;
@@ -461,7 +461,7 @@ static void server_init(int instance_no) {
   ev.data.fd = listened_socket;
   if (epoll_ctl(epollfd_full[instance_no], EPOLL_CTL_ADD, listened_socket, &ev) ==
       -1) {
-    FATAL("server_init: epoll_ctl: listened_socket");
+    FATAL("client_init: epoll_ctl: listened_socket");
   }
 
   wait_XXXXXX_ready(instance_no);
@@ -688,11 +688,11 @@ static void thread_init(int instance_no) {
 
   epollfd_full[instance_no] = epoll_create1(0);
   if (epollfd_full[instance_no] == -1) {
-    FATAL("server_init: epoll_create1");
+    FATAL("client_init: epoll_create1");
   }
   epollfd_limited[instance_no] = epoll_create1(0);
   if (epollfd_limited[instance_no] == -1) {
-    FATAL("server_init: epoll_create1");
+    FATAL("client_init: epoll_create1");
   }
 
   /* Turn signal into file descriptor */
@@ -719,7 +719,7 @@ static void thread_init(int instance_no) {
     /* Create socket that waypipe can write to
      * Add the socket fd to the epollfd_full
      */
-    server_init(instance_no);
+    client_init(instance_no);
     /* interrupt/doorbell sent when the peer there is a data ready to process */
     local_rr_int_no[instance_no] = vm_control->data[instance_no].XXXXXX.vmid |
                                    (instance_no << 1) |
