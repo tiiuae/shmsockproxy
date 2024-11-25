@@ -1186,7 +1186,7 @@ int main(int argc, char **argv) {
       /* input is a list of integers */
       char *token = strtok(optarg, ",");
       while (token != NULL) {
-        if (strspn(token, "0123456789") != strlen(token)) {
+        if (strspn(token, "-0123456789") != strlen(token)) {
           goto invalid_value;
         }
         int value = atoi(token);
