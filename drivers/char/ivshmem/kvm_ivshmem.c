@@ -26,14 +26,14 @@
 #include <linux/uio.h>
 #include <linux/version.h>
 
-#ifndef CONFIG_KVM_IVSHMEM_VM_COUNT
-#warning CONFIG_KVM_IVSHMEM_VM_COUNT not defined. Assuming 5.
-#define CONFIG_KVM_IVSHMEM_VM_COUNT (5)
+#ifndef CONFIG_KVM_IVSHMEM_SHM_SLOTS
+#warning CONFIG_KVM_IVSHMEM_SHM_SLOTS not defined. Assuming 5.
+#define CONFIG_KVM_IVSHMEM_SHM_SLOTS (5)
 #endif
 
 DEFINE_SPINLOCK(rawhide_irq_lock);
-#define VM_COUNT (CONFIG_KVM_IVSHMEM_VM_COUNT)
-#define VECTORS_COUNT (2 * VM_COUNT)
+#define SHM_SLOTS (CONFIG_KVM_IVSHMEM_SHM_SLOTS)
+#define VECTORS_COUNT (2 * SHM_SLOTS)
 
 #undef DEBUG
 #ifdef DEBUG
@@ -72,12 +72,12 @@ typedef struct kvm_ivshmem_device {
   int nvectors;
 } kvm_ivshmem_device;
 
-static int irq_incoming_data[VM_COUNT];
-static int irq_ack[VM_COUNT];
-static int local_resource_count[VM_COUNT];
-static int peer_resource_count[VM_COUNT];
-static wait_queue_head_t local_data_ready_wait_queue[VM_COUNT];
-static wait_queue_head_t peer_data_ready_wait_queue[VM_COUNT];
+static int irq_incoming_data[SHM_SLOTS];
+static int irq_ack[SHM_SLOTS];
+static int local_resource_count[SHM_SLOTS];
+static int peer_resource_count[SHM_SLOTS];
+static wait_queue_head_t local_data_ready_wait_queue[SHM_SLOTS];
+static wait_queue_head_t peer_data_ready_wait_queue[SHM_SLOTS];
 
 static kvm_ivshmem_device kvm_ivshmem_dev;
 
@@ -143,10 +143,10 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx",
                       (unsigned long int)filp->private_data, cmd, arg);
-  if ((unsigned long int)filp->private_data >= VM_COUNT &&
+  if ((unsigned long int)filp->private_data >= SHM_SLOTS &&
       cmd != SHMEM_IOCSETINSTANCENO) {
-    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld > VM_COUNT=%d",
-           (unsigned long int)filp->private_data, VM_COUNT);
+    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld > SHM_SLOTS=%d",
+           (unsigned long int)filp->private_data, SHM_SLOTS);
     return -EINVAL;
   }
   switch (cmd) {
@@ -202,7 +202,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
 
   case SHMEM_IOCSETINSTANCENO:
     spin_lock_irqsave(&rawhide_irq_lock, flags);
-    if (arg >= VM_COUNT) {
+    if (arg >= SHM_SLOTS) {
       printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", arg);
       rv = -EINVAL;
       goto unlock;
@@ -392,7 +392,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
   }
 
   KVM_IVSHMEM_DPRINTK("irq %d", irq);
-  for (i = 0; i < VM_COUNT; i++) {
+  for (i = 0; i < SHM_SLOTS; i++) {
     if (irq == irq_incoming_data[i]) {
       out_counter++;
       KVM_IVSHMEM_DPRINTK("%d wake up peer_data_ready_wait_queue count=%d", i,
@@ -605,7 +605,7 @@ static int __init kvm_ivshmem_init_module(void) {
     goto error;
   }
 
-  for (i = 0; i < VM_COUNT; i++) {
+  for (i = 0; i < SHM_SLOTS; i++) {
     init_waitqueue_head(&local_data_ready_wait_queue[i]);
     init_waitqueue_head(&peer_data_ready_wait_queue[i]);
     local_resource_count[i] = 1;

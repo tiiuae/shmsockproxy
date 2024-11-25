@@ -25,8 +25,8 @@
 
 #include "../drivers/char/ivshmem/kvm_ivshmem.h"
 
-#ifndef VM_COUNT
-#define VM_COUNT (5)
+#ifndef SHM_SLOTS
+#define SHM_SLOTS (5)
 #endif
 
 #define SHM_DEVICE_FN "/dev/ivshmem"
@@ -109,7 +109,7 @@ enum {
 struct {
   int my_fd;
   int remote_fd;
-} fd_map[VM_COUNT][MAX_FDS];
+} fd_map[SHM_SLOTS][MAX_FDS];
 
 typedef struct {
   volatile __attribute__((aligned(64))) unsigned char data[SHMEM_BUFFER_SIZE];
@@ -119,9 +119,9 @@ typedef struct {
   volatile int len;
 } vm_data;
 
-int epollfd_full[VM_COUNT], epollfd_limited[VM_COUNT];
+int epollfd_full[SHM_SLOTS], epollfd_limited[SHM_SLOTS];
 char *socket_path = NULL;
-int endpoint_socket = -1, shmem_fd[VM_COUNT], signal_fd = -1;
+int endpoint_socket = -1, shmem_fd[SHM_SLOTS], signal_fd = -1;
 
 /* Variables related to running on the host and communicating
   with the ivshmem server */
@@ -132,25 +132,25 @@ pthread_mutex_t host_fd_mutex;
 pthread_cond_t host_cond;
 struct peer {
   int vm_id;
-  int interrupt_fd[VM_COUNT * 2];
+  int interrupt_fd[SHM_SLOTS * 2];
   int fd_count;
-} peers_on_host[VM_COUNT];
+} peers_on_host[SHM_SLOTS];
 const long long int kick =
     1; /* the value of '1' is defined by qemu ivshm app */
 
 volatile int *my_vmid = NULL;
 int vm_id = -1;
-vm_data *my_shm_data[VM_COUNT], *peer_shm_data[VM_COUNT];
+vm_data *my_shm_data[SHM_SLOTS], *peer_shm_data[SHM_SLOTS];
 int run_as_client = -1;
-int local_rr_int_no[VM_COUNT], remote_rc_int_no[VM_COUNT];
-pthread_t server_threads[VM_COUNT];
+int local_rr_int_no[SHM_SLOTS], remote_rc_int_no[SHM_SLOTS];
+pthread_t server_threads[SHM_SLOTS];
 long long int client_listen_mask = 0;
 /* End of host related variables */
 struct {
   struct {
     vm_data __attribute__((aligned(64))) server;
     vm_data __attribute__((aligned(64))) client;
-  } data[VM_COUNT];
+  } data[SHM_SLOTS];
 } *vm_control;
 
 static const char usage_string[] =
@@ -254,13 +254,13 @@ static void read_msg(int ivshmem_fd, long int *buf, int *fd, int instance_no) {
 }
 
 int peer_index_op(int op, int vmid, int instance_no) {
-  int i, n, free = VM_COUNT;
+  int i, n, free = SHM_SLOTS;
   struct peer *peer;
 
   if (vmid == vm_id >> 16)
     return 0; /* Our data is always on the index 0*/
 
-  for (i = 0; i < VM_COUNT; i++) {
+  for (i = 0; i < SHM_SLOTS; i++) {
     peer = &peers_on_host[i];
     if (peer->vm_id == -1) {
       free = i;
@@ -275,7 +275,7 @@ int peer_index_op(int op, int vmid, int instance_no) {
         break;
       case 1: /* clear */
         peer->vm_id = -1;
-        for (n = 0; n < VM_COUNT * 2; n++) {
+        for (n = 0; n < SHM_SLOTS * 2; n++) {
           if (peer->interrupt_fd[n] >= 0)
             close(peer->interrupt_fd[n]);
           peer->interrupt_fd[n] = -1;
@@ -377,13 +377,13 @@ static void *host_run(void *arg) {
       if (shm_fd >= 0) { /* peer or self connection */
 
         peer_idx = peer_index_op(0, tmp, instance_no);
-        if (peer_idx >= VM_COUNT) {
+        if (peer_idx >= SHM_SLOTS) {
           ERROR("vm id %ld not found", tmp);
           continue;
         }
         peer = &peers_on_host[peer_idx];
 
-        if (peer->fd_count >= VM_COUNT * 2) {
+        if (peer->fd_count >= SHM_SLOTS * 2) {
           ERROR("Ignored received excessive interrupt fd# %d fd_count=%d",
                 shm_fd, peer->fd_count);
           continue;
@@ -393,7 +393,7 @@ static void *host_run(void *arg) {
           INFO("Received peer idx=%d interrupt[%d] fd %d", peer_idx,
                peer->fd_count, shm_fd);
           peer->fd_count++;
-          if (peer->fd_count == VM_COUNT * 2 && !peer_idx) {
+          if (peer->fd_count == SHM_SLOTS * 2 && !peer_idx) {
             INFO("%s", "Host configuration ready");
             pthread_cond_signal(&host_cond);
             pthread_mutex_unlock(&host_fd_mutex);
@@ -631,7 +631,7 @@ static void shmem_init(int instance_no) {
     my_vmid = &vm_control->data[instance_no].client.vmid;
   } else {
     my_vmid = &vm_control->data[instance_no].server.vmid;
-    for (int i = 0; i < VM_COUNT; i++) {
+    for (int i = 0; i < SHM_SLOTS; i++) {
       if (!(client_listen_mask & 1 << i)) {
         continue;
       }
@@ -815,7 +815,7 @@ static void *run(void *arg) {
   int fd_int_data_ready = -1; /* signal the peer that there is data ready */
   long long int kick;
 
-  if (instance_no >= VM_COUNT || instance_no < 0) {
+  if (instance_no >= SHM_SLOTS || instance_no < 0) {
     ERROR("Invalid instance no %d", instance_no);
     FATAL("Exiting");
   }
@@ -1154,7 +1154,7 @@ int main(int argc, char **argv) {
   int instance_no = -1;
   int opt;
   int run_mode = 0;
-  pthread_t threads[VM_COUNT], host_thread;
+  pthread_t threads[SHM_SLOTS], host_thread;
 
   while ((opt = getopt(argc, argv, "c:s:h:l:")) != -1) {
     switch (opt) {
@@ -1190,7 +1190,7 @@ int main(int argc, char **argv) {
           goto invalid_value;
         }
         int value = atoi(token);
-        if (value >= VM_COUNT) {
+        if (value >= SHM_SLOTS) {
           goto invalid_value;
         }
         if (value = -1) {
@@ -1215,13 +1215,13 @@ int main(int argc, char **argv) {
       (!client_listen_mask && !run_as_client))
     goto wrong_args;
 
-  for (i = 0; i < VM_COUNT; i++) {
+  for (i = 0; i < SHM_SLOTS; i++) {
     my_shm_data[i] = NULL;
     peer_shm_data[i] = NULL;
     shmem_fd[i] = -1;
     peers_on_host[i].vm_id = -1;
     peers_on_host[i].fd_count = 0;
-    for (n = 0; n < VM_COUNT * 2; n++)
+    for (n = 0; n < SHM_SLOTS * 2; n++)
       peers_on_host[i].interrupt_fd[n] = -1;
   }
 
@@ -1240,7 +1240,7 @@ int main(int argc, char **argv) {
   /* On server site start a thread for each supported client */
   if (run_as_client == 0) {
     printf("client_listen_mask=0x%llx\n", client_listen_mask); // TODO
-    for (i = 0; i < VM_COUNT; i++) {
+    for (i = 0; i < SHM_SLOTS; i++) {
       if (!(client_listen_mask & 1 << i)) {
         continue;
       }
@@ -1254,7 +1254,7 @@ int main(int argc, char **argv) {
       }
     }
 
-    for (i = 0; i < VM_COUNT; i++) {
+    for (i = 0; i < SHM_SLOTS; i++) {
       if (!(client_listen_mask & 1 << i)) {
         continue;
       }
