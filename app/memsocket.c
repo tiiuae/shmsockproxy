@@ -292,7 +292,7 @@ int peer_index_op(int op, int vmid, int instance_no) {
   case 1:
     return -1;
   case 3:
-    ERROR("vmid %d not found", vmid);
+    ERROR("vmid 0x%x not found", vmid);
     FATAL("Exiting.")
   }
   return -1;
@@ -707,13 +707,7 @@ static void thread_init(int instance_no) {
     FATAL("client_init: epoll_create1");
   }
 
-  /* Turn signal into file descriptor */
-  sigset_t mask;
   struct epoll_event ev;
-  sigemptyset(&mask);
-  sigaddset(&mask, SIGINT);
-  sigprocmask(SIG_BLOCK, &mask, NULL); // Block SIGINT signal
-  signal_fd = signalfd(-1, &mask, 0);  // Create fd for the SIGINT signal
   ev.events = EPOLLIN;
   ev.data.fd = signal_fd;
   if (epoll_ctl(epollfd_limited[instance_no], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
@@ -846,7 +840,8 @@ static void *run(void *arg) {
     }
 #endif
     nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
-    if (nfds == -1) {
+    ERROR("nfds=%d", nfds); // jarekk
+    if (nfds < 0) {
       FATAL("epoll_wait");
     }
 
@@ -862,6 +857,7 @@ static void *run(void *arg) {
 #endif
       /* Check for Ctrl-C */
       if (current_event->data.fd == signal_fd) {
+        DBG("%s", "A signal received. Exiting.");
         struct signalfd_siginfo siginfo;
         read(signal_fd, &siginfo, sizeof(siginfo)); // Read the signal info
         if (siginfo.ssi_signo == SIGINT) {
@@ -1185,6 +1181,7 @@ int main(int argc, char **argv) {
     case 'l':
       /* input is a list of integers */
       char *token = strtok(optarg, ",");
+      printf("token=%s\n", token); // jarekk
       while (token != NULL) {
         if (strspn(token, "-0123456789") != strlen(token)) {
           goto invalid_value;
@@ -1193,7 +1190,7 @@ int main(int argc, char **argv) {
         if (value >= SHM_SLOTS) {
           goto invalid_value;
         }
-        if (value = -1) {
+        if (value == -1) {
           client_listen_mask = -1;
         }
         client_listen_mask |= 1 << value;
@@ -1236,6 +1233,16 @@ int main(int argc, char **argv) {
       FATAL("Cannot create the host thread");
     }
   }
+
+  /* Turn signal into file descriptor */
+  sigset_t mask;
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGINT);
+  // sigprocmask(SIG_BLOCK, &mask, NULL); // Block SIGINT signal
+  if (pthread_sigmask(SIG_BLOCK, &mask, NULL) != 0) {
+    FATAL("pthread_sigmask");
+  }
+  signal_fd = signalfd(-1, &mask, 0);  // Create fd for the SIGINT signal
 
   /* On server site start a thread for each supported client */
   if (run_as_client == 0) {
