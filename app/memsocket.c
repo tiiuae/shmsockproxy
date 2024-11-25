@@ -97,7 +97,14 @@
     report(tmp1, 1);                                                           \
   }
 
-enum { CMD_LOGIN, CMD_CONNECT, CMD_DATA, CMD_CLOSE, CMD_DATA_CLOSE };
+enum {
+  CMD_LOGIN,
+  CMD_LOGOUT,
+  CMD_CONNECT,
+  CMD_DATA,
+  CMD_CLOSE,
+  CMD_DATA_CLOSE
+};
 #define FD_MAP_COUNT (sizeof(fd_map) / sizeof(fd_map[0]))
 struct {
   int my_fd;
@@ -364,7 +371,7 @@ static void *host_run(void *arg) {
   /* Process messages */
   do {
     read_msg(ivshmemsrv_fd, &tmp, &shm_fd, instance_no);
-    INFO("peer addr=%ld shm_fd=%d", tmp, shm_fd);
+    INFO("peer addr=0x%lx shm_fd=%d", tmp, shm_fd);
 
     if (tmp >= 0) {      /* peer or self  connection or disconnection */
       if (shm_fd >= 0) { /* peer or self connection */
@@ -377,7 +384,8 @@ static void *host_run(void *arg) {
         peer = &peers_on_host[peer_idx];
 
         if (peer->fd_count >= VM_COUNT * 2) {
-          ERROR("Ignored received excessive interrupt fd: %d", shm_fd);
+          ERROR("Ignored received excessive interrupt fd# %d fd_count=%d",
+                shm_fd, peer->fd_count);
           continue;
         }
         if (peer->interrupt_fd[peer->fd_count] == -1) {
@@ -621,8 +629,8 @@ static void shmem_init(int instance_no) {
   }
   if (run_as_client) {
     my_vmid = &vm_control->data[instance_no].client.vmid;
-    *my_vmid = vm_id;
   } else {
+    my_vmid = &vm_control->data[instance_no].server.vmid;
     for (int i = 0; i < VM_COUNT; i++) {
       if (!(client_listen_mask & 1 << i)) {
         continue;
@@ -630,6 +638,7 @@ static void shmem_init(int instance_no) {
       vm_control->data[i].server.vmid = vm_id;
     }
   }
+  *my_vmid = vm_id;
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
   if (run_as_client) {
     INFO("%s", "client");
@@ -752,8 +761,8 @@ static void thread_init(int instance_no) {
     INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no);
     res = doorbell(instance_no, &ioctl_data);
 
-    DEBUG("Sent login vmid: %d ioctl result=%d --> vm_id=0x%x", *my_vmid, res,
-          vm_control->server_vmid);
+    DBG("Sent login vmid: %d ioctl result=%d to server_vm_id=0x%x", *my_vmid,
+        res, peer_shm_data[instance_no]->vmid);
   }
 }
 
@@ -772,6 +781,18 @@ static int cksum(unsigned char *buf, int len) {
   for (i = 0; i < len; i++)
     res += buf[i];
   return res;
+}
+
+static void send_logout(int instance_no, vm_data *my_shm_desc) {
+  struct ioctl_data ioctl_data;
+
+  my_shm_desc->cmd = CMD_LOGOUT;
+  my_shm_desc->fd = 0;
+  my_shm_desc->len = 0;
+  ioctl_data.int_no = local_rr_int_no[instance_no];
+
+  doorbell(instance_no, &ioctl_data);
+  return;
 }
 
 static void *run(void *arg) {
@@ -844,7 +865,8 @@ static void *run(void *arg) {
         struct signalfd_siginfo siginfo;
         read(signal_fd, &siginfo, sizeof(siginfo)); // Read the signal info
         if (siginfo.ssi_signo == SIGINT) {
-          INFO("SIGINT received. Exiting.")
+          DBG("%s", "SIGINT received. Exiting.");
+          send_logout(instance_no, my_shm_desc);
           exit(EXIT_FAILURE);
         }
       }
@@ -874,7 +896,7 @@ static void *run(void *arg) {
         event_handled = 1;
       }
 
-      /* Handle the new connection event on the listeningsocket */
+      /* Handle the new connection event on the listening socket */
       if (current_event->events & EPOLLIN && run_as_client &&
           current_event->data.fd == endpoint_socket) {
         connected_app_fd =
@@ -931,7 +953,7 @@ static void *run(void *arg) {
 
         switch (peer_shm_desc->cmd) {
         case CMD_LOGIN:
-          DEBUG("Received login request from 0x%x", peer_shm_desc->fd);
+          DBG("Received login request from 0x%x", peer_shm_desc->fd);
           /* If the peer VM starts again, close all opened file handles */
           close_peer_vm(instance_no);
           local_rr_int_no[instance_no] = peer_shm_desc->fd |
@@ -942,6 +964,11 @@ static void *run(void *arg) {
                                           PEER_RESOURCE_CONSUMED_INT_VEC;
 
           peer_shm_desc->fd = -1;
+          break;
+        case CMD_LOGOUT:
+          DBG("Received logout request from 0x%x", peer_shm_desc->fd);
+          /* Close all opened file handles */
+          close_peer_vm(instance_no);
           break;
         case CMD_DATA:
         case CMD_DATA_CLOSE:
@@ -1166,6 +1193,9 @@ int main(int argc, char **argv) {
         if (value >= VM_COUNT) {
           goto invalid_value;
         }
+        if (value = -1) {
+          client_listen_mask = -1;
+        }
         client_listen_mask |= 1 << value;
         token = strtok(NULL, ",");
         continue;
@@ -1215,7 +1245,8 @@ int main(int argc, char **argv) {
         continue;
       }
 
-      printf("Client #%d\n", i); // TODO
+      instance_no = i;
+      DBG("Starting thread for client #%d", i);
       res = pthread_create(&threads[i], NULL, run, (void *)(intptr_t)i);
       if (res) {
         ERROR("Thread id=%d", i);
