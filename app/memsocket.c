@@ -756,7 +756,7 @@ static void thread_init(int slot) {
     INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no);
     res = doorbell(slot, &ioctl_data);
 
-    DBG("Sent login vmid: %d ioctl result=%d to server_vm_id=0x%x", *my_vmid,
+    DBG("Sent login vmid: 0x%x ioctl result=%d to server_vm_id=0x%x", *my_vmid,
         res, peer_shm_data[slot]->vmid);
   }
 }
