@@ -26,7 +26,7 @@
 #include "../drivers/char/ivshmem/kvm_ivshmem.h"
 
 #ifndef SHM_SLOTS
-#define SHM_SLOTS (5)
+#define SHM_SLOTS (4)
 #endif
 
 #define SHM_DEVICE_FN "/dev/ivshmem"
@@ -965,6 +965,10 @@ static void *run(void *arg) {
           DBG("Received logout request from 0x%x", peer_shm_desc->fd);
           /* Close all opened file handles */
           close_peer_vm(instance_no);
+          if (run_as_client) {
+            DBG("%s", "Server has terminated. Exiting.");
+            return NULL;
+          }
           break;
         case CMD_DATA:
         case CMD_DATA_CLOSE:
