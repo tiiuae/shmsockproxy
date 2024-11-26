@@ -629,6 +629,14 @@ static void shmem_init(int slot) {
     my_vmid = &vm_control->data[slot].client.vmid;
   } else {
     my_vmid = &vm_control->data[slot].server.vmid;
+    /* Clear the vm_id and wait longer then timeout in order to let clients
+    know the server has restarted */
+    for (int i = 0; i < SHM_SLOTS; i++) {
+      if (client_listen_mask & 1 << i) {
+        vm_control->data[i].server.vmid = 0;
+      }
+    }
+    sleep(3 * SHMEM_POLL_TIMEOUT / 2 / 1000);
     for (int i = 0; i < SHM_SLOTS; i++) {
       if (client_listen_mask & 1 << i) {
         vm_control->data[i].server.vmid = vm_id;
