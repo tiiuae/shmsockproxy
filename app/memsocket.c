@@ -761,7 +761,7 @@ static void thread_init(int slot) {
   }
 }
 
-static void close_peer_vm(int slot) {
+static void close_fds(int slot) {
   int i;
 
   for (i = 0; i < MAX_FDS; i++) {
@@ -951,7 +951,7 @@ static void *run(void *arg) {
         case CMD_LOGIN:
           DBG("Received login request from 0x%x", peer_shm_desc->fd);
           /* If the peer VM starts again, close all opened file handles */
-          close_peer_vm(slot);
+          close_fds(slot);
           local_rr_int_no[slot] = peer_shm_desc->fd |
                                          (slot << 1) |
                                          LOCAL_RESOURCE_READY_INT_VEC;
@@ -964,7 +964,7 @@ static void *run(void *arg) {
         case CMD_LOGOUT:
           DBG("Received logout request from 0x%x", peer_shm_desc->fd);
           /* Close all opened file handles */
-          close_peer_vm(slot);
+          close_fds(slot);
           if (run_as_client) {
             DBG("%s", "Server has terminated. Exiting.");
             return NULL;
