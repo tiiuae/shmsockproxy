@@ -145,7 +145,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                       (unsigned long int)filp->private_data, cmd, arg);
   if ((unsigned long int)filp->private_data >= SHM_SLOTS &&
       cmd != SHMEM_IOCSETINSTANCENO) {
-    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld > SHM_SLOTS=%d",
+    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid slot no %ld > SHM_SLOTS=%d",
            (unsigned long int)filp->private_data, SHM_SLOTS);
     return -EINVAL;
   }
@@ -203,13 +203,13 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   case SHMEM_IOCSETINSTANCENO:
     spin_lock_irqsave(&rawhide_irq_lock, flags);
     if (arg >= SHM_SLOTS) {
-      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid instance id %ld", arg);
+      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid slot no %ld", arg);
       rv = -EINVAL;
       goto unlock;
     }
     filp->private_data = (void *)arg;
     printk(KERN_INFO
-           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set instance id 0x%lx",
+           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set slot no %ld",
            arg);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);
