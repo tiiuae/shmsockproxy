@@ -425,7 +425,7 @@ static void wait_server_ready(int slot) {
   do {
     /* check if server has started */
     DEBUG("%s", "Waiting for server to be ready");
-    sleep(2);
+    sleep(SHMEM_POLL_TIMEOUT / 1000);
   } while (!vm_control->data[slot].server.vmid ||
            !vm_control->data[slot].server.vmid == UNKNOWN_PEER);
   DEBUG("server vmid=0x%x", (unsigned)vm_control->data[slot].server.vmid);
@@ -630,10 +630,9 @@ static void shmem_init(int slot) {
   } else {
     my_vmid = &vm_control->data[slot].server.vmid;
     for (int i = 0; i < SHM_SLOTS; i++) {
-      if (!(client_listen_mask & 1 << i)) {
-        continue;
+      if (client_listen_mask & 1 << i) {
+        vm_control->data[i].server.vmid = vm_id;
       }
-      vm_control->data[i].server.vmid = vm_id;
     }
   }
   *my_vmid = vm_id;
@@ -828,9 +827,16 @@ static void *run(void *arg) {
       DEBUG("%s", "Waiting for ACK");
     }
 #endif
-    nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
+    nfds = epoll_wait(epollfd, events, MAX_EVENTS, SHMEM_POLL_TIMEOUT);
     if (nfds < 0) {
       FATAL("epoll_wait");
+    }
+    if (nfds == 0) { /* when timeout */
+      if (vm_control->data[slot].server.vmid == 0) {
+        FATAL("memsocket server died");
+      } else {
+        continue;
+      }
     }
 
     for (n = 0; n < nfds; n++) {
@@ -845,12 +851,20 @@ static void *run(void *arg) {
 #endif
       /* Check for Ctrl-C */
       if (current_event->data.fd == signal_fd) {
-        DBG("%s", "A signal received. Exiting.");
+        DBG("%s", "A signal received.");
         struct signalfd_siginfo siginfo;
         read(signal_fd, &siginfo, sizeof(siginfo)); // Read the signal info
         if (siginfo.ssi_signo == SIGINT) {
-          DBG("%s", "SIGINT received. Exiting.");
+          DBG("%s", "SIGINT: exiting.");
           send_logout(slot, my_shm_desc);
+          if (!run_as_client) {
+            int i;
+            for (i = 0; i < SHM_SLOTS; i++) {
+              if (client_listen_mask & 1 << i) {
+                vm_control->data[i].server.vmid = 0;
+              }
+            }
+          }
           exit(EXIT_FAILURE);
         }
       }
