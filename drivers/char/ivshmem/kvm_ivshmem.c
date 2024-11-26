@@ -116,7 +116,6 @@ static struct miscdevice kvm_ivshmem_misc_dev = {
 static uint64_t flataddr = 0x0;
 module_param_named(flataddr, flataddr, ullong, S_IRUGO);
 
-// TODO: debug
 static int in_counter = 0, out_counter = 0;
 
 MODULE_DEVICE_TABLE(pci, kvm_ivshmem_id_table);
@@ -134,7 +133,6 @@ static struct pci_driver kvm_ivshmem_pci_driver = {
 
 static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                               unsigned long arg) {
-
 
   int rv = 0;
   unsigned long flags;
@@ -208,8 +206,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       goto unlock;
     }
     filp->private_data = (void *)arg;
-    printk(KERN_INFO
-           "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set slot no %ld",
+    printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set slot no %ld",
            arg);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);
@@ -312,7 +309,8 @@ static ssize_t kvm_ivshmem_read(struct file *filp, char *buffer, size_t len,
   if (len == 0)
     return 0;
 
-  bytes_read = copy_to_user(buffer, (void*)  kvm_ivshmem_dev.base_addr + offset, len);
+  bytes_read =
+      copy_to_user(buffer, (void *)kvm_ivshmem_dev.base_addr + offset, len);
   if (bytes_read > 0) {
     return -EFAULT;
   }
@@ -370,7 +368,7 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
     return 0;
 
   bytes_written =
-      copy_from_user((void*)  kvm_ivshmem_dev.base_addr + offset, buffer, len);
+      copy_from_user((void *)kvm_ivshmem_dev.base_addr + offset, buffer, len);
   if (bytes_written > 0) {
     return -EFAULT;
   }
@@ -471,7 +469,7 @@ static int request_msix_vectors(struct kvm_ivshmem_device *ivs_info,
       irq_incoming_data[i >> 1] = n;
       KVM_IVSHMEM_DPRINTK("Using interrupt #%d for incoming data for vm %d", n,
                           i >> 1);
-    // vector 0 is used for for sending acknowledgments
+      // vector 0 is used for for sending acknowledgments
     } else {
       irq_ack[i >> 1] = n;
       KVM_IVSHMEM_DPRINTK("Using interrupt #%d for ACKs for vm %d", n, i >> 1);
@@ -507,13 +505,14 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   kvm_ivshmem_dev.ioaddr_size = pci_resource_len(pdev, 2);
 
   if (flataddr) {
-    kvm_ivshmem_dev.base_addr = memremap(flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
-    printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p", flataddr,
-       kvm_ivshmem_dev.base_addr);
-  }
-  else {
+    kvm_ivshmem_dev.base_addr =
+        memremap(flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
+    printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p",
+           flataddr, kvm_ivshmem_dev.base_addr);
+  } else {
     kvm_ivshmem_dev.base_addr = pci_iomap(pdev, 2, 0);
-    printk(KERN_INFO "KVM_IVSHMEM: using PCI iomap base = 0x%p", kvm_ivshmem_dev.base_addr);
+    printk(KERN_INFO "KVM_IVSHMEM: using PCI iomap base = 0x%p",
+           kvm_ivshmem_dev.base_addr);
   }
 
   if (!kvm_ivshmem_dev.base_addr) {
@@ -522,8 +521,10 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
     goto pci_release;
   }
 
-  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr = %p flataddr = 0x%llx",
-         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size, kvm_ivshmem_dev.base_addr, flataddr);
+  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr "
+                   "= %p flataddr = 0x%llx",
+         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size,
+         kvm_ivshmem_dev.base_addr, flataddr);
 
   /* Clear the the shared memory*/
   memset_io(kvm_ivshmem_dev.base_addr, kvm_ivshmem_dev.ioaddr_size, 0);
@@ -554,8 +555,8 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   return 0;
 
 reg_release:
-if (!flataddr)
-  pci_iounmap(pdev, kvm_ivshmem_dev.base_addr);
+  if (!flataddr)
+    pci_iounmap(pdev, kvm_ivshmem_dev.base_addr);
 pci_release:
   pci_release_regions(pdev);
   if (flataddr)
@@ -619,7 +620,8 @@ error:
 }
 
 static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
-  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device. Using memory @ %p", kvm_ivshmem_dev.base_addr);
+  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device. Using memory @ %p",
+         kvm_ivshmem_dev.base_addr);
   filp->private_data = (void *)(unsigned long)-1;
   return 0;
 }
@@ -635,7 +637,7 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
   uint64_t start;
 
   off = vma->vm_pgoff << PAGE_SHIFT;
-  start = flataddr? flataddr:(uint64_t)kvm_ivshmem_dev.ioaddr;
+  start = flataddr ? flataddr : (uint64_t)kvm_ivshmem_dev.ioaddr;
 
   len = PAGE_ALIGN((start & ~PAGE_MASK) + kvm_ivshmem_dev.ioaddr_size);
   start &= PAGE_MASK;
@@ -653,14 +655,14 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   off += start;
   vma->vm_pgoff = off >> PAGE_SHIFT;
-  #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,3,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
   vm_flags_mod(vma, VM_SHARED, 0);
-  #else
+#else
   vma->vm_flags |= VM_SHARED;
-  #endif
+#endif
 
   if (remap_pfn_range(vma, vma->vm_start, off >> PAGE_SHIFT,
-                         vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
+                      vma->vm_end - vma->vm_start, vma->vm_page_prot)) {
     KVM_IVSHMEM_DPRINTK("%ld mmap failed",
                         (unsigned long int)filp->private_data);
     return -ENXIO;

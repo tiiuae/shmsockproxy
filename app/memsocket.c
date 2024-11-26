@@ -43,8 +43,8 @@
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
     snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
-    snprintf(tmp1, sizeof(tmp1), "[%d] %s:%d: %s\n", slot,              \
-             __FUNCTION__, __LINE__, tmp2);                                    \
+    snprintf(tmp1, sizeof(tmp1), "[%d] %s:%d: %s\n", slot, __FUNCTION__,       \
+             __LINE__, tmp2);                                                  \
     errno = 0;                                                                 \
     report(tmp1, 0);                                                           \
   }
@@ -64,8 +64,8 @@
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
     snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
-    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d] %s\n", slot,             \
-             __FUNCTION__, __LINE__, tmp2);                                    \
+    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d] %s\n", slot, __FUNCTION__,      \
+             __LINE__, tmp2);                                                  \
     errno = 0;                                                                 \
     report(tmp1, 0);                                                           \
   }
@@ -74,7 +74,7 @@
 #define ERROR0(msg)                                                            \
   {                                                                            \
     char tmp[512];                                                             \
-    snprintf(tmp, sizeof(tmp), "[%d] [%s:%d] %s\n", slot, __FUNCTION__, \
+    snprintf(tmp, sizeof(tmp), "[%d] [%s:%d] %s\n", slot, __FUNCTION__,        \
              __LINE__, msg);                                                   \
     report(tmp, 0);                                                            \
   }
@@ -83,8 +83,8 @@
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
     snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
-    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d] %s\n", slot,             \
-             __FUNCTION__, __LINE__, tmp2);                                    \
+    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d] %s\n", slot, __FUNCTION__,      \
+             __LINE__, tmp2);                                                  \
     report(tmp1, 0);                                                           \
   }
 
@@ -92,8 +92,8 @@
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
     snprintf(tmp2, sizeof(tmp2), msg);                                         \
-    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d]: %s\n", slot,            \
-             __FUNCTION__, __LINE__, tmp2);                                    \
+    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d]: %s\n", slot, __FUNCTION__,     \
+             __LINE__, tmp2);                                                  \
     report(tmp1, 1);                                                           \
   }
 
@@ -155,30 +155,30 @@ struct {
 
 static const char usage_string[] =
     "Usage: memsocket [-h <host_ivshmem_socket_path>] { -s <sink_socket_path> "
-    "-l "
-    "<slot_list> | -c <source_socket_path> <slot> }\n\n"
+    "-l <slot_list> | -c <source_socket_path> <slot> }\n\n"
     "Options:\n"
     "  -s <sink_socket_path>\n"
     "      Connect to an existing socket (e.g., created by Waypipe) and "
-    "transfer data from slots specified with the `-l` option.\n"
+    "transfer\n"
+    "      data from slots specified with the `-l` option.\n\n"
     "  -l <slot_list>\n"
-    "      Comma-ceparated list of slots (e.g., 1,2,3) to listen for data "
-    "      or `-1` to listen on all possible slots"
-    "transfer. Used with `-s`.\n"
+    "      Comma-separated list of slots (e.g., 1,2,3) to listen for data, or "
+    "`-1`\n"
+    "      to listen on all available slots. Used with `-s`.\n\n"
     "  -c <source_socket_path> <slot>\n"
     "      Create a socket to forward all data to the connected peer’s sink "
-    "socket.\n"
+    "socket.\n\n"
     "  -h <host_ivshmem_socket_path>\n"
-    "      Specify the ivshmem socket path (shared memory interface) used when "
-    "running on the host system.\n\n"
+    "      Specify the ivshmem socket path (shared memory interface) to be "
+    "used\n"
+    "      when running on the host system.\n\n"
     "Examples:\n"
     "  1. Start socket receiving for slots 2 and 3:\n"
     "       memsocket -s /run/user/1000/pipewire-0 -l 2,3\n\n"
-    "  2. Start socket forwarding on slots 2 and 3:\n"
+    "  2. Start socket forwarding for slots 2 and 3:\n"
     "       On Host:\n"
     "         memsocket -h /tmp/ivshmem_socket -c "
-    "/home/ghaf/pipewire-forward.socket "
-    "2\n"
+    "/home/ghaf/pipewire-forward.socket 2\n"
     "       On VM:\n"
     "         memsocket -c /run/user/1000/pipewire-forward.socket 3\n";
 
@@ -428,8 +428,7 @@ static void wait_server_ready(int slot) {
     sleep(2);
   } while (!vm_control->data[slot].server.vmid ||
            !vm_control->data[slot].server.vmid == UNKNOWN_PEER);
-  DEBUG("server vmid=0x%x",
-        (unsigned)vm_control->data[slot].server.vmid);
+  DEBUG("server vmid=0x%x", (unsigned)vm_control->data[slot].server.vmid);
 }
 
 static void client_init(int slot) {
@@ -471,13 +470,12 @@ static void client_init(int slot) {
 
   ev.events = EPOLLIN;
   ev.data.fd = endpoint_socket;
-  if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, endpoint_socket,
-                &ev) == -1) {
+  if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, endpoint_socket, &ev) ==
+      -1) {
     FATAL("client_init: epoll_ctl: endpoint_socket");
   }
 
   wait_server_ready(slot);
-
   INFO("%s", "client instance initialized");
 }
 
@@ -504,8 +502,7 @@ static int wayland_connect(int slot) {
 
   ev.events = EPOLLIN;
   ev.data.fd = wayland_fd;
-  if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, wayland_fd, &ev) ==
-      -1) {
+  if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, wayland_fd, &ev) == -1) {
     FATAL("epoll_ctl: wayland_fd");
   }
 
@@ -650,14 +647,13 @@ static void shmem_init(int slot) {
   if (!run_on_host) {
     ev.events = EPOLLIN | EPOLLOUT;
     ev.data.fd = shmem_fd[slot];
-    if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
-        -1) {
+    if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) == -1) {
       FATAL("epoll_ctl: -1");
     }
     ev.events = EPOLLIN | EPOLLOUT;
     ev.data.fd = shmem_fd[slot];
-    if (epoll_ctl(epollfd_limited[slot], EPOLL_CTL_ADD, ev.data.fd,
-                  &ev) == -1) {
+    if (epoll_ctl(epollfd_limited[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
+        -1) {
       FATAL("epoll_ctl: -1");
     }
     /* Set output buffer it's available */
@@ -668,24 +664,21 @@ static void shmem_init(int slot) {
     ev.data.fd =
         peers_on_host[0]
             .interrupt_fd[(slot << 1) | PEER_RESOURCE_CONSUMED_INT_VEC];
-    if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
-        -1) {
+    if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) == -1) {
       FATAL("epoll_ctl: -1");
     }
-    if (epoll_ctl(epollfd_limited[slot], EPOLL_CTL_ADD, ev.data.fd,
-                  &ev) == -1) {
+    if (epoll_ctl(epollfd_limited[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
+        -1) {
       FATAL("epoll_ctl: -1");
     }
     ev.events = EPOLLIN;
-    ev.data.fd =
-        peers_on_host[0]
-            .interrupt_fd[(slot << 1) | LOCAL_RESOURCE_READY_INT_VEC];
-    if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
-        -1) {
+    ev.data.fd = peers_on_host[0]
+                     .interrupt_fd[(slot << 1) | LOCAL_RESOURCE_READY_INT_VEC];
+    if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) == -1) {
       FATAL("epoll_ctl: -1");
     }
-    if (epoll_ctl(epollfd_limited[slot], EPOLL_CTL_ADD, ev.data.fd,
-                  &ev) == -1) {
+    if (epoll_ctl(epollfd_limited[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
+        -1) {
       FATAL("epoll_ctl: -1");
     }
   }
@@ -711,12 +704,10 @@ static void thread_init(int slot) {
   struct epoll_event ev;
   ev.events = EPOLLIN;
   ev.data.fd = signal_fd;
-  if (epoll_ctl(epollfd_limited[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
-      -1) {
+  if (epoll_ctl(epollfd_limited[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) == -1) {
     ERROR("%s", "epoll_ctl: -1");
   }
-  if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) ==
-      -1) {
+  if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, ev.data.fd, &ev) == -1) {
     ERROR("%s", "epoll_ctl: -1");
   }
 
@@ -730,16 +721,14 @@ static void thread_init(int slot) {
     /* Specifies the interrupt (doorbell) number used to notify the peer that
        data is ready to be processed in the buffer
     */
-    local_rr_int_no[slot] = vm_control->data[slot].server.vmid |
-                                   (slot << 1) |
-                                   LOCAL_RESOURCE_READY_INT_VEC;
+    local_rr_int_no[slot] = vm_control->data[slot].server.vmid | (slot << 1) |
+                            LOCAL_RESOURCE_READY_INT_VEC;
     /* Specifies the interrupt (doorbell) number used to notify the peer that
        the received remote data has been consumed, allowing it to reuse its
        buffer
     */
-    remote_rc_int_no[slot] = vm_control->data[slot].server.vmid |
-                                    (slot << 1) |
-                                    PEER_RESOURCE_CONSUMED_INT_VEC;
+    remote_rc_int_no[slot] = vm_control->data[slot].server.vmid | (slot << 1) |
+                             PEER_RESOURCE_CONSUMED_INT_VEC;
     /*
      * Send LOGIN cmd to the server. Supply my_vmid
      */
@@ -826,8 +815,7 @@ static void *run(void *arg) {
         peers_on_host[0]
             .interrupt_fd[slot << 1 | PEER_RESOURCE_CONSUMED_INT_VEC];
     fd_int_data_ready =
-        peers_on_host[0]
-            .interrupt_fd[slot << 1 | LOCAL_RESOURCE_READY_INT_VEC];
+        peers_on_host[0].interrupt_fd[slot << 1 | LOCAL_RESOURCE_READY_INT_VEC];
     INFO("fd_int_data_ack=%d fd_int_data_ready=%d", fd_int_data_ack,
          fd_int_data_ready)
   }
@@ -902,8 +890,8 @@ static void *run(void *arg) {
         }
         ev.events = EPOLLIN | EPOLLET | EPOLLHUP;
         ev.data.fd = connected_app_fd;
-        if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD,
-                      connected_app_fd, &ev) == -1) {
+        if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, connected_app_fd,
+                      &ev) == -1) {
           FATAL("epoll_ctl: connected_app_fd");
         }
         /* Send the connect request to the wayland peer */
@@ -952,12 +940,10 @@ static void *run(void *arg) {
           DBG("Received login request from 0x%x", peer_shm_desc->fd);
           /* If the peer VM starts again, close all opened file handles */
           close_fds(slot);
-          local_rr_int_no[slot] = peer_shm_desc->fd |
-                                         (slot << 1) |
-                                         LOCAL_RESOURCE_READY_INT_VEC;
-          remote_rc_int_no[slot] = peer_shm_desc->fd |
-                                          (slot << 1) |
-                                          PEER_RESOURCE_CONSUMED_INT_VEC;
+          local_rr_int_no[slot] =
+              peer_shm_desc->fd | (slot << 1) | LOCAL_RESOURCE_READY_INT_VEC;
+          remote_rc_int_no[slot] =
+              peer_shm_desc->fd | (slot << 1) | PEER_RESOURCE_CONSUMED_INT_VEC;
 
           peer_shm_desc->fd = -1;
           break;
@@ -972,9 +958,9 @@ static void *run(void *arg) {
           break;
         case CMD_DATA:
         case CMD_DATA_CLOSE:
-          connected_app_fd =
-              run_as_client ? peer_shm_desc->fd
-                            : map_peer_fd(slot, peer_shm_desc->fd, 0);
+          connected_app_fd = run_as_client
+                                 ? peer_shm_desc->fd
+                                 : map_peer_fd(slot, peer_shm_desc->fd, 0);
           DEBUG(
               "shmem: received %d bytes for %d cksum=0x%x", peer_shm_desc->len,
               connected_app_fd,
@@ -1001,8 +987,8 @@ static void *run(void *arg) {
             DEBUG("Closing %d peer fd=%d", connected_app_fd, peer_shm_desc->fd);
           }
           if (connected_app_fd > 0) {
-            if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_DEL,
-                          connected_app_fd, NULL) == -1) {
+            if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_DEL, connected_app_fd,
+                          NULL) == -1) {
               ERROR0("epoll_ctl: EPOLL_CTL_DEL");
             }
             close(connected_app_fd);
@@ -1041,8 +1027,8 @@ static void *run(void *arg) {
          be sent to the shared memory peer */
       if ((current_event->events & EPOLLIN) && !event_handled) {
         if (!run_as_client) {
-          connected_app_fd = get_remote_socket(
-              slot, current_event->data.fd, 0, IGNORE_ERROR);
+          connected_app_fd =
+              get_remote_socket(slot, current_event->data.fd, 0, IGNORE_ERROR);
           DEBUG("get_remote_socket: %d", connected_app_fd);
         } else {
           connected_app_fd = current_event->data.fd;
@@ -1103,11 +1089,11 @@ static void *run(void *arg) {
         if (run_as_client)
           my_shm_desc->fd = current_event->data.fd;
         else {
-          DEBUG("get_remote_socket: %d",
-                get_remote_socket(slot, current_event->data.fd, 0,
-                                  IGNORE_ERROR));
-          my_shm_desc->fd = get_remote_socket(
-              slot, current_event->data.fd, CLOSE_FD, IGNORE_ERROR);
+          DEBUG(
+              "get_remote_socket: %d",
+              get_remote_socket(slot, current_event->data.fd, 0, IGNORE_ERROR));
+          my_shm_desc->fd = get_remote_socket(slot, current_event->data.fd,
+                                              CLOSE_FD, IGNORE_ERROR);
         }
         if (my_shm_desc->fd > 0) {
           DEBUG("ioctl ending close request for %d", my_shm_desc->fd);
@@ -1128,8 +1114,8 @@ static void *run(void *arg) {
             ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
                   (LOCAL_RESOURCE_READY_INT_VEC << 8) + 1);
         }
-        if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_DEL,
-                      current_event->data.fd, NULL) == -1) {
+        if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_DEL, current_event->data.fd,
+                      NULL) == -1) {
           ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", current_event->data.fd);
         }
         close(current_event->data.fd);
@@ -1210,8 +1196,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (run_mode > 1 || run_as_client < 0 ||
-      (slot < 0 && run_as_client > 0) ||
+  if (run_mode > 1 || run_as_client < 0 || (slot < 0 && run_as_client > 0) ||
       (!client_listen_mask && !run_as_client))
     goto wrong_args;
 
@@ -1241,11 +1226,10 @@ int main(int argc, char **argv) {
   sigset_t mask;
   sigemptyset(&mask);
   sigaddset(&mask, SIGINT);
-  // sigprocmask(SIG_BLOCK, &mask, NULL); // Block SIGINT signal
   if (pthread_sigmask(SIG_BLOCK, &mask, NULL) != 0) {
     FATAL("pthread_sigmask");
   }
-  signal_fd = signalfd(-1, &mask, 0);  // Create fd for the SIGINT signal
+  signal_fd = signalfd(-1, &mask, 0); // Create fd for the SIGINT signal
 
   /* On server site start a thread for each supported client */
   if (run_as_client == 0) {
