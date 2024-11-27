@@ -839,12 +839,11 @@ static void *run(void *arg) {
     if (nfds < 0) {
       FATAL("epoll_wait");
     }
-    if (nfds == 0) { /* when timeout */
-      if (vm_control->data[slot].server.vmid == 0) {
-        FATAL("memsocket server died");
-      } else {
-        continue;
-      }
+    if (vm_control->data[slot].server.vmid == 0) {
+      FATAL("memsocket server died");
+    }
+    if (nfds == 0) { /* timeout */
+      continue;
     }
 
     for (n = 0; n < nfds; n++) {
