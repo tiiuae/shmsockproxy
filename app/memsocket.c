@@ -32,7 +32,7 @@
 #define SHM_DEVICE_FN "/dev/ivshmem"
 
 #define MAX_EVENTS (1024)
-#define MAX_FDS (10)
+#define MAX_FDS (100)
 #define SHMEM_POLL_TIMEOUT (3000)
 #define SHMEM_BUFFER_SIZE (512 * 1024)
 #define UNKNOWN_PEER (-1)
@@ -91,6 +91,16 @@
 #define FATAL(msg, ...)                                                        \
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
+    if (!run_as_client) {                                                      \
+      int i;                                                                   \
+      for (i = 0; i < SHM_SLOTS; i++) {                                        \
+        if (client_listen_mask & 1 << i) {                                     \
+          vm_control->data[i].server.vmid = 0;                                 \
+        }                                                                      \
+      }                                                                        \
+    } else {                                                                   \
+      vm_control->data[slot].client.vmid = 0;                                  \
+    }                                                                          \
     snprintf(tmp2, sizeof(tmp2), msg);                                         \
     snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d]: %s\n", slot, __FUNCTION__,     \
              __LINE__, tmp2);                                                  \
@@ -142,6 +152,7 @@ volatile int *my_vmid = NULL;
 int vm_id = -1;
 vm_data *my_shm_data[SHM_SLOTS], *peer_shm_data[SHM_SLOTS];
 int run_as_client = -1;
+int force_vmid = 0;
 int local_rr_int_no[SHM_SLOTS], remote_rc_int_no[SHM_SLOTS];
 pthread_t server_threads[SHM_SLOTS];
 long long int client_listen_mask = 0;
@@ -153,8 +164,11 @@ struct {
   } data[SHM_SLOTS];
 } *vm_control;
 
+static const char warning_other_instance[] = "Exiting if the '-f' flag was "
+                                             "not used";
 static const char usage_string[] =
-    "Usage: memsocket [-h <host_ivshmem_socket_path>] { -s <sink_socket_path> "
+    "Usage: memsocket [-h <host_ivshmem_socket_path>] [-f] { -s "
+    "<sink_socket_path> "
     "-l <slot_list> | -c <source_socket_path> <slot> }\n\n"
     "Options:\n"
     "  -s <sink_socket_path>\n"
@@ -172,6 +186,8 @@ static const char usage_string[] =
     "      Specify the ivshmem socket path (shared memory interface) to be "
     "used\n"
     "      when running on the host system.\n\n"
+    "  -f\n"
+    "      Force run when other instance exited unclearly\n\n"
     "Examples:\n"
     "  1. Start socket receiving for slots 2 and 3:\n"
     "       memsocket -s /run/user/1000/pipewire-0 -l 2,3\n\n"
@@ -629,21 +645,22 @@ static void shmem_init(int slot) {
     my_vmid = &vm_control->data[slot].client.vmid;
   } else {
     my_vmid = &vm_control->data[slot].server.vmid;
-    /* Clear the vm_id and wait longer then timeout in order to let clients
-    know the server has restarted */
-    for (int i = 0; i < SHM_SLOTS; i++) {
-      if (client_listen_mask & 1 << i) {
-        vm_control->data[i].server.vmid = 0;
-      }
-    }
-    sleep(3 * SHMEM_POLL_TIMEOUT / 2 / 1000);
-    for (int i = 0; i < SHM_SLOTS; i++) {
-      if (client_listen_mask & 1 << i) {
-        vm_control->data[i].server.vmid = vm_id;
-      }
+  }
+  if (*my_vmid) {
+    ERROR("Another client/server from VM 0x%x may be running ", *my_vmid);
+    if (force_vmid) {
+      ERROR("%s", warning_other_instance);
+    } else {
+      FATAL(warning_other_instance);
     }
   }
   *my_vmid = vm_id;
+  if (!run_as_client) { /* Clear the vm_id and wait longer then client's timeout
+                     in order to let it know the server has restarted */
+    vm_control->data[slot].server.vmid = 0;
+    sleep(3 * SHMEM_POLL_TIMEOUT / 2 / 1000);
+    vm_control->data[slot].server.vmid = vm_id;
+  }
   INFO("My VM id = 0x%x. Running as a ", *my_vmid);
   if (run_as_client) {
     INFO("%s", "client");
@@ -862,17 +879,8 @@ static void *run(void *arg) {
         struct signalfd_siginfo siginfo;
         read(signal_fd, &siginfo, sizeof(siginfo)); // Read the signal info
         if (siginfo.ssi_signo == SIGINT) {
-          DBG("%s", "SIGINT: exiting.");
           send_logout(slot, my_shm_desc);
-          if (!run_as_client) {
-            int i;
-            for (i = 0; i < SHM_SLOTS; i++) {
-              if (client_listen_mask & 1 << i) {
-                vm_control->data[i].server.vmid = 0;
-              }
-            }
-          }
-          exit(EXIT_FAILURE);
+          FATAL("SIGINT: exiting.");
         }
       }
 
@@ -935,8 +943,8 @@ static void *run(void *arg) {
       }
 
       /*
-       * Server and client: Received interrupt from peer VM - there is incoming
-       * data in the shared memory - EPOLLIN
+       * Server and client: Received interrupt from peer VM - there is
+       * incoming data in the shared memory - EPOLLIN
        */
       INFO("Possible incoming data: current_event->events=0x%x "
            "current_event->data.fd=%d "
@@ -1140,7 +1148,8 @@ static void *run(void *arg) {
           ERROR("epoll_ctl: EPOLL_CTL_DEL on fd %d", current_event->data.fd);
         }
         close(current_event->data.fd);
-        /* If the shared memory buffer is busy, don't proceed any further events
+        /* If the shared memory buffer is busy, don't proceed any further
+         * events
          */
         if (epollfd == epollfd_limited[slot])
           break;
@@ -1163,7 +1172,7 @@ int main(int argc, char **argv) {
   int run_mode = 0;
   pthread_t threads[SHM_SLOTS], host_thread;
 
-  while ((opt = getopt(argc, argv, "c:s:h:l:")) != -1) {
+  while ((opt = getopt(argc, argv, "c:s:h:l:f:")) != -1) {
     switch (opt) {
     case 's':
       run_as_client = 0;
@@ -1197,7 +1206,7 @@ int main(int argc, char **argv) {
           goto invalid_value;
         }
         int value = atoi(token);
-        if (value >= SHM_SLOTS) {
+        if (value >= SHM_SLOTS || value < -1) {
           goto invalid_value;
         }
         if (value == -1) {
@@ -1211,6 +1220,10 @@ int main(int argc, char **argv) {
         goto wrong_args;
       }
       break;
+
+    case 'f':
+      force_vmid = 1;
+      continue;
 
     default: /* '?' */
       goto wrong_args;
