@@ -513,7 +513,8 @@ static int wayland_connect(int slot) {
   strncpy(socket_name.sun_path, socket_path, sizeof(socket_name.sun_path) - 1);
   if (connect(wayland_fd, (struct sockaddr *)&socket_name,
               sizeof(socket_name)) < 0) {
-    FATAL("connect");
+    ERROR("%s", "connect to sink socket");
+    return errno;
   }
 
   ev.events = EPOLLIN;
@@ -526,19 +527,22 @@ static int wayland_connect(int slot) {
   return wayland_fd;
 }
 
-static void make_wayland_connection(int slot, int peer_fd) {
+static int make_wayland_connection(int slot, int peer_fd) {
 
-  int i;
+  int i, tmp;
 
   for (i = 0; i < MAX_FDS; i++) {
     if (fd_map[slot][i].my_fd == -1) {
-      fd_map[slot][i].my_fd = wayland_connect(slot);
-      fd_map[slot][i].remote_fd = peer_fd;
-      return;
+      tmp = wayland_connect(slot);
+      if (tmp > 0) {
+        fd_map[slot][i].my_fd = tmp;
+        fd_map[slot][i].remote_fd = peer_fd;
+      }
+      return tmp;
     }
   }
-  ERROR("FAILED fd#%d", peer_fd);
-  FATAL("fd_map table full");
+  ERROR("fd_map table full. Failed fd#%d", peer_fd);
+  return -1;
 }
 
 static int map_peer_fd(int slot, int peer_fd, int close_fd) {
@@ -713,6 +717,7 @@ static void thread_init(int slot) {
 
   int res;
   struct ioctl_data ioctl_data;
+  struct stat server_socket_stat;
 
   fd_map_clear(slot);
 
@@ -772,6 +777,11 @@ static void thread_init(int slot) {
     DBG("Sent login vmid: 0x%x ioctl result=%d to server_vm_id=0x%x", *my_vmid,
         res, peer_shm_data[slot]->vmid);
   }
+  else { /* run as server */
+    if (stat(socket_path, &server_socket_stat)) {
+      ERROR("Sink socket %s doesn't exist", socket_path);
+    }
+  }
 }
 
 static void close_fds(int slot) {
@@ -795,7 +805,7 @@ static void send_logout(int slot, vm_data *my_shm_desc) {
   struct ioctl_data ioctl_data;
 
   my_shm_desc->cmd = CMD_LOGOUT;
-  my_shm_desc->fd = 0;
+  my_shm_desc->fd = *my_vmid;
   my_shm_desc->len = 0;
   ioctl_data.int_no = local_rr_int_no[slot];
 
@@ -857,7 +867,7 @@ static void *run(void *arg) {
       FATAL("epoll_wait");
     }
     if (vm_control->data[slot].server.vmid == 0) {
-      FATAL("memsocket server died");
+      FATAL("memsocket server died or another instance is running");
     }
     if (nfds == 0) { /* timeout */
       continue;
@@ -893,6 +903,11 @@ static void *run(void *arg) {
                    current_event->data.fd == fd_int_data_ack;
       if (data_ack) {
         DEBUG("%s", "Received remote ACK");
+        if (my_shm_desc->fd) {
+          errno = my_shm_desc->fd;
+          ERROR("Server %d error for the %d command", my_shm_desc->fd,
+            my_shm_desc->cmd);
+        }
         /* Notify the driver that we reserve the local buffer */
         if (!run_on_host) {
           ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
@@ -974,7 +989,7 @@ static void *run(void *arg) {
           remote_rc_int_no[slot] =
               peer_shm_desc->fd | (slot << 1) | PEER_RESOURCE_CONSUMED_INT_VEC;
 
-          peer_shm_desc->fd = -1;
+          peer_shm_desc->fd = 0; /* result */
           break;
         case CMD_LOGOUT:
           DBG("Received logout request from 0x%x", peer_shm_desc->fd);
@@ -982,8 +997,10 @@ static void *run(void *arg) {
           close_fds(slot);
           if (run_as_client) {
             DBG("%s", "Server has terminated. Exiting.");
+            peer_shm_desc->fd = -1;
             return NULL;
           }
+          peer_shm_desc->fd = 0; /* result */
           break;
         case CMD_DATA:
         case CMD_DATA_CLOSE:
@@ -998,10 +1015,13 @@ static void *run(void *arg) {
             rv = send(connected_app_fd, (const void *)peer_shm_desc->data,
                       peer_shm_desc->len, MSG_NOSIGNAL);
             if (rv != peer_shm_desc->len) {
-              DEBUG("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
+              ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
                     connected_app_fd);
             }
             DEBUG("%s", "Received data has been sent");
+            peer_shm_desc->fd = rv;
+          } else {
+            peer_shm_desc->fd = -1;
           }
           if (peer_shm_desc->cmd == CMD_DATA) {
             break;
@@ -1021,13 +1041,17 @@ static void *run(void *arg) {
               ERROR0("epoll_ctl: EPOLL_CTL_DEL");
             }
             close(connected_app_fd);
+            peer_shm_desc->fd = 0; /* result */
+          } else {
+            peer_shm_desc->fd = -1; /* result */
           }
           break;
         case CMD_CONNECT:
-          make_wayland_connection(slot, peer_shm_desc->fd);
+          peer_shm_desc->fd = make_wayland_connection(slot, peer_shm_desc->fd);
           break;
         default:
           ERROR("Invalid CMD 0x%x from peer!", peer_shm_desc->cmd);
+          peer_shm_desc->fd = -1;
           break;
         } /* switch peer_shm_desc->cmd */
 
@@ -1038,7 +1062,6 @@ static void *run(void *arg) {
         if (!run_on_host) {
 #ifdef DEBUG_IOCTL
           ioctl_data.cmd = -1;
-          ioctl_data.fd = 0;
           ioctl_data.len = 0;
 #endif
         } else {
