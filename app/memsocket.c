@@ -776,8 +776,7 @@ static void thread_init(int slot) {
 
     DBG("Sent login vmid: 0x%x ioctl result=%d to server_vm_id=0x%x", *my_vmid,
         res, peer_shm_data[slot]->vmid);
-  }
-  else { /* run as server */
+  } else { /* run as server */
     if (stat(socket_path, &server_socket_stat)) {
       ERROR("Sink socket %s doesn't exist", socket_path);
     }
@@ -903,10 +902,10 @@ static void *run(void *arg) {
                    current_event->data.fd == fd_int_data_ack;
       if (data_ack) {
         DEBUG("%s", "Received remote ACK");
-        if (my_shm_desc->fd) {
+        if (my_shm_desc->fd < 0) {
           errno = my_shm_desc->fd;
-          ERROR("Server %d error for the %d command", my_shm_desc->fd,
-            my_shm_desc->cmd);
+          ERROR("Server error 0x%x for the %d command", my_shm_desc->fd,
+                my_shm_desc->cmd);
         }
         /* Notify the driver that we reserve the local buffer */
         if (!run_on_host) {
@@ -1057,11 +1056,9 @@ static void *run(void *arg) {
 
         /* Signal the other side that the data buffer has been processed */
         DEBUG("%s", "Exec ioctl REMOTE_RESOURCE_CONSUMED_INT_VEC");
-        peer_shm_desc->cmd = -1;
         ioctl_data.int_no = remote_rc_int_no[slot];
         if (!run_on_host) {
 #ifdef DEBUG_IOCTL
-          ioctl_data.cmd = -1;
           ioctl_data.len = 0;
 #endif
         } else {
