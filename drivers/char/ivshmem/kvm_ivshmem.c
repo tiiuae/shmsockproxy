@@ -143,7 +143,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   KVM_IVSHMEM_DPRINTK("%ld ioctl: cmd=0x%x args is 0x%lx",
                       (unsigned long int)filp->private_data, cmd, arg);
   if ((unsigned long int)filp->private_data >= SHM_SLOTS &&
-      cmd != SHMEM_IOCSETINSTANCENO) {
+      cmd != SHMEM_IOCSETINSTANCENO && cmd != SHMEM_IOCIVPOSN) {
     printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid slot no %ld > SHM_SLOTS=%d",
            (unsigned long int)filp->private_data, SHM_SLOTS);
     return -EINVAL;
