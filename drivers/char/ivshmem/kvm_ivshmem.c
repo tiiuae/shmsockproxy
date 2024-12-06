@@ -206,6 +206,11 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       rv = -EINVAL;
       goto unlock;
     }
+    if (slots_enabled[arg]) {
+      printk(KERN_ERR "KVM_IVSHMEM: ioctl: slot #%ld already opened", arg);
+      rv = -EBUSY;
+      goto unlock;
+    }
     filp->private_data = (void *)arg;
     printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set slot no %ld",
            arg);

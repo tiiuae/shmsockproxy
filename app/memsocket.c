@@ -499,7 +499,7 @@ static int wayland_connect(int slot) {
 
   struct sockaddr_un socket_name;
   struct epoll_event ev;
-  int wayland_fd;
+  int wayland_fd, res;
 
   wayland_fd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (wayland_fd < 0) {
@@ -513,8 +513,9 @@ static int wayland_connect(int slot) {
   strncpy(socket_name.sun_path, socket_path, sizeof(socket_name.sun_path) - 1);
   if (connect(wayland_fd, (struct sockaddr *)&socket_name,
               sizeof(socket_name)) < 0) {
-    ERROR("%s", "cannot connect to sink socket");
-    return errno;
+    res = errno;
+    ERROR("%s", "cannot connect to the sink socket");
+    return res;
   }
 
   ev.events = EPOLLIN;
@@ -605,7 +606,10 @@ static void shmem_init(int slot) {
       FATAL("Open " SHM_DEVICE_FN);
     }
     INFO("shared memory fd: %d", shmem_fd[slot]);
-    ioctl(shmem_fd[slot], SHMEM_IOCSETINSTANCENO, slot);
+    res = ioctl(shmem_fd[slot], SHMEM_IOCSETINSTANCENO, slot);
+    if (res) {
+      FATAL("Setting instance id failed");
+    }
   }
 
   /* Get shared memory: check size and mmap it */
@@ -902,6 +906,9 @@ static void *run(void *arg) {
                    current_event->data.fd == fd_int_data_ack;
       if (data_ack) {
         DEBUG("%s", "Received remote ACK");
+        if (my_shm_desc->cmd == CMD_LOGIN) {
+          DBG("%s", "Connected to the server");
+        }  
         if (my_shm_desc->fd < 0) {
           errno = my_shm_desc->fd;
           ERROR("Server error 0x%x for the command #%d", my_shm_desc->fd,
