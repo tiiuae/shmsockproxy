@@ -513,7 +513,7 @@ static int wayland_connect(int slot) {
   strncpy(socket_name.sun_path, socket_path, sizeof(socket_name.sun_path) - 1);
   if (connect(wayland_fd, (struct sockaddr *)&socket_name,
               sizeof(socket_name)) < 0) {
-    ERROR("%s", "connect to sink socket");
+    ERROR("%s", "cannot connect to sink socket");
     return errno;
   }
 
@@ -904,8 +904,12 @@ static void *run(void *arg) {
         DEBUG("%s", "Received remote ACK");
         if (my_shm_desc->fd < 0) {
           errno = my_shm_desc->fd;
-          ERROR("Server error 0x%x for the %d command", my_shm_desc->fd,
+          ERROR("Server error 0x%x for the command #%d", my_shm_desc->fd,
                 my_shm_desc->cmd);
+          if (my_shm_desc->cmd == CMD_CONNECT) {
+            ERROR("Closing fd #%d due to error on server site", connected_app_fd);
+            close(connected_app_fd);              
+          }
         }
         /* Notify the driver that we reserve the local buffer */
         if (!run_on_host) {
