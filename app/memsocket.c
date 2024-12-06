@@ -906,7 +906,7 @@ static void *run(void *arg) {
                    current_event->data.fd == fd_int_data_ack;
       if (data_ack) {
         DEBUG("%s", "Received remote ACK");
-        if (my_shm_desc->cmd == CMD_LOGIN) {
+        if (my_shm_desc->cmd == CMD_LOGIN && run_as_client) {
           DBG("%s", "Connected to the server");
         }  
         if (my_shm_desc->fd < 0) {
