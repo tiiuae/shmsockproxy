@@ -91,15 +91,18 @@
 #define FATAL(msg, ...)                                                        \
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
-    if (!run_as_client) {                                                      \
-      int i;                                                                   \
-      for (i = 0; i < SHM_SLOTS; i++) {                                        \
-        if (client_listen_mask & 1 << i) {                                     \
-          vm_control->data[i].server.vmid = 0;                                 \
+                                                                               \
+    if (vm_control) {                                                          \
+      if (!run_as_client) {                                                    \
+        int i;                                                                 \
+        for (i = 0; i < SHM_SLOTS; i++) {                                      \
+          if (client_listen_mask & 1 << i) {                                   \
+            vm_control->data[i].server.vmid = 0;                               \
+          }                                                                    \
         }                                                                      \
+      } else {                                                                 \
+        vm_control->data[slot].client.vmid = 0;                                \
       }                                                                        \
-    } else {                                                                   \
-      vm_control->data[slot].client.vmid = 0;                                  \
     }                                                                          \
     snprintf(tmp2, sizeof(tmp2), msg);                                         \
     snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d]: %s\n", slot, __FUNCTION__,     \
@@ -908,14 +911,15 @@ static void *run(void *arg) {
         DEBUG("%s", "Received remote ACK");
         if (my_shm_desc->cmd == CMD_LOGIN && run_as_client) {
           DBG("%s", "Connected to the server");
-        }  
+        }
         if (my_shm_desc->fd < 0) {
           errno = my_shm_desc->fd;
           ERROR("Server error 0x%x for the command #%d", my_shm_desc->fd,
                 my_shm_desc->cmd);
           if (my_shm_desc->cmd == CMD_CONNECT) {
-            ERROR("Closing fd #%d due to error on server site", connected_app_fd);
-            close(connected_app_fd);              
+            ERROR("Closing fd #%d due to error on server site",
+                  connected_app_fd);
+            close(connected_app_fd);
           }
         }
         /* Notify the driver that we reserve the local buffer */
@@ -1203,7 +1207,7 @@ int main(int argc, char **argv) {
   int run_mode = 0;
   pthread_t threads[SHM_SLOTS], host_thread;
 
-  while ((opt = getopt(argc, argv, "c:s:h:l:f:")) != -1) {
+  while ((opt = getopt(argc, argv, "c:s:h:l:f")) != -1) {
     switch (opt) {
     case 's':
       run_as_client = 0;
@@ -1215,13 +1219,6 @@ int main(int argc, char **argv) {
       run_as_client = 1;
       socket_path = optarg;
       run_mode++;
-      if (optind >= argc)
-        goto wrong_args;
-      if (strspn(argv[optind], "0123456789") != strlen(argv[optind])) {
-        fprintf(stderr, "-c: invalid vm_id value %s\n", argv[optind]);
-        goto wrong_args;
-      }
-      slot = atoi(argv[optind]);
       break;
 
     case 'h':
@@ -1248,16 +1245,29 @@ int main(int argc, char **argv) {
         continue;
       invalid_value:
         fprintf(stderr, "-l: invalid value %s\n", token);
-        goto wrong_args;
+        goto exit;
       }
       break;
 
     case 'f':
       force_vmid = 1;
-      continue;
+      break;
 
     default: /* '?' */
       goto wrong_args;
+    }
+  }
+
+  if (argc > optind) {
+    if (run_as_client) { /* extract positional parameter - client id*/
+      if (strspn(argv[optind], "0123456789") != strlen(argv[optind])) {
+        fprintf(stderr, "-c: invalid vm_id value %s\n", argv[optind]);
+        goto exit;
+      }
+      slot = atoi(argv[optind]);
+    } else {
+      fprintf(stderr, "Ignored extra parameter(s): %s\n", argv[optind]);
+      goto exit;
     }
   }
 
@@ -1344,5 +1354,6 @@ int main(int argc, char **argv) {
   return 0;
 wrong_args:
   print_usage_and_exit();
+exit:
   return 1;
 }
