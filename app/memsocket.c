@@ -516,7 +516,7 @@ static int wayland_connect(int slot) {
   strncpy(socket_name.sun_path, socket_path, sizeof(socket_name.sun_path) - 1);
   if (connect(wayland_fd, (struct sockaddr *)&socket_name,
               sizeof(socket_name)) < 0) {
-    res = errno;
+    res = -errno;
     ERROR("%s", "cannot connect to the sink socket");
     return res;
   }
@@ -873,7 +873,7 @@ static void *run(void *arg) {
       FATAL("epoll_wait");
     }
     if (vm_control->data[slot].server.vmid == 0) {
-      FATAL("memsocket server died or another instance is running");
+      FATAL("memsocket server died/restarted or another instance is running");
     }
     if (nfds == 0) { /* timeout */
       continue;
@@ -913,7 +913,7 @@ static void *run(void *arg) {
           DBG("%s", "Connected to the server");
         }
         if (my_shm_desc->fd < 0) {
-          errno = my_shm_desc->fd;
+          errno = -my_shm_desc->fd;
           ERROR("Server error 0x%x for the command #%d", my_shm_desc->fd,
                 my_shm_desc->cmd);
           if (my_shm_desc->cmd == CMD_CONNECT) {
