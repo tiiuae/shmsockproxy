@@ -499,23 +499,23 @@ static void client_init(int slot) {
   INFO("%s", "client instance initialized");
 }
 
-static int wayland_connect(int slot) {
+static int sink_connect(int slot) {
 
   struct sockaddr_un socket_name;
   struct epoll_event ev;
-  int wayland_fd, res;
+  int sink_fd, res;
 
-  wayland_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (wayland_fd < 0) {
-    FATAL("wayland socket");
+  sink_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (sink_fd < 0) {
+    FATAL("sink socket");
   }
 
-  DEBUG("wayland socket: %d", wayland_fd);
+  DEBUG("sink socket: %d", sink_fd);
 
   memset(&socket_name, 0, sizeof(socket_name));
   socket_name.sun_family = AF_UNIX;
   strncpy(socket_name.sun_path, socket_path, sizeof(socket_name.sun_path) - 1);
-  if (connect(wayland_fd, (struct sockaddr *)&socket_name,
+  if (connect(sink_fd, (struct sockaddr *)&socket_name,
               sizeof(socket_name)) < 0) {
     res = -errno;
     ERROR("%s", "cannot connect to the sink socket");
@@ -523,22 +523,22 @@ static int wayland_connect(int slot) {
   }
 
   ev.events = EPOLLIN;
-  ev.data.fd = wayland_fd;
-  if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, wayland_fd, &ev) == -1) {
-    FATAL("epoll_ctl: wayland_fd");
+  ev.data.fd = sink_fd;
+  if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, sink_fd, &ev) == -1) {
+    FATAL("epoll_ctl: sink_fd");
   }
 
   INFO("%s", "server initialized");
-  return wayland_fd;
+  return sink_fd;
 }
 
-static int make_wayland_connection(int slot, int peer_fd) {
+static int make_sink_connection(int slot, int peer_fd) {
 
   int i, tmp;
 
   for (i = 0; i < MAX_FDS; i++) {
     if (fd_map[slot][i].my_fd == -1) {
-      tmp = wayland_connect(slot);
+      tmp = sink_connect(slot);
       if (tmp > 0) {
         fd_map[slot][i].my_fd = tmp;
         fd_map[slot][i].remote_fd = peer_fd;
@@ -918,8 +918,8 @@ static void *run(void *arg) {
         }
         if (my_shm_desc->status < 0) {
           errno = -my_shm_desc->status;
-          ERROR("Server error 0x%x fd=%d for the command #%d", my_shm_desc->status, my_shm_desc->fd,
-                my_shm_desc->cmd);
+          ERROR("Peer error 0x%x fd=%d for the command #%d sent data count %d", my_shm_desc->status, my_shm_desc->fd,
+                my_shm_desc->cmd, my_shm_desc->len);
           if (my_shm_desc->cmd == CMD_CONNECT) {
             ERROR("Closing fd #%d due to error on server site",
                   connected_app_fd);
@@ -956,7 +956,7 @@ static void *run(void *arg) {
                       &ev) == -1) {
           FATAL("epoll_ctl: connected_app_fd");
         }
-        /* Send the connect request to the wayland peer */
+        /* Send the connect request to the sink peer */
         my_shm_desc->cmd = CMD_CONNECT;
         my_shm_desc->fd = connected_app_fd;
         my_shm_desc->len = 0;
@@ -1038,11 +1038,12 @@ static void *run(void *arg) {
             rv = send(connected_app_fd, (const void *)peer_shm_desc->data,
                       peer_shm_desc->len, MSG_NOSIGNAL);
             if (rv != peer_shm_desc->len) {
+              peer_shm_desc->status = errno;
               ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
                     connected_app_fd);
             }
             DEBUG("%s", "Received data has been sent");
-            peer_shm_desc->status = rv;
+            peer_shm_desc->len = rv;
           } else {
             peer_shm_desc->status = -1;
           }
@@ -1070,7 +1071,7 @@ static void *run(void *arg) {
           }
           break;
         case CMD_CONNECT:
-          peer_shm_desc->fd = make_wayland_connection(slot, peer_shm_desc->fd);
+          peer_shm_desc->fd = make_sink_connection(slot, peer_shm_desc->fd);
           break;
         default:
           ERROR("Invalid CMD 0x%x from peer!", peer_shm_desc->cmd);
@@ -1107,13 +1108,13 @@ static void *run(void *arg) {
         } else {
           connected_app_fd = current_event->data.fd;
         }
-        DEBUG("%s", "Reading from wayland/waypipe socket");
+        DEBUG("%s", "Reading from sink/waypipe socket");
         read_count = recv(current_event->data.fd, (void *)my_shm_desc->data,
                           sizeof(my_shm_desc->data), MSG_NOSIGNAL);
 
         if (read_count <= 0) {
           if (read_count < 0)
-            ERROR("recv from wayland/waypipe socket failed fd=%d",
+            ERROR("recv from sink/waypipe socket failed fd=%d",
                   current_event->data.fd);
           if (!run_on_host)
             /* Release output buffer */
