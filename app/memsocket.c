@@ -130,6 +130,7 @@ typedef struct {
   volatile int cmd;
   volatile int fd;
   volatile int len;
+  volatile int status;
 } vm_data;
 
 int epollfd_full[SHM_SLOTS], epollfd_limited[SHM_SLOTS];
@@ -771,12 +772,14 @@ static void thread_init(int slot) {
     my_shm_data[slot]->cmd = CMD_LOGIN;
     my_shm_data[slot]->fd = *my_vmid;
     my_shm_data[slot]->len = 0;
+    my_shm_data[slot]->status = 0;
 
     ioctl_data.int_no = local_rr_int_no[slot];
 #ifdef DEBUG_IOCTL
     ioctl_data.cmd = my_shm_data[slot]->cmd;
     ioctl_data.fd = my_shm_data[slot]->fd;
     ioctl_data.len = my_shm_data[slot]->len;
+    ioctl_data.status = my_shm_data[slot]->status;
 #endif
     INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no);
     res = doorbell(slot, &ioctl_data);
@@ -813,6 +816,7 @@ static void send_logout(int slot, vm_data *my_shm_desc) {
   my_shm_desc->cmd = CMD_LOGOUT;
   my_shm_desc->fd = *my_vmid;
   my_shm_desc->len = 0;
+  my_shm_desc->status = 0;
   ioctl_data.int_no = local_rr_int_no[slot];
 
   doorbell(slot, &ioctl_data);
@@ -894,9 +898,9 @@ static void *run(void *arg) {
         DBG("%s", "A signal received.");
         struct signalfd_siginfo siginfo;
         read(signal_fd, &siginfo, sizeof(siginfo)); // Read the signal info
-        if (siginfo.ssi_signo == SIGINT) {
+        if (siginfo.ssi_signo == SIGINT || siginfo.ssi_signo == SIGTERM) {
           send_logout(slot, my_shm_desc);
-          FATAL("SIGINT: exiting.");
+          FATAL("SIGINT/SIGTERM: exiting.");
         }
       }
 
@@ -912,9 +916,9 @@ static void *run(void *arg) {
         if (my_shm_desc->cmd == CMD_LOGIN && run_as_client) {
           DBG("%s", "Connected to the server");
         }
-        if (my_shm_desc->fd < 0) {
-          errno = -my_shm_desc->fd;
-          ERROR("Server error 0x%x for the command #%d", my_shm_desc->fd,
+        if (my_shm_desc->status < 0) {
+          errno = -my_shm_desc->status;
+          ERROR("Server error 0x%x fd=%d for the command #%d", my_shm_desc->status, my_shm_desc->fd,
                 my_shm_desc->cmd);
           if (my_shm_desc->cmd == CMD_CONNECT) {
             ERROR("Closing fd #%d due to error on server site",
@@ -956,11 +960,13 @@ static void *run(void *arg) {
         my_shm_desc->cmd = CMD_CONNECT;
         my_shm_desc->fd = connected_app_fd;
         my_shm_desc->len = 0;
+        my_shm_desc->status = 0;
         ioctl_data.int_no = local_rr_int_no[slot];
 #ifdef DEBUG_IOCTL
         ioctl_data.cmd = my_shm_desc->cmd;
         ioctl_data.fd = my_shm_desc->fd;
         ioctl_data.len = my_shm_desc->len;
+        ioctl_data.len = my_shm_desc->status;
 #endif
         /* Buffer is busy since now. Switch to waiting for the doorbell ACK
            from the peer */
@@ -988,10 +994,10 @@ static void *run(void *arg) {
 
       if (data_in) {
         DEBUG("shmem_fd/host_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote "
-              "len: %d",
+              "len: %d status: %d",
               run_on_host ? fd_int_data_ready : shm_buffer_fd.fd,
               current_event->events, peer_shm_desc->cmd, peer_shm_desc->fd,
-              peer_shm_desc->len);
+              peer_shm_desc->len, peer_shm_desc->status);
 
         switch (peer_shm_desc->cmd) {
         case CMD_LOGIN:
@@ -1003,7 +1009,8 @@ static void *run(void *arg) {
           remote_rc_int_no[slot] =
               peer_shm_desc->fd | (slot << 1) | PEER_RESOURCE_CONSUMED_INT_VEC;
 
-          peer_shm_desc->fd = 0; /* result */
+          peer_shm_desc->fd = 0;
+          peer_shm_desc->status = 0; /* result */
           break;
         case CMD_LOGOUT:
           DBG("Received logout request from 0x%x", peer_shm_desc->fd);
@@ -1012,9 +1019,11 @@ static void *run(void *arg) {
           if (run_as_client) {
             DBG("%s", "Server has terminated. Exiting.");
             peer_shm_desc->fd = -1;
+            peer_shm_desc->status = -1;
             return NULL;
           }
-          peer_shm_desc->fd = 0; /* result */
+          peer_shm_desc->fd = 0;
+          peer_shm_desc->status = 0; /* result */
           break;
         case CMD_DATA:
         case CMD_DATA_CLOSE:
@@ -1033,9 +1042,9 @@ static void *run(void *arg) {
                     connected_app_fd);
             }
             DEBUG("%s", "Received data has been sent");
-            peer_shm_desc->fd = rv;
+            peer_shm_desc->status = rv;
           } else {
-            peer_shm_desc->fd = -1;
+            peer_shm_desc->status = -1;
           }
           if (peer_shm_desc->cmd == CMD_DATA) {
             break;
@@ -1055,9 +1064,9 @@ static void *run(void *arg) {
               ERROR0("epoll_ctl: EPOLL_CTL_DEL");
             }
             close(connected_app_fd);
-            peer_shm_desc->fd = 0; /* result */
+            peer_shm_desc->status = 0; /* result */
           } else {
-            peer_shm_desc->fd = -1; /* result */
+            peer_shm_desc->status = -1; /* result */
           }
           break;
         case CMD_CONNECT:
@@ -1066,6 +1075,7 @@ static void *run(void *arg) {
         default:
           ERROR("Invalid CMD 0x%x from peer!", peer_shm_desc->cmd);
           peer_shm_desc->fd = -1;
+          peer_shm_desc->status = -1;
           break;
         } /* switch peer_shm_desc->cmd */
 
@@ -1131,12 +1141,14 @@ static void *run(void *arg) {
 
           my_shm_desc->fd = connected_app_fd;
           my_shm_desc->len = read_count;
+          my_shm_desc->status = 0;
 
           ioctl_data.int_no = local_rr_int_no[slot];
 #ifdef DEBUG_IOCTL
           ioctl_data.cmd = my_shm_desc->cmd;
           ioctl_data.fd = my_shm_desc->fd;
           ioctl_data.len = my_shm_desc->len;
+          ioctl_data.status = my_shm_desc->status;
 #endif
           DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d",
                 my_shm_desc->cmd, my_shm_desc->fd, my_shm_desc->len);
@@ -1163,10 +1175,12 @@ static void *run(void *arg) {
           DEBUG("ioctl ending close request for %d", my_shm_desc->fd);
 
           ioctl_data.int_no = local_rr_int_no[slot];
+          my_shm_desc->status = 0;
 #ifdef DEBUG_IOCTL
           ioctl_data.cmd = my_shm_desc->cmd;
           ioctl_data.fd = my_shm_desc->fd;
           ioctl_data.len = my_shm_desc->len;
+          ioctl_data.status = my_shm_desc->status;
 #endif
           /* Output buffer is busy. Accept only the events
              that don't use it */
@@ -1300,7 +1314,7 @@ int main(int argc, char **argv) {
   /* Turn signal into file descriptor */
   sigset_t mask;
   sigemptyset(&mask);
-  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGINT|SIGTERM);
   if (pthread_sigmask(SIG_BLOCK, &mask, NULL) != 0) {
     FATAL("pthread_sigmask");
   }
