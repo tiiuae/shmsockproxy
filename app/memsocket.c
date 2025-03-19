@@ -33,7 +33,7 @@
 
 #define MAX_EVENTS (1024)
 #define MAX_FDS (100)
-#define SHMEM_POLL_TIMEOUT (2000)
+#define SHMEM_POLL_TIMEOUT (3000)
 #define SHMEM_BUFFER_SIZE (512 * 1024)
 #define UNKNOWN_PEER (-1)
 #define CLOSE_FD (1)
