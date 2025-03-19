@@ -446,8 +446,8 @@ static void *host_run(void *arg) {
 static void wait_server_ready(int slot) {
   do {
     /* check if server has started */
-    if (!vm_control->data[slot].server.vmid ||
-        !vm_control->data[slot].server.vmid == UNKNOWN_PEER) {
+    if (vm_control->data[slot].server.vmid &&
+        vm_control->data[slot].server.vmid == UNKNOWN_PEER) {
       break;
     }
     DEBUG("%s", "Waiting for server to be ready");
