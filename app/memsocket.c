@@ -751,7 +751,7 @@ static void thread_init(int slot) {
   shmem_init(slot);
 
   if (run_as_client) {
-    /* Create socket that waypipe can write to
+    /* Create the sink socket that client can write to
      * Add the socket fd to the epollfd_full
      */
     client_init(slot);
@@ -1072,6 +1072,7 @@ static void *run(void *arg) {
           break;
         case CMD_CONNECT:
           peer_shm_desc->fd = make_sink_connection(slot, peer_shm_desc->fd);
+          peer_shm_desc->status = peer_shm_desc->fd > 0 ? 0 : -1;
           break;
         default:
           ERROR("Invalid CMD 0x%x from peer!", peer_shm_desc->cmd);
@@ -1108,13 +1109,13 @@ static void *run(void *arg) {
         } else {
           connected_app_fd = current_event->data.fd;
         }
-        DEBUG("%s", "Reading from sink/waypipe socket");
+        DEBUG("%s", "Reading from sink socket");
         read_count = recv(current_event->data.fd, (void *)my_shm_desc->data,
                           sizeof(my_shm_desc->data), MSG_NOSIGNAL);
 
         if (read_count <= 0) {
           if (read_count < 0)
-            ERROR("recv from sink/waypipe socket failed fd=%d",
+            ERROR("recv from sink socket failed fd=%d",
                   current_event->data.fd);
           if (!run_on_host)
             /* Release output buffer */
