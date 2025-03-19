@@ -33,7 +33,7 @@
 
 #define MAX_EVENTS (1024)
 #define MAX_FDS (100)
-#define SHMEM_POLL_TIMEOUT (3000)
+#define SHMEM_POLL_TIMEOUT (2000)
 #define SHMEM_BUFFER_SIZE (512 * 1024)
 #define UNKNOWN_PEER (-1)
 #define CLOSE_FD (1)
@@ -51,14 +51,16 @@
 
 #ifndef DEBUG_OFF
 #define DEBUG(fmt, ...)                                                        \
-  {}
+  {                                                                            \
+  }
 #else
 #define DEBUG DBG
 #endif
 
 #ifndef DEBUG_ON
 #define INFO(fmt, ...)                                                         \
-  {}
+  {                                                                            \
+  }
 #else
 #define INFO(fmt, ...)                                                         \
   {                                                                            \
@@ -444,10 +446,13 @@ static void *host_run(void *arg) {
 static void wait_server_ready(int slot) {
   do {
     /* check if server has started */
+    if (!vm_control->data[slot].server.vmid ||
+        !vm_control->data[slot].server.vmid == UNKNOWN_PEER) {
+      break;
+    }
     DEBUG("%s", "Waiting for server to be ready");
-    sleep(SHMEM_POLL_TIMEOUT / 1000);
-  } while (!vm_control->data[slot].server.vmid ||
-           !vm_control->data[slot].server.vmid == UNKNOWN_PEER);
+    sleep(1);
+  } while (1);
   DEBUG("server vmid=0x%x", (unsigned)vm_control->data[slot].server.vmid);
 }
 
@@ -515,8 +520,8 @@ static int sink_connect(int slot) {
   memset(&socket_name, 0, sizeof(socket_name));
   socket_name.sun_family = AF_UNIX;
   strncpy(socket_name.sun_path, socket_path, sizeof(socket_name.sun_path) - 1);
-  if (connect(sink_fd, (struct sockaddr *)&socket_name,
-              sizeof(socket_name)) < 0) {
+  if (connect(sink_fd, (struct sockaddr *)&socket_name, sizeof(socket_name)) <
+      0) {
     res = -errno;
     ERROR("%s", "cannot connect to the sink socket");
     return res;
@@ -918,8 +923,9 @@ static void *run(void *arg) {
         }
         if (my_shm_desc->status < 0) {
           errno = -my_shm_desc->status;
-          ERROR("Peer error 0x%x fd=%d for the command #%d sent data count %d", my_shm_desc->status, my_shm_desc->fd,
-                my_shm_desc->cmd, my_shm_desc->len);
+          ERROR("Peer error 0x%x fd=%d for the command #%d sent data count %d",
+                my_shm_desc->status, my_shm_desc->fd, my_shm_desc->cmd,
+                my_shm_desc->len);
           if (my_shm_desc->cmd == CMD_CONNECT) {
             ERROR("Closing fd #%d due to error on server site",
                   connected_app_fd);
@@ -1115,8 +1121,7 @@ static void *run(void *arg) {
 
         if (read_count <= 0) {
           if (read_count < 0)
-            ERROR("recv from sink socket failed fd=%d",
-                  current_event->data.fd);
+            ERROR("recv from sink socket failed fd=%d", current_event->data.fd);
           if (!run_on_host)
             /* Release output buffer */
             ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
@@ -1316,7 +1321,7 @@ int main(int argc, char **argv) {
   /* Turn signal into file descriptor */
   sigset_t mask;
   sigemptyset(&mask);
-  sigaddset(&mask, SIGINT|SIGTERM);
+  sigaddset(&mask, SIGINT | SIGTERM);
   if (pthread_sigmask(SIG_BLOCK, &mask, NULL) != 0) {
     FATAL("pthread_sigmask");
   }
