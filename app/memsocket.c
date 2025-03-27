@@ -1044,7 +1044,7 @@ static void *run(void *arg) {
             rv = send(connected_app_fd, (const void *)peer_shm_desc->data,
                       peer_shm_desc->len, MSG_NOSIGNAL);
             if (rv != peer_shm_desc->len) {
-              peer_shm_desc->status = errno;
+              peer_shm_desc->status = -errno;
               ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
                     connected_app_fd);
             }
