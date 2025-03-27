@@ -1072,8 +1072,8 @@ static void *run(void *arg) {
                       peer_shm_desc->len, MSG_NOSIGNAL);
             if (rv != peer_shm_desc->len) {
               peer_shm_desc->status = -errno;
-              ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
-                    connected_app_fd);
+              ERROR("Sent %d out of %d bytes on fd#%d peer fd#%d", rv, peer_shm_desc->len,
+                    connected_app_fd, peer_shm_desc->fd);
             }
             DEBUG("%s", "Received data has been sent");
             peer_shm_desc->len = rv;
