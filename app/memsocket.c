@@ -169,6 +169,7 @@ struct {
     vm_data __attribute__((aligned(64))) client;
   } data[SHM_SLOTS];
 } *vm_control;
+static int map_peer_fd(int slot, int peer_fd, int close_fd);
 
 static const char warning_other_instance[] = "Exiting if the '-f' flag was "
                                              "not used";
@@ -234,6 +235,29 @@ static void fd_map_clear(int slot) {
   for (i = 0; i < MAX_FDS; i++) {
     fd_map[slot][i].my_fd = -1;
     fd_map[slot][i].remote_fd = -1;
+  }
+}
+
+static int close_connection(int slot, vm_data *shm_desc) {
+  int connected_app_fd, res;
+
+  if (run_as_client) {
+    connected_app_fd = shm_desc->fd;
+    DEBUG("Closing %d", connected_app_fd);
+  } else {
+    connected_app_fd = map_peer_fd(slot, shm_desc->fd, 1);
+    DEBUG("Closing %d peer fd=%d", connected_app_fd, shm_desc->fd);
+  }
+
+  if (connected_app_fd > 0) {
+    if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_DEL, connected_app_fd, NULL) ==
+        -1) {
+      ERROR0("epoll_ctl: EPOLL_CTL_DEL");
+    }
+    close(connected_app_fd);
+    return 0;
+  } else {
+    return -1;
   }
 }
 
@@ -926,6 +950,9 @@ static void *run(void *arg) {
           ERROR("Peer error 0x%x fd=%d for the command #%d sent data count %d",
                 my_shm_desc->status, my_shm_desc->fd, my_shm_desc->cmd,
                 my_shm_desc->len);
+          if (my_shm_desc->len < 0) {
+            close_connection(slot, my_shm_desc);
+          }
           if (my_shm_desc->cmd == CMD_CONNECT) {
             ERROR("Closing fd #%d due to error on server site",
                   connected_app_fd);
@@ -1050,6 +1077,9 @@ static void *run(void *arg) {
             }
             DEBUG("%s", "Received data has been sent");
             peer_shm_desc->len = rv;
+            if (rv < 0) {
+              peer_shm_desc->status = close_connection(slot, peer_shm_desc);
+            }
           } else {
             peer_shm_desc->status = -1;
           }
@@ -1058,6 +1088,8 @@ static void *run(void *arg) {
           }
           /* no break if we also need to close the file descriptor */
         case CMD_CLOSE:
+          peer_shm_desc->status = close_connection(slot, peer_shm_desc);
+#if 0
           if (run_as_client) {
             connected_app_fd = peer_shm_desc->fd;
             DEBUG("Closing %d", connected_app_fd);
@@ -1075,6 +1107,7 @@ static void *run(void *arg) {
           } else {
             peer_shm_desc->status = -1; /* result */
           }
+#endif
           break;
         case CMD_CONNECT:
           peer_shm_desc->fd = make_sink_connection(slot, peer_shm_desc->fd);
