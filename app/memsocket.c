@@ -1078,7 +1078,7 @@ static void *run(void *arg) {
             DEBUG("%s", "Received data has been sent");
             peer_shm_desc->len = rv;
             if (rv < 0) {
-              peer_shm_desc->status = close_connection(slot, peer_shm_desc);
+              close_connection(slot, peer_shm_desc);
             }
           } else {
             peer_shm_desc->status = -1;
