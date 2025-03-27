@@ -946,11 +946,12 @@ static void *run(void *arg) {
           DBG("%s", "Connected to the server");
         }
         if (my_shm_desc->status < 0) {
-          errno = -my_shm_desc->status;
+          errno = my_shm_desc->status;
           ERROR("Peer error 0x%x fd=%d for the command #%d sent data count %d",
                 my_shm_desc->status, my_shm_desc->fd, my_shm_desc->cmd,
                 my_shm_desc->len);
           if (my_shm_desc->len < 0) {
+            ERROR("%s", "Closing connection");
             close_connection(slot, my_shm_desc);
           }
           if (my_shm_desc->cmd == CMD_CONNECT) {
