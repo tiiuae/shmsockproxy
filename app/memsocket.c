@@ -951,7 +951,7 @@ static void *run(void *arg) {
                 my_shm_desc->status, my_shm_desc->fd, my_shm_desc->cmd,
                 my_shm_desc->len);
           if (my_shm_desc->len < 0) {
-            ERROR("%s", "Closing connection");
+            ERROR("%s", "Closing connection due to error:");
             close_connection(slot, my_shm_desc);
           }
           if (my_shm_desc->cmd == CMD_CONNECT) {
