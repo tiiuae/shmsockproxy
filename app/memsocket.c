@@ -950,6 +950,10 @@ static void *run(void *arg) {
           ERROR("Peer error 0x%x fd=%d for the command #%d sent data count %d",
                 my_shm_desc->status, my_shm_desc->fd, my_shm_desc->cmd,
                 my_shm_desc->len);
+          errno = 0;
+          if (!run_as_client) {
+            ERROR("Local fd=%d", current_event->data.fd);
+          };
           if (my_shm_desc->len < 0) {
             ERROR("%s", "Closing connection due to error:");
             close_connection(slot, my_shm_desc);
