@@ -952,10 +952,10 @@ static void *run(void *arg) {
                 my_shm_desc->len);
           errno = 0;
           if (!run_as_client) {
-            ERROR("Local fd=%d", current_event->data.fd);
+            ERROR("Local fd=%d", map_peer_fd(slot, my_shm_desc->fd, 0));
           };
           if (my_shm_desc->len < 0) {
-            ERROR("%s", "Closing connection due to error:");
+            ERROR("%s", "Closing connection due to error");
             close_connection(slot, my_shm_desc);
           }
           if (my_shm_desc->cmd == CMD_CONNECT) {
