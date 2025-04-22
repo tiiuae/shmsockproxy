@@ -1064,6 +1064,7 @@ static void *run(void *arg) {
           connected_app_fd = run_as_client
                                  ? peer_shm_desc->fd
                                  : map_peer_fd(slot, peer_shm_desc->fd, 0);
+          peer_shm_desc->status = 0;
           DEBUG(
               "shmem: received %d bytes for %d cksum=0x%x", peer_shm_desc->len,
               connected_app_fd,
@@ -1080,6 +1081,7 @@ static void *run(void *arg) {
             peer_shm_desc->len = rv;
             if (rv < 0) {
               close_connection(slot, peer_shm_desc);
+              break;
             }
           } else {
             peer_shm_desc->status = -1;
@@ -1090,25 +1092,6 @@ static void *run(void *arg) {
           /* no break if we also need to close the file descriptor */
         case CMD_CLOSE:
           peer_shm_desc->status = close_connection(slot, peer_shm_desc);
-#if 0
-          if (run_as_client) {
-            connected_app_fd = peer_shm_desc->fd;
-            DEBUG("Closing %d", connected_app_fd);
-          } else {
-            connected_app_fd = map_peer_fd(slot, peer_shm_desc->fd, 1);
-            DEBUG("Closing %d peer fd=%d", connected_app_fd, peer_shm_desc->fd);
-          }
-          if (connected_app_fd > 0) {
-            if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_DEL, connected_app_fd,
-                          NULL) == -1) {
-              ERROR0("epoll_ctl: EPOLL_CTL_DEL");
-            }
-            close(connected_app_fd);
-            peer_shm_desc->status = 0; /* result */
-          } else {
-            peer_shm_desc->status = -1; /* result */
-          }
-#endif
           break;
         case CMD_CONNECT:
           peer_shm_desc->fd = make_sink_connection(slot, peer_shm_desc->fd);
