@@ -1263,20 +1263,17 @@ int main(int argc, char **argv) {
     case 's':
       run_as_client = 0;
       socket_path = optarg;
-      printf("s:%s\n", socket_path);
       run_mode++;
       break;
 
     case 'c':
       run_as_client = 1;
       socket_path = optarg;
-      printf("c:%s\n", socket_path);
       run_mode++;
       break;
 
     case 'h':
       run_on_host = 1;
-      printf("run on host\n");
       ivshmem_socket_path = optarg;
       break;
 
@@ -1301,12 +1298,10 @@ int main(int argc, char **argv) {
         fprintf(stderr, "-l: invalid value %s\n", token);
         goto exit;
       }
-      printf("l:0x%llx\n", client_listen_mask);
       break;
 
     case 'f':
       force_vmid = 1;
-      printf("f: force\n");
       break;
 
     default: /* '?' */
