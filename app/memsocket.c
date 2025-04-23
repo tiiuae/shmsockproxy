@@ -179,7 +179,7 @@ static const char usage_string[] =
     "<sink_socket_path> "
     "-l | --listen <slot_list>) | (-c | --client <source_socket_path> <slot>) }\n\n"
     "Options:\n"
-    "  -s, --sink <sink_socket_path>\n"
+    "  -s, --server <sink_socket_path>\n"
     "      Connect to an existing socket (e.g., created by Waypipe) and "
     "transfer\n"
     "      data from slots specified with the `-l` option.\n\n"
