@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #include "../drivers/char/ivshmem/kvm_ivshmem.h"
 
@@ -1248,23 +1249,34 @@ int main(int argc, char **argv) {
   int opt;
   int run_mode = 0;
   pthread_t threads[SHM_SLOTS], host_thread;
+  static struct option long_opts[] = {
+    {"server",  required_argument, 0, 's'},
+    {"client",  required_argument, 0, 'c'},
+    {"host",    required_argument, 0, 'h'},
+    {"listen",  required_argument, 0, 'l'},
+    {"force",   no_argument,       0, 'f'},
+    {0, 0, 0, 0}
+};
 
-  while ((opt = getopt(argc, argv, "c:s:h:l:f")) != -1) {
+  while ((opt = getopt_long(argc, argv, "c:s:h:l:f", long_opts, NULL)) != -1) {
     switch (opt) {
     case 's':
       run_as_client = 0;
       socket_path = optarg;
+      printf("s:%s\n", socket_path);
       run_mode++;
       break;
 
     case 'c':
       run_as_client = 1;
       socket_path = optarg;
+      printf("c:%s\n", socket_path);
       run_mode++;
       break;
 
     case 'h':
       run_on_host = 1;
+      printf("run on host\n");
       ivshmem_socket_path = optarg;
       break;
 
@@ -1289,10 +1301,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "-l: invalid value %s\n", token);
         goto exit;
       }
+      printf("l:0x%llx\n", client_listen_mask);
       break;
 
     case 'f':
       force_vmid = 1;
+      printf("f: force\n");
       break;
 
     default: /* '?' */
