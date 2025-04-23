@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #include "../drivers/char/ivshmem/kvm_ivshmem.h"
 
@@ -51,14 +52,16 @@
 
 #ifndef DEBUG_OFF
 #define DEBUG(fmt, ...)                                                        \
-  {}
+  {                                                                            \
+  }
 #else
 #define DEBUG DBG
 #endif
 
 #ifndef DEBUG_ON
 #define INFO(fmt, ...)                                                         \
-  {}
+  {                                                                            \
+  }
 #else
 #define INFO(fmt, ...)                                                         \
   {                                                                            \
@@ -130,6 +133,7 @@ typedef struct {
   volatile int cmd;
   volatile int fd;
   volatile int len;
+  volatile int status;
 } vm_data;
 
 int epollfd_full[SHM_SLOTS], epollfd_limited[SHM_SLOTS];
@@ -166,6 +170,7 @@ struct {
     vm_data __attribute__((aligned(64))) client;
   } data[SHM_SLOTS];
 } *vm_control;
+static int map_peer_fd(int slot, int peer_fd, int close_fd);
 
 static const char warning_other_instance[] = "Exiting if the '-f' flag was "
                                              "not used";
@@ -231,6 +236,29 @@ static void fd_map_clear(int slot) {
   for (i = 0; i < MAX_FDS; i++) {
     fd_map[slot][i].my_fd = -1;
     fd_map[slot][i].remote_fd = -1;
+  }
+}
+
+static int close_connection(int slot, vm_data *shm_desc) {
+  int connected_app_fd, res;
+
+  if (run_as_client) {
+    connected_app_fd = shm_desc->fd;
+    DEBUG("Closing %d", connected_app_fd);
+  } else {
+    connected_app_fd = map_peer_fd(slot, shm_desc->fd, 1);
+    DEBUG("Closing %d peer fd=%d", connected_app_fd, shm_desc->fd);
+  }
+
+  if (connected_app_fd > 0) {
+    if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_DEL, connected_app_fd, NULL) ==
+        -1) {
+      ERROR0("epoll_ctl: EPOLL_CTL_DEL");
+    }
+    close(connected_app_fd);
+    return 0;
+  } else {
+    return -1;
   }
 }
 
@@ -443,10 +471,13 @@ static void *host_run(void *arg) {
 static void wait_server_ready(int slot) {
   do {
     /* check if server has started */
+    if (vm_control->data[slot].server.vmid &&
+        vm_control->data[slot].server.vmid != UNKNOWN_PEER) {
+      break;
+    }
     DEBUG("%s", "Waiting for server to be ready");
-    sleep(SHMEM_POLL_TIMEOUT / 1000);
-  } while (!vm_control->data[slot].server.vmid ||
-           !vm_control->data[slot].server.vmid == UNKNOWN_PEER);
+    sleep(1);
+  } while (1);
   DEBUG("server vmid=0x%x", (unsigned)vm_control->data[slot].server.vmid);
 }
 
@@ -498,46 +529,46 @@ static void client_init(int slot) {
   INFO("%s", "client instance initialized");
 }
 
-static int wayland_connect(int slot) {
+static int sink_connect(int slot) {
 
   struct sockaddr_un socket_name;
   struct epoll_event ev;
-  int wayland_fd, res;
+  int sink_fd, res;
 
-  wayland_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (wayland_fd < 0) {
-    FATAL("wayland socket");
+  sink_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (sink_fd < 0) {
+    FATAL("sink socket");
   }
 
-  DEBUG("wayland socket: %d", wayland_fd);
+  DEBUG("sink socket: %d", sink_fd);
 
   memset(&socket_name, 0, sizeof(socket_name));
   socket_name.sun_family = AF_UNIX;
   strncpy(socket_name.sun_path, socket_path, sizeof(socket_name.sun_path) - 1);
-  if (connect(wayland_fd, (struct sockaddr *)&socket_name,
-              sizeof(socket_name)) < 0) {
+  if (connect(sink_fd, (struct sockaddr *)&socket_name, sizeof(socket_name)) <
+      0) {
     res = -errno;
     ERROR("%s", "cannot connect to the sink socket");
     return res;
   }
 
   ev.events = EPOLLIN;
-  ev.data.fd = wayland_fd;
-  if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, wayland_fd, &ev) == -1) {
-    FATAL("epoll_ctl: wayland_fd");
+  ev.data.fd = sink_fd;
+  if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_ADD, sink_fd, &ev) == -1) {
+    FATAL("epoll_ctl: sink_fd");
   }
 
   INFO("%s", "server initialized");
-  return wayland_fd;
+  return sink_fd;
 }
 
-static int make_wayland_connection(int slot, int peer_fd) {
+static int make_sink_connection(int slot, int peer_fd) {
 
   int i, tmp;
 
   for (i = 0; i < MAX_FDS; i++) {
     if (fd_map[slot][i].my_fd == -1) {
-      tmp = wayland_connect(slot);
+      tmp = sink_connect(slot);
       if (tmp > 0) {
         fd_map[slot][i].my_fd = tmp;
         fd_map[slot][i].remote_fd = peer_fd;
@@ -750,7 +781,7 @@ static void thread_init(int slot) {
   shmem_init(slot);
 
   if (run_as_client) {
-    /* Create socket that waypipe can write to
+    /* Create the sink socket that client can write to
      * Add the socket fd to the epollfd_full
      */
     client_init(slot);
@@ -771,12 +802,14 @@ static void thread_init(int slot) {
     my_shm_data[slot]->cmd = CMD_LOGIN;
     my_shm_data[slot]->fd = *my_vmid;
     my_shm_data[slot]->len = 0;
+    my_shm_data[slot]->status = 0;
 
     ioctl_data.int_no = local_rr_int_no[slot];
 #ifdef DEBUG_IOCTL
     ioctl_data.cmd = my_shm_data[slot]->cmd;
     ioctl_data.fd = my_shm_data[slot]->fd;
     ioctl_data.len = my_shm_data[slot]->len;
+    ioctl_data.status = my_shm_data[slot]->status;
 #endif
     INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no);
     res = doorbell(slot, &ioctl_data);
@@ -813,6 +846,7 @@ static void send_logout(int slot, vm_data *my_shm_desc) {
   my_shm_desc->cmd = CMD_LOGOUT;
   my_shm_desc->fd = *my_vmid;
   my_shm_desc->len = 0;
+  my_shm_desc->status = 0;
   ioctl_data.int_no = local_rr_int_no[slot];
 
   doorbell(slot, &ioctl_data);
@@ -894,9 +928,9 @@ static void *run(void *arg) {
         DBG("%s", "A signal received.");
         struct signalfd_siginfo siginfo;
         read(signal_fd, &siginfo, sizeof(siginfo)); // Read the signal info
-        if (siginfo.ssi_signo == SIGINT) {
+        if (siginfo.ssi_signo == SIGINT || siginfo.ssi_signo == SIGTERM) {
           send_logout(slot, my_shm_desc);
-          FATAL("SIGINT: exiting.");
+          FATAL("SIGINT/SIGTERM: exiting.");
         }
       }
 
@@ -912,10 +946,19 @@ static void *run(void *arg) {
         if (my_shm_desc->cmd == CMD_LOGIN && run_as_client) {
           DBG("%s", "Connected to the server");
         }
-        if (my_shm_desc->fd < 0) {
-          errno = -my_shm_desc->fd;
-          ERROR("Server error 0x%x for the command #%d", my_shm_desc->fd,
-                my_shm_desc->cmd);
+        if (my_shm_desc->status < 0) {
+          errno = -my_shm_desc->status;
+          ERROR("Peer error 0x%x fd=%d for the command #%d sent data count %d",
+                my_shm_desc->status, my_shm_desc->fd, my_shm_desc->cmd,
+                my_shm_desc->len);
+          errno = 0;
+          if (!run_as_client) {
+            ERROR("Local fd=%d", map_peer_fd(slot, my_shm_desc->fd, 0));
+          };
+          if (my_shm_desc->len < 0) {
+            ERROR("%s", "Closing connection due to error");
+            close_connection(slot, my_shm_desc);
+          }
           if (my_shm_desc->cmd == CMD_CONNECT) {
             ERROR("Closing fd #%d due to error on server site",
                   connected_app_fd);
@@ -952,15 +995,17 @@ static void *run(void *arg) {
                       &ev) == -1) {
           FATAL("epoll_ctl: connected_app_fd");
         }
-        /* Send the connect request to the wayland peer */
+        /* Send the connect request to the sink peer */
         my_shm_desc->cmd = CMD_CONNECT;
         my_shm_desc->fd = connected_app_fd;
         my_shm_desc->len = 0;
+        my_shm_desc->status = 0;
         ioctl_data.int_no = local_rr_int_no[slot];
 #ifdef DEBUG_IOCTL
         ioctl_data.cmd = my_shm_desc->cmd;
         ioctl_data.fd = my_shm_desc->fd;
         ioctl_data.len = my_shm_desc->len;
+        ioctl_data.len = my_shm_desc->status;
 #endif
         /* Buffer is busy since now. Switch to waiting for the doorbell ACK
            from the peer */
@@ -988,10 +1033,10 @@ static void *run(void *arg) {
 
       if (data_in) {
         DEBUG("shmem_fd/host_fd=%d event: 0x%x cmd: 0x%x remote fd: %d remote "
-              "len: %d",
+              "len: %d status: %d",
               run_on_host ? fd_int_data_ready : shm_buffer_fd.fd,
               current_event->events, peer_shm_desc->cmd, peer_shm_desc->fd,
-              peer_shm_desc->len);
+              peer_shm_desc->len, peer_shm_desc->status);
 
         switch (peer_shm_desc->cmd) {
         case CMD_LOGIN:
@@ -1003,7 +1048,8 @@ static void *run(void *arg) {
           remote_rc_int_no[slot] =
               peer_shm_desc->fd | (slot << 1) | PEER_RESOURCE_CONSUMED_INT_VEC;
 
-          peer_shm_desc->fd = 0; /* result */
+          peer_shm_desc->fd = 0;
+          peer_shm_desc->status = 0; /* result */
           break;
         case CMD_LOGOUT:
           DBG("Received logout request from 0x%x", peer_shm_desc->fd);
@@ -1012,15 +1058,18 @@ static void *run(void *arg) {
           if (run_as_client) {
             DBG("%s", "Server has terminated. Exiting.");
             peer_shm_desc->fd = -1;
+            peer_shm_desc->status = -1;
             return NULL;
           }
-          peer_shm_desc->fd = 0; /* result */
+          peer_shm_desc->fd = 0;
+          peer_shm_desc->status = 0; /* result */
           break;
         case CMD_DATA:
         case CMD_DATA_CLOSE:
           connected_app_fd = run_as_client
                                  ? peer_shm_desc->fd
                                  : map_peer_fd(slot, peer_shm_desc->fd, 0);
+          peer_shm_desc->status = 0;
           DEBUG(
               "shmem: received %d bytes for %d cksum=0x%x", peer_shm_desc->len,
               connected_app_fd,
@@ -1029,43 +1078,34 @@ static void *run(void *arg) {
             rv = send(connected_app_fd, (const void *)peer_shm_desc->data,
                       peer_shm_desc->len, MSG_NOSIGNAL);
             if (rv != peer_shm_desc->len) {
-              ERROR("Sent %d out of %d bytes on fd#%d", rv, peer_shm_desc->len,
-                    connected_app_fd);
+              peer_shm_desc->status = -errno;
+              ERROR("Sent %d out of %d bytes on fd#%d peer fd#%d", rv, peer_shm_desc->len,
+                    connected_app_fd, peer_shm_desc->fd);
             }
             DEBUG("%s", "Received data has been sent");
-            peer_shm_desc->fd = rv;
+            peer_shm_desc->len = rv;
+            if (rv < 0) {
+              close_connection(slot, peer_shm_desc);
+              break;
+            }
           } else {
-            peer_shm_desc->fd = -1;
+            peer_shm_desc->status = -1;
           }
           if (peer_shm_desc->cmd == CMD_DATA) {
             break;
           }
           /* no break if we also need to close the file descriptor */
         case CMD_CLOSE:
-          if (run_as_client) {
-            connected_app_fd = peer_shm_desc->fd;
-            DEBUG("Closing %d", connected_app_fd);
-          } else {
-            connected_app_fd = map_peer_fd(slot, peer_shm_desc->fd, 1);
-            DEBUG("Closing %d peer fd=%d", connected_app_fd, peer_shm_desc->fd);
-          }
-          if (connected_app_fd > 0) {
-            if (epoll_ctl(epollfd_full[slot], EPOLL_CTL_DEL, connected_app_fd,
-                          NULL) == -1) {
-              ERROR0("epoll_ctl: EPOLL_CTL_DEL");
-            }
-            close(connected_app_fd);
-            peer_shm_desc->fd = 0; /* result */
-          } else {
-            peer_shm_desc->fd = -1; /* result */
-          }
+          peer_shm_desc->status = close_connection(slot, peer_shm_desc);
           break;
         case CMD_CONNECT:
-          peer_shm_desc->fd = make_wayland_connection(slot, peer_shm_desc->fd);
+          peer_shm_desc->fd = make_sink_connection(slot, peer_shm_desc->fd);
+          peer_shm_desc->status = peer_shm_desc->fd > 0 ? 0 : -1;
           break;
         default:
           ERROR("Invalid CMD 0x%x from peer!", peer_shm_desc->cmd);
           peer_shm_desc->fd = -1;
+          peer_shm_desc->status = -1;
           break;
         } /* switch peer_shm_desc->cmd */
 
@@ -1097,14 +1137,13 @@ static void *run(void *arg) {
         } else {
           connected_app_fd = current_event->data.fd;
         }
-        DEBUG("%s", "Reading from wayland/waypipe socket");
+        DEBUG("%s", "Reading from sink socket");
         read_count = recv(current_event->data.fd, (void *)my_shm_desc->data,
                           sizeof(my_shm_desc->data), MSG_NOSIGNAL);
 
         if (read_count <= 0) {
           if (read_count < 0)
-            ERROR("recv from wayland/waypipe socket failed fd=%d",
-                  current_event->data.fd);
+            ERROR("recv from sink socket failed fd=%d", current_event->data.fd);
           if (!run_on_host)
             /* Release output buffer */
             ioctl(shm_buffer_fd.fd, SHMEM_IOCSET,
@@ -1131,12 +1170,14 @@ static void *run(void *arg) {
 
           my_shm_desc->fd = connected_app_fd;
           my_shm_desc->len = read_count;
+          my_shm_desc->status = 0;
 
           ioctl_data.int_no = local_rr_int_no[slot];
 #ifdef DEBUG_IOCTL
           ioctl_data.cmd = my_shm_desc->cmd;
           ioctl_data.fd = my_shm_desc->fd;
           ioctl_data.len = my_shm_desc->len;
+          ioctl_data.status = my_shm_desc->status;
 #endif
           DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d",
                 my_shm_desc->cmd, my_shm_desc->fd, my_shm_desc->len);
@@ -1163,10 +1204,12 @@ static void *run(void *arg) {
           DEBUG("ioctl ending close request for %d", my_shm_desc->fd);
 
           ioctl_data.int_no = local_rr_int_no[slot];
+          my_shm_desc->status = 0;
 #ifdef DEBUG_IOCTL
           ioctl_data.cmd = my_shm_desc->cmd;
           ioctl_data.fd = my_shm_desc->fd;
           ioctl_data.len = my_shm_desc->len;
+          ioctl_data.status = my_shm_desc->status;
 #endif
           /* Output buffer is busy. Accept only the events
              that don't use it */
@@ -1206,8 +1249,16 @@ int main(int argc, char **argv) {
   int opt;
   int run_mode = 0;
   pthread_t threads[SHM_SLOTS], host_thread;
+  static struct option long_opts[] = {
+    {"server",  required_argument, 0, 's'},
+    {"client",  required_argument, 0, 'c'},
+    {"host",    required_argument, 0, 'h'},
+    {"listen",  required_argument, 0, 'l'},
+    {"force",   no_argument,       0, 'f'},
+    {0, 0, 0, 0}
+};
 
-  while ((opt = getopt(argc, argv, "c:s:h:l:f")) != -1) {
+  while ((opt = getopt_long(argc, argv, "c:s:h:l:f", long_opts, NULL)) != -1) {
     switch (opt) {
     case 's':
       run_as_client = 0;
@@ -1300,7 +1351,7 @@ int main(int argc, char **argv) {
   /* Turn signal into file descriptor */
   sigset_t mask;
   sigemptyset(&mask);
-  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGINT | SIGTERM);
   if (pthread_sigmask(SIG_BLOCK, &mask, NULL) != 0) {
     FATAL("pthread_sigmask");
   }

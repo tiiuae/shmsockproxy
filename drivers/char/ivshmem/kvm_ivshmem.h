@@ -22,4 +22,5 @@ struct ioctl_data {
   int fd;
   int cmd;
   int len;
+  int status;
 };
