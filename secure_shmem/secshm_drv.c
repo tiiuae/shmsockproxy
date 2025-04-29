@@ -5,7 +5,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
-
+#include "./config.h"
 #define DEVICE_NAME "mmap_device"
 #define MEM_SIZE PAGE_SIZE  // Allocate one page of memory
 
