@@ -1,4 +1,4 @@
-obj-m := mmap_driver.o
+obj-m := secshm_drv.o
 KDIR := /lib/modules/$(shell uname -r)/build
 
 all:
