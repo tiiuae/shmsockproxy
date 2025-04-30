@@ -14,6 +14,7 @@ static struct cdev mmap_cdev;
 static struct class *mmap_class;
 static void *kernel_buffer;  // Allocated memory
 static int client_table_size = CLIENT_TABLE_SIZE;
+static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 
 // Open function
 static int mmap_dev_open(struct inode *inode, struct file *filp) {
@@ -25,6 +26,33 @@ static int mmap_dev_open(struct inode *inode, struct file *filp) {
 static int mmap_dev_release(struct inode *inode, struct file *filp) {
     printk(KERN_INFO "secshm: Closed\n");
     return 0;
+}
+
+// Lseek function
+static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin)
+{
+    loff_t newpos;
+
+    switch (origin) {
+    case 0: // SEEK_SET
+        newpos = offset;
+        break;
+    case 1: // SEEK_CUR
+        newpos = filp->f_pos + offset;
+        break;
+    case 2: // SEEK_END
+        newpos = MEM_SIZE - offset;
+        break;
+    default:
+        return -EINVAL;
+    }
+
+    if (newpos < 0 || newpos > MEM_SIZE) {
+        return -EINVAL;
+    }
+
+    filp->f_pos = newpos;
+    return newpos;
 }
 
 // mmap implementation
@@ -48,6 +76,7 @@ static struct file_operations fops = {
     .owner = THIS_MODULE,
     .open = mmap_dev_open,
     .release = mmap_dev_release,
+    .llseek = kvm_ivshmem_lseek,
     .mmap = mmap_dev_mmap,
 };
 
