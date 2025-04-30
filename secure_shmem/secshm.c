@@ -17,13 +17,13 @@ static int client_table_size = CLIENT_TABLE_SIZE;
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 
 // Open function
-static int mmap_dev_open(struct inode *inode, struct file *filp) {
-    printk(KERN_INFO "secshm MOD: Opened\n");
+static int secshm_open(struct inode *inode, struct file *filp) {
+    printk(KERN_INFO "secshm: Opened\n");
     return 0;
 }
 
 // Release function
-static int mmap_dev_release(struct inode *inode, struct file *filp) {
+static int secshm_release(struct inode *inode, struct file *filp) {
     printk(KERN_INFO "secshm: Closed\n");
     return 0;
 }
@@ -56,7 +56,7 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin)
 }
 
 // mmap implementation
-static int mmap_dev_mmap(struct file *filp, struct vm_area_struct *vma) {
+static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
     struct page *page;
     unsigned long pfn;
 
@@ -74,14 +74,14 @@ static int mmap_dev_mmap(struct file *filp, struct vm_area_struct *vma) {
 // File operations structure
 static struct file_operations fops = {
     .owner = THIS_MODULE,
-    .open = mmap_dev_open,
-    .release = mmap_dev_release,
-    .llseek = kvm_ivshmem_lseek,
-    .mmap = mmap_dev_mmap,
+    .open = secshm_open,
+    .release = secshm_release,
+    .llseek = secshm_lseek,
+    .mmap = secshm_mmap,
 };
 
 // Module initialization
-static int __init mmap_dev_init(void) {
+static int __init secshm_init(void) {
     // Allocate device number
     if (alloc_chrdev_region(&dev_num, 0, 1, DEVICE_NAME) < 0) {
         printk(KERN_ERR "secshm: Failed to allocate device number\n");
@@ -130,7 +130,7 @@ static int __init mmap_dev_init(void) {
 }
 
 // Module cleanup
-static void __exit mmap_dev_exit(void) {
+static void __exit secshm_exit(void) {
     kfree(kernel_buffer);
     device_destroy(mmap_class, dev_num);
     class_destroy(mmap_class);
@@ -139,8 +139,8 @@ static void __exit mmap_dev_exit(void) {
     printk(KERN_INFO "secshm: Module unloaded\n");
 }
 
-module_init(mmap_dev_init);
-module_exit(mmap_dev_exit);
+module_init(secshm_init);
+module_exit(secshm_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jaroslaw Kurowski");
