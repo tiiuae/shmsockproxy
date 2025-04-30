@@ -1,4 +1,4 @@
-obj-m := secshm_drv.o
+obj-m := secshm.o
 KDIR := /lib/modules/$(shell uname -r)/build
 PWD   := $(shell pwd)
 
@@ -7,7 +7,7 @@ all:
 
 install:
 	mkdir -p $(MODULEDIR)
-	install secshm_drv.ko $(MODULEDIR)
+	install secshm.ko $(MODULEDIR)
 
 clean:
 	make -C $(KDIR) M=$(PWD) clean

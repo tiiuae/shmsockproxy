@@ -6,7 +6,7 @@
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
 #include "./secshm_config.h"
-#define DEVICE_NAME "mmap_device"
+#define DEVICE_NAME "secshm"
 #define MEM_SIZE PAGE_SIZE  // Allocate one page of memory
 
 static dev_t dev_num;
@@ -17,13 +17,13 @@ static int client_table_size = CLIENT_TABLE_SIZE;
 
 // Open function
 static int mmap_dev_open(struct inode *inode, struct file *filp) {
-    printk(KERN_INFO "mmap_device MOD: Opened\n");
+    printk(KERN_INFO "secshm MOD: Opened\n");
     return 0;
 }
 
 // Release function
 static int mmap_dev_release(struct inode *inode, struct file *filp) {
-    printk(KERN_INFO "mmap_device: Closed\n");
+    printk(KERN_INFO "secshm: Closed\n");
     return 0;
 }
 
@@ -39,7 +39,7 @@ static int mmap_dev_mmap(struct file *filp, struct vm_area_struct *vma) {
         return -EIO;
     }
 
-    printk(KERN_INFO "mmap_device: Memory mapped successfully\n");
+    printk(KERN_INFO "secshm: Memory mapped successfully\n");
     return 0;
 }
 
@@ -55,14 +55,14 @@ static struct file_operations fops = {
 static int __init mmap_dev_init(void) {
     // Allocate device number
     if (alloc_chrdev_region(&dev_num, 0, 1, DEVICE_NAME) < 0) {
-        printk(KERN_ERR "mmap_device: Failed to allocate device number\n");
+        printk(KERN_ERR "secshm: Failed to allocate device number\n");
         return -1;
     }
 
     // Initialize character device
     cdev_init(&mmap_cdev, &fops);
     if (cdev_add(&mmap_cdev, dev_num, 1) < 0) {
-        printk(KERN_ERR "mmap_device: Failed to add cdev\n");
+        printk(KERN_ERR "secshm: Failed to add cdev\n");
         unregister_chrdev_region(dev_num, 1);
         return -1;
     }
@@ -70,7 +70,7 @@ static int __init mmap_dev_init(void) {
     // Create device class (without THIS_MODULE)
     mmap_class = class_create(DEVICE_NAME);
     if (IS_ERR(mmap_class)) {
-        printk(KERN_ERR "mmap_device: Failed to create class\n");
+        printk(KERN_ERR "secshm: Failed to create class\n");
         cdev_del(&mmap_cdev);
         unregister_chrdev_region(dev_num, 1);
         return -1;
@@ -78,7 +78,7 @@ static int __init mmap_dev_init(void) {
 
     // Create device node
     if (!device_create(mmap_class, NULL, dev_num, NULL, DEVICE_NAME)) {
-        printk(KERN_ERR "mmap_device: Failed to create device\n");
+        printk(KERN_ERR "secshm: Failed to create device\n");
         class_destroy(mmap_class);
         cdev_del(&mmap_cdev);
         unregister_chrdev_region(dev_num, 1);
@@ -88,7 +88,7 @@ static int __init mmap_dev_init(void) {
     // Allocate kernel memory
     kernel_buffer = kmalloc(MEM_SIZE, GFP_KERNEL);
     if (!kernel_buffer) {
-        printk(KERN_ERR "mmap_device: Failed to allocate memory\n");
+        printk(KERN_ERR "secshm: Failed to allocate memory\n");
         device_destroy(mmap_class, dev_num);
         class_destroy(mmap_class);
         cdev_del(&mmap_cdev);
@@ -96,7 +96,7 @@ static int __init mmap_dev_init(void) {
         return -1;
     }
 
-    printk(KERN_INFO "mmap_device: Module loaded successfully\n");
+    printk(KERN_INFO "secshm: Module loaded successfully\n");
     return 0;
 }
 
@@ -107,7 +107,7 @@ static void __exit mmap_dev_exit(void) {
     class_destroy(mmap_class);
     cdev_del(&mmap_cdev);
     unregister_chrdev_region(dev_num, 1);
-    printk(KERN_INFO "mmap_device: Module unloaded\n");
+    printk(KERN_INFO "secshm: Module unloaded\n");
 }
 
 module_init(mmap_dev_init);
