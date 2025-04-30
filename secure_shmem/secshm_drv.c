@@ -17,7 +17,7 @@ static int client_table_size = CLIENT_TABLE_SIZE;
 
 // Open function
 static int mmap_dev_open(struct inode *inode, struct file *filp) {
-    printk(KERN_INFO "mmap_device: Opened\n");
+    printk(KERN_INFO "mmap_device MOD: Opened\n");
     return 0;
 }
 
