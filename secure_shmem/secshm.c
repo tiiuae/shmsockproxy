@@ -37,7 +37,7 @@ static int secshm_getattr(struct mnt_idmap *idmap, const struct path *path,
     generic_fillattr(idmap, inode, stat);
     // Override the size with our shared memory size
     stat->size = SHM_SIZE;
-    printk(KERN_INFO "secshm: getattr called, size set to %lld\n", SHM_SIZE);
+    printk(KERN_INFO "secshm: getattr called, size set to %d\n", SHM_SIZE);
     return 0;
 }
 // Lseek function
