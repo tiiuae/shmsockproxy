@@ -27,20 +27,18 @@ static int secshm_open(struct inode *inode, struct file *filp) {
 //     return 0;
 // }
 // Getter for file attributes, including size
-static int secshm_getattr(struct mnt_idmap *, const struct path *path, 
+static int secshm_getattr(struct mnt_idmap *idmap, const struct path *path, 
     struct kstat *stat, u32 request_mask,  unsigned int query_flags)
 
 {
-  printk(KERN_INFO "secshm: getattr called\n");
-  int ret = vfs_getattr(path, stat, request_mask, query_flags);
-  if (ret)
-    return ret;
-
-  // Set the size of the shared memory region
-  stat->size = SHM_SIZE;
-
-  printk(KERN_INFO "secshm: getattr called, size set to %lld\n", SHM_SIZE);
-  return 0;
+    struct inode *inode = path->dentry->d_inode;    
+    printk(KERN_INFO "secshm: getattr called\n");
+    // Get basic attributes from the generic implementation
+    generic_fillattr(idmap, inode, stat);
+    // Override the size with our shared memory size
+    stat->size = SHM_SIZE;
+    printk(KERN_INFO "secshm: getattr called, size set to %lld\n", SHM_SIZE);
+    return 0;
 }
 // Lseek function
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
