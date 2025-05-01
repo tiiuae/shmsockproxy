@@ -30,7 +30,8 @@ static int allocate_hugepages(void) {
   printk(KERN_INFO "Allocating %d pages\n", num_pages); // jarekk: TODO delete
   // Allocate each hugepage
   for (unsigned int i = 0; i < num_pages; i++) {
-    huge_pages[i] = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP, order);
+    huge_pages[i] = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP, HPAGE_PMD_ORDER);
+    printk(KERN_INFO "Allocated page %u at %p\n", i, huge_pages[i]);
     if (!huge_pages[i]) {
       printk(KERN_ERR "Failed to allocate hugepage %u\n", i);
       // Free previously allocated pages
