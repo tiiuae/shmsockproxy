@@ -6,8 +6,7 @@
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
 #include "./secshm_config.h"
-#define DEVICE_NAME "secshm"
-#define MEM_SIZE PAGE_SIZE  // Allocate one page of memory
+#define DEVICE_NAME "ivshmem"
 
 static dev_t dev_num;
 static struct cdev mmap_cdev;
@@ -41,13 +40,13 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin)
         newpos = filp->f_pos + offset;
         break;
     case 2: // SEEK_END
-        newpos = MEM_SIZE - offset;
+        newpos = SHM_SIZE - offset;
         break;
     default:
         return -EINVAL;
     }
 
-    if (newpos < 0 || newpos > MEM_SIZE) {
+    if (newpos < 0 || newpos > SHM_SIZE) {
         return -EINVAL;
     }
 
@@ -115,7 +114,7 @@ static int __init secshm_init(void) {
     }
 
     // Allocate kernel memory
-    kernel_buffer = kmalloc(MEM_SIZE, GFP_KERNEL);
+    kernel_buffer = kmalloc(SHM_SIZE, GFP_KERNEL);
     if (!kernel_buffer) {
         printk(KERN_ERR "secshm: Failed to allocate memory\n");
         device_destroy(mmap_class, dev_num);
