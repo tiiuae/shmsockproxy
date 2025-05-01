@@ -17,20 +17,17 @@ static unsigned int num_pages;   // Number of pages to allocate
 
 // Allocate hugepages
 static int allocate_hugepages(void) {
-  unsigned long size = SHM_SIZE;
-  unsigned long page_count =
-      size >> PAGE_SHIFT; // Calculate the number of pages
   unsigned long order =
-      get_order(size); // Get the allocation order (for hugepages)
+      get_order(SHM_SIZE); // Get the allocation order (for hugepages)
 
   // Allocate huge pages
-  num_pages = SHM_SIZE / (PAGE_SIZE * 512);  // 2MB per hugepage 
+  num_pages = SHM_SIZE / (PAGE_SIZE * 512); // 2MB per hugepage
   huge_pages = kmalloc(num_pages * sizeof(struct page *), GFP_KERNEL);
   if (!huge_pages) {
-    print(KERN_ERR "Failed to allocate hugepage array\n");
+    printk(KERN_ERR "Failed to allocate hugepage array\n");
     return -ENOMEM;
   }
-
+  print(KERN_INFO "Allocating %d pages\n", num_pages); // jarekk: TODO delete
   // Allocate each hugepage
   for (unsigned int i = 0; i < num_pages; i++) {
     huge_pages[i] = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP, order);
@@ -60,7 +57,8 @@ static void free_hugepages(void) {
 // Open function
 static int secshm_open(struct inode *inode, struct file *filp) {
   inode->i_op = &secshm_inode_ops; // Override default i_op
-  printk(KERN_INFO "secshm: Opened. Huge page size is: %lu bytes\n", huge_page_size(0));
+  printk(KERN_INFO "secshm: Opened. Huge page size is: %lu bytes\n",
+         huge_page_size(0));
   return 0;
 }
 
