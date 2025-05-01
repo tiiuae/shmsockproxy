@@ -2,11 +2,11 @@
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/init.h>
+#include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-#include <linux/miscdevice.h>
 #define DEVICE_NAME "ivshmem"
 
 static dev_t dev_num;
@@ -23,9 +23,11 @@ static int secshm_open(struct inode *inode, struct file *filp) {
 }
 
 // Getter for file attributes, including size
-static int secshm_getattr(struct user_namespace *mnt_userns,
-                          const struct path *path, struct kstat *stat,
-                          u32 request_mask, unsigned int query_flags) {
+static int secshm_getattr(struct mnt_idmap *, const struct path *path,
+                          struct kstat *stat, u32 request_mask,
+                          unsigned int query_flags)
+
+{
   printk(KERN_INFO "secshm: getattr called\n");
   int ret = vfs_getattr(path, stat, request_mask, query_flags);
   if (ret)
