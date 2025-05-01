@@ -36,7 +36,7 @@ static int secshm_getattr(struct mnt_idmap *idmap, const struct path *path,
     // Get basic attributes from the generic implementation
     generic_fillattr(idmap, request_mask, inode, stat);
     // Override the size with our shared memory size
-    stat->size = SHM_SIZE * 1024 * 1024; // Convert to bytes
+    stat->size = SHM_SIZE;
     stat->result_mask |= STATX_SIZE; // Set the size result mask
     printk(KERN_INFO "secshm: getattr called, size set to %d\n", SHM_SIZE);
     return 0;
@@ -72,11 +72,14 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   struct page *page;
   unsigned long pfn;
 
+  printk(KERN_INFO "secshm: Memory mmap called\n");
+
   page = virt_to_page(kernel_buffer);
   pfn = page_to_pfn(page);
 
   if (remap_pfn_range(vma, vma->vm_start, pfn, vma->vm_end - vma->vm_start,
                       vma->vm_page_prot)) {
+      printk(KERN_INFO "secshm: remap_pfn_range failed\n");
     return -EIO;
   }
 
