@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/miscdevice.h>
 #define DEVICE_NAME "ivshmem"
 
 static dev_t dev_num;
