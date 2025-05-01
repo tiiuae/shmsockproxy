@@ -34,7 +34,7 @@ static int secshm_getattr(struct mnt_idmap *idmap, const struct path *path,
     struct inode *inode = path->dentry->d_inode;    
     printk(KERN_INFO "secshm: getattr called\n");
     // Get basic attributes from the generic implementation
-    generic_fillattr(idmap, inode, stat);
+    generic_fillattr(idmap, request_mask, inode, stat);
     // Override the size with our shared memory size
     stat->size = SHM_SIZE;
     printk(KERN_INFO "secshm: getattr called, size set to %d\n", SHM_SIZE);
