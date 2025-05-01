@@ -18,10 +18,10 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 
 // Open function
 static int secshm_open(struct inode *inode, struct file *filp) {
-  printk(KERN_INFO "secshm: Opened\n");
-  return 0;
+    inode->i_op = &secshm_inode_ops;  // Override default i_op
+    printk(KERN_INFO "secshm: Opened\n");
+    return 0;
 }
-
 // static int secshm_getattr(struct inode *inode, struct file *file)
 // {
 //     struct kstat *stat = file->f_path.dentry->d_inode->i_mapping->host;
@@ -95,7 +95,7 @@ static struct file_operations secshm_fops = {
     .release = secshm_release,
     .llseek = secshm_lseek,
     .mmap = secshm_mmap,
-    .getattr = secshm_getattr, // Handle stat() and fstat()
+//    .getattr = secshm_getattr, // Handle stat() and fstat()
 };
 
 // Misc device structure
