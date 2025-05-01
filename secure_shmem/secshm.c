@@ -17,7 +17,23 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 
 // Open function
 static int secshm_open(struct inode *inode, struct file *filp) {
+    inode->i_op = &secshm_inode_ops;  // Override default i_op
     printk(KERN_INFO "secshm: Opened\n");
+    return 0;
+}
+
+static int secshm_getattr(struct user_namespace *mnt_userns,
+    const struct path *path,
+    struct kstat *stat, u32 request_mask,
+    unsigned int query_flags)
+{
+    printk(KERN_INFO "secshm: getattr\n");
+    int ret = vfs_getattr(path, stat, request_mask, query_flags);
+    if (ret)
+        return ret;
+
+    printk(KERN_INFO "secshm: size set to %ld\n", SHM_SIZE);
+    stat->size = SHM_SIZE;
     return 0;
 }
 
@@ -77,6 +93,10 @@ static struct file_operations fops = {
     .release = secshm_release,
     .llseek = secshm_lseek,
     .mmap = secshm_mmap,
+};
+
+static const struct inode_operations secshm_inode_ops = {
+    .getattr = secshm_getattr,
 };
 
 // Module initialization
