@@ -12,34 +12,73 @@
 static void *kernel_buffer; // Allocated memory
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 static const struct inode_operations secshm_inode_ops;
+static struct page **huge_pages; // Array to hold allocated hugepages
+static unsigned int num_pages;   // Number of pages to allocate
+
+// Allocate hugepages
+static int allocate_hugepages(void) {
+  unsigned long size = SHM_SIZE;
+  unsigned long page_count =
+      size >> PAGE_SHIFT; // Calculate the number of pages
+  unsigned long order =
+      get_order(size); // Get the allocation order (for hugepages)
+
+  // Allocate huge pages
+  num_pages =
+      page_count >> (PAGE_SIZE * 512 / PAGE_SIZE); // Get hugepages count
+  huge_pages = kmalloc(num_pages * sizeof(struct page *), GFP_KERNEL);
+  if (!huge_pages) {
+    print(KERN_ERR "Failed to allocate hugepage array\n");
+    return -ENOMEM;
+  }
+
+  // Allocate each hugepage
+  for (unsigned int i = 0; i < num_pages; i++) {
+    huge_pages[i] = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP, order);
+    if (!huge_pages[i]) {
+      print(KERN_ERR "Failed to allocate hugepage %u\n", i);
+      // Free previously allocated pages
+      for (unsigned int j = 0; j < i; j++) {
+        __free_pages(huge_pages[j], order);
+      }
+      kfree(huge_pages);
+      return -ENOMEM;
+    }
+  }
+
+  return 0;
+}
+
+// Free allocated hugepages
+static void free_hugepages(void) {
+  for (unsigned int i = 0; i < num_pages; i++) {
+    if (huge_pages[i])
+      __free_pages(huge_pages[i], get_order(SHM_SIZE));
+  }
+  kfree(huge_pages);
+}
 
 // Open function
 static int secshm_open(struct inode *inode, struct file *filp) {
-    inode->i_op = &secshm_inode_ops;  // Override default i_op
-    printk(KERN_INFO "secshm: Opened\n");
-    return 0;
+  inode->i_op = &secshm_inode_ops; // Override default i_op
+  printk(KERN_INFO "secshm: Opened\n");
+  return 0;
 }
-// static int secshm_getattr(struct inode *inode, struct file *file)
-// {
-//     struct kstat *stat = file->f_path.dentry->d_inode->i_mapping->host;
-//     printk(KERN_INFO "secshm: getattr called\n");
-//     stat->size = SHM_SIZE;
-//     return 0;
-// }
-// Getter for file attributes, including size
-static int secshm_getattr(struct mnt_idmap *idmap, const struct path *path, 
-    struct kstat *stat, u32 request_mask,  unsigned int query_flags)
+
+static int secshm_getattr(struct mnt_idmap *idmap, const struct path *path,
+                          struct kstat *stat, u32 request_mask,
+                          unsigned int query_flags)
 
 {
-    struct inode *inode = path->dentry->d_inode;    
-    printk(KERN_INFO "secshm: getattr called\n");
-    // Get basic attributes from the generic implementation
-    generic_fillattr(idmap, request_mask, inode, stat);
-    // Override the size with our shared memory size
-    stat->size = SHM_SIZE;
-    stat->result_mask |= STATX_SIZE; // Set the size result mask
-    printk(KERN_INFO "secshm: getattr called, size set to %d\n", SHM_SIZE);
-    return 0;
+  struct inode *inode = path->dentry->d_inode;
+  printk(KERN_INFO "secshm: getattr called\n");
+  // Get basic attributes from the generic implementation
+  generic_fillattr(idmap, request_mask, inode, stat);
+  // Override the size with our shared memory size
+  stat->size = SHM_SIZE;
+  stat->result_mask |= STATX_SIZE; // Set the size result mask
+  printk(KERN_INFO "secshm: getattr called, size set to %d\n", SHM_SIZE);
+  return 0;
 }
 // Lseek function
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
@@ -69,21 +108,30 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
 
 // mmap implementation
 static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
-  struct page *page;
+  unsigned long size = vma->vm_end - vma->vm_start;
   unsigned long pfn;
+  unsigned long page_offset;
+  unsigned long page_count = size / PAGE_SIZE;
 
-  printk(KERN_INFO "secshm: Memory mmap called\n");
-
-  page = virt_to_page(kernel_buffer);
-  pfn = page_to_pfn(page);
-
-  if (remap_pfn_range(vma, vma->vm_start, pfn, vma->vm_end - vma->vm_start,
-                      vma->vm_page_prot)) {
-      printk(KERN_INFO "secshm: remap_pfn_range failed\n");
-    return -EIO;
+  printk(KERN_ERR "secshm: mmap called, size: %lu\n", size);
+  // Check if the requested size is valid
+  if (size != SHM_SIZE) {
+    pr_err("Invalid size for mmap: %lu\n", size);
+    return -EINVAL;
   }
 
-  printk(KERN_INFO "secshm: Memory mapped successfully\n");
+  // Map each hugepage to the user-space address
+  for (unsigned int i = 0; i < page_count; i++) {
+    page_offset = i * PAGE_SIZE;
+    pfn = page_to_pfn(huge_pages[i]); // Convert page to physical frame number
+
+    if (remap_pfn_range(vma, vma->vm_start + page_offset, pfn, PAGE_SIZE,
+                        vma->vm_page_prot)) {
+      pr_err("Failed to remap hugepage at offset %lu\n", page_offset);
+      return -EAGAIN;
+    }
+  }
+
   return 0;
 }
 
@@ -130,6 +178,8 @@ static int __init secshm_init(void) {
 // Module cleanup
 static void __exit secshm_exit(void) {
   misc_deregister(&secshm_device);
+  // Free the hugepage memory
+  free_hugepages();
   kfree(kernel_buffer);
   printk(KERN_INFO "secshm: Module unloaded\n");
 }
