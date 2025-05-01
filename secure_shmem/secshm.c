@@ -1,16 +1,15 @@
 #include "./secshm_config.h"
 #include <linux/cdev.h>
 #include <linux/fs.h>
+#include <linux/hugetlb.h>
 #include <linux/init.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-#include <linux/hugetlb.h>
 #define DEVICE_NAME "ivshmem"
 
-static void *kernel_buffer; // Allocated memory
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 static const struct inode_operations secshm_inode_ops;
 static struct page **huge_pages; // Array to hold allocated hugepages
@@ -28,12 +27,12 @@ static int allocate_hugepages(void) {
     printk(KERN_ERR "Failed to allocate hugepage array\n");
     return -ENOMEM;
   }
-  print(KERN_INFO "Allocating %d pages\n", num_pages); // jarekk: TODO delete
+  printk(KERN_INFO "Allocating %d pages\n", num_pages); // jarekk: TODO delete
   // Allocate each hugepage
   for (unsigned int i = 0; i < num_pages; i++) {
     huge_pages[i] = alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP, order);
     if (!huge_pages[i]) {
-      print(KERN_ERR "Failed to allocate hugepage %u\n", i);
+      printk(KERN_ERR "Failed to allocate hugepage %u\n", i);
       // Free previously allocated pages
       for (unsigned int j = 0; j < i; j++) {
         __free_pages(huge_pages[j], order);
@@ -154,18 +153,16 @@ static const struct inode_operations secshm_inode_ops = {
 
 // Module initialization
 static int __init secshm_init(void) {
-  // Allocate kernel memory for shared memory region
-  kernel_buffer = kmalloc(SHM_SIZE, GFP_KERNEL);
-  if (!kernel_buffer) {
-    printk(KERN_ERR "secshm: Failed to allocate memory\n");
+
+  // Allocate hugepages
+  if (allocate_hugepages()) {
+    printk(KERN_ERR "secshm: Failed to allocate hugepages\n");
     return -ENOMEM;
   }
-
   // Register the misc device
   int ret = misc_register(&secshm_device);
   if (ret) {
     printk(KERN_ERR "secshm: Failed to register misc device\n");
-    kfree(kernel_buffer);
     return ret;
   }
 
@@ -178,7 +175,6 @@ static void __exit secshm_exit(void) {
   misc_deregister(&secshm_device);
   // Free the hugepage memory
   free_hugepages();
-  kfree(kernel_buffer);
   printk(KERN_INFO "secshm: Module unloaded\n");
 }
 
