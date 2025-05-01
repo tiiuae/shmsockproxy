@@ -9,11 +9,7 @@
 #include <linux/uaccess.h>
 #define DEVICE_NAME "ivshmem"
 
-static dev_t dev_num;
-static struct cdev mmap_cdev;
-static struct class *mmap_class;
 static void *kernel_buffer; // Allocated memory
-static int client_table_size = CLIENT_TABLE_SIZE;
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 
 // Open function
@@ -42,7 +38,7 @@ static int secshm_getattr(struct mnt_idmap *, const struct path *path,
   // Set the size of the shared memory region
   stat->size = SHM_SIZE;
 
-  printk(KERN_INFO "secshm: getattr called, size set to %lld\n", SHM_SIZE);
+  printk(KERN_INFO "secshm: getattr called, size set to %d\n", SHM_SIZE);
   return 0;
 }
 // Lseek function
