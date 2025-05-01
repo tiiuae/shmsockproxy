@@ -92,10 +92,8 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
 static struct file_operations secshm_fops = {
     .owner = THIS_MODULE,
     .open = secshm_open,
-    .release = secshm_release,
     .llseek = secshm_lseek,
     .mmap = secshm_mmap,
-//    .getattr = secshm_getattr, // Handle stat() and fstat()
 };
 
 // Misc device structure
