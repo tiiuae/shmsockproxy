@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/hugetlb.h>
 #define DEVICE_NAME "ivshmem"
 
 static void *kernel_buffer; // Allocated memory
