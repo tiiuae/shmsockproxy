@@ -17,7 +17,7 @@ static unsigned int num_pages;   // Number of pages to allocate
 
 // Allocate hugepages
 static int allocate_hugepages(void) {
-  unsigned long order = HUGE_PAGE_ORDER;
+  unsigned long order = HUGETLB_PAGE_ORDER;
     //   get_order(SHM_SIZE); // Get the allocation order (for hugepages)
 
   // Allocate huge pages
