@@ -59,9 +59,7 @@ static void free_hugepages(void) {
 
 // Open function
 static int secshm_open(struct inode *inode, struct file *filp) {
-  printk(KERN_INFO "secshm: open: inode=%p, filp=%p\n", inode, filp); // jarekk: TODO delete
-  if (inode) // jarekk: TODO: remove
-    inode->i_op = &secshm_inode_ops; // Override default i_op
+  inode->i_op = &secshm_inode_ops; // Override default i_op
   printk(KERN_INFO "secshm: Opened.\n");
   return 0;
 }
