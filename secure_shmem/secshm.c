@@ -62,8 +62,7 @@ static int secshm_open(struct inode *inode, struct file *filp) {
   printk(KERN_INFO "secshm: open: inode=%p, filp=%p\n", inode, filp); // jarekk: TODO delete
   if (inode) // jarekk: TODO: remove
     inode->i_op = &secshm_inode_ops; // Override default i_op
-  printk(KERN_INFO "secshm: Opened.\n",
-         /*huge_page_size(0)*/); // jarekk: TODO delete
+  printk(KERN_INFO "secshm: Opened.\n");
   return 0;
 }
 
