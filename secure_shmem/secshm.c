@@ -128,8 +128,8 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
       return -EINVAL;
     } // Check if the page offset is valid
     // jarekk TODO delete
-    printk(KERN_ERR "secshm: mmap page %u, offset: %lu\n", i, page_offset);
     pfn = page_to_pfn(huge_pages[i]); // Convert page to physical frame number
+    printk(KERN_ERR "secshm: mmap page %u, pfn: 0x%lx offset: %lu\n", i, pfn, page_offset);
 
     if (remap_pfn_range(vma, vma->vm_start + page_offset, pfn, hugepage_size,
                         vma->vm_page_prot)) {
