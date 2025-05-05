@@ -14,10 +14,12 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 static const struct inode_operations secshm_inode_ops;
 static struct page **huge_pages; // Array to hold allocated hugepages
 static unsigned int num_pages;   // Number of pages to allocate
+static unsigned int hugepage_size; // Size of each hugepage
 
 // Allocate hugepages
 static int allocate_hugepages(void) {
-  num_pages = SHM_SIZE / (PAGE_SIZE * 512); // 2MB per hugepage
+  hugepage_size = PAGE_SIZE * 512; // 2MB per hugepage
+  num_pages = SHM_SIZE / hugepage_size; // 2MB per hugepage
   huge_pages = kmalloc(num_pages * sizeof(struct page *), GFP_KERNEL);
   if (!huge_pages) {
     printk(KERN_ERR "Failed to allocate hugepage array\n");
@@ -110,7 +112,6 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long size = vma->vm_end - vma->vm_start;
   unsigned long pfn;
   unsigned long page_offset;
-  unsigned long page_count = size / PAGE_SIZE;
 
   printk(KERN_ERR "secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
@@ -120,11 +121,17 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   }
 
   // Map each hugepage to the user-space address
-  for (unsigned int i = 0; i < page_count; i++) {
-    page_offset = i * PAGE_SIZE;
+  for (unsigned int i = 0; i < num_pages; i++) {
+    page_offset = i * hugepage_size;  // 2MB per hugepage
+    if (page_offset >= SHM_SIZE) {
+      pr_err("Page offset exceeds SHM_SIZE: %lu\n", page_offset);
+      return -EINVAL;
+    } // Check if the page offset is valid
+    // jarekk TODO delete
+    printk(KERN_ERR "secshm: mmap page %u, offset: %lu\n", i, page_offset);
     pfn = page_to_pfn(huge_pages[i]); // Convert page to physical frame number
 
-    if (remap_pfn_range(vma, vma->vm_start + page_offset, pfn, PAGE_SIZE,
+    if (remap_pfn_range(vma, vma->vm_start + page_offset, pfn, hugepage_size,
                         vma->vm_page_prot)) {
       pr_err("Failed to remap hugepage at offset %lu\n", page_offset);
       return -EAGAIN;
