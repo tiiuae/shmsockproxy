@@ -1,13 +1,21 @@
 #include "./secshm_config.h"
 #include <linux/cdev.h>
+#include <linux/device.h>
+#include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/hugetlb.h>
+#include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/pagemap.h>
+#include <linux/shmem_fs.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+
+
+
 #define DEVICE_NAME "ivshmem"
 
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
@@ -15,12 +23,42 @@ static const struct inode_operations secshm_inode_ops;
 static struct page **huge_pages; // Array to hold allocated hugepages
 static unsigned int num_pages;   // Number of pages to allocate
 static unsigned int hugepage_size; // Size of each hugepage
+static struct file *huge_file;
 
+/**
+ * Create a hugetlb file in the hugetlbfs
+ */
+static struct file *create_hugetlb_file(void)
+{
+    struct file *file;
+    char *file_name = "/dev/hugepages/ivshmem"; // Path to the hugetlb file
+    
+    // dd if=/dev/zero of=/dev/hugepages/ivshmem bs=2M count=16
+    // if (vfs_truncate(file_name, SHM_SIZE)) { // Truncate the file to the specified size
+    //   printk(KERN_ERR "secshm: Failed to truncate hugetlb file: %ld\n", PTR_ERR(file));
+    //   return NULL;
+    // }
+
+    file = filp_open(file_name, O_RDWR /*| O_CREAT*/, 0600);
+    if (IS_ERR(file)) {
+        printk(KERN_ERR "secshm: Failed to open ??? hugetlb file: %ld file=%p\n", PTR_ERR(file), file);
+        return NULL;
+    }
+    
+    // /* Truncate the file to the specified size */
+    // sys_ftruncate(file_inode(file)->i_rdev, size);
+    
+    return file;
+}
+
+#if 0
 // Allocate hugepages
 static int allocate_hugepages(void) {
-  hugepage_size = SHM_SIZE; // PAGE_SIZE * 512; // 2MB per hugepage
+
+  hugepage_size = PAGE_SIZE * 512; // 2MB per hugepage
   num_pages = SHM_SIZE / hugepage_size; // 2MB per hugepage
   huge_pages = kmalloc(num_pages * sizeof(struct page *), GFP_KERNEL);
+
   if (!huge_pages) {
     printk(KERN_ERR "Failed to allocate hugepage array\n");
     return -ENOMEM;
@@ -33,7 +71,7 @@ static int allocate_hugepages(void) {
   // Allocate each hugepage
   for (unsigned int i = 0; i < num_pages; i++) {
     huge_pages[i] =
-        alloc_pages(GFP_KERNEL | GFP_TRANSHUGE | __GFP_ZERO | __GFP_COMP, get_order(SHM_SIZE));
+        alloc_pages(GFP_KERNEL /*| GFP_TRANSHUGE*/ | __GFP_ZERO | __GFP_COMP, get_order(hugepage_size));
     printk(KERN_INFO "Allocated page %u pfn=0x%lx virt=%p\n", i, page_to_pfn(huge_pages[i]),
       page_address(huge_pages[i])); // jarekk: TODO delete
 
@@ -60,6 +98,7 @@ static void free_hugepages(void) {
   }
   kfree(huge_pages);
 }
+#endif
 
 // Open function
 static int secshm_open(struct inode *inode, struct file *filp) {
@@ -111,6 +150,46 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
 
 // mmap implementation
 static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
+
+  #if 1
+  loff_t offset = 0;
+  int ret;
+
+  printk(KERN_ERR "secshm: mmap() called\n");
+
+  if (!huge_file) {
+      printk(KERN_ERR "secshm: huge_file not available\n");
+      return -EINVAL;
+  }
+
+  ret = vma->vm_ops ? 0 : -ENODEV;
+  if (ret)
+      return ret;
+
+  // Don't allow partial mapping (just for safety)
+  if ((vma->vm_end - vma->vm_start) != SHM_SIZE) {
+      printk(KERN_ERR "secshm: User requested wrong size: %lx should be %x\n", vma->vm_end - vma->vm_start, SHM_SIZE);
+      return -EINVAL;
+  }
+
+  // mmap backing file into this VMA
+#if 1 
+//LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+  vm_flags_mod(vma, VM_SHARED | VM_HUGETLB, 0);
+#else
+  vma->vm_flags |= VM_SHARED | VM_HUGETLB;
+#endif
+
+  printk(KERN_ERR "secshm: call_mmap()\n");
+  ret = call_mmap(huge_file, vma);
+  if (ret)
+      printk(KERN_ERR "secshm: call_mmap failed: %d\n", ret);
+  else 
+      printk(KERN_ERR "secshm: call_mmap succeeded\n");
+  
+  return ret;
+
+  #else
   unsigned long size = vma->vm_end - vma->vm_start;
   unsigned long pfn;
   unsigned long page_offset;
@@ -141,6 +220,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   }
 
   return 0;
+  #endif
 }
 
 // File operations structure
@@ -166,10 +246,18 @@ static const struct inode_operations secshm_inode_ops = {
 static int __init secshm_init(void) {
 
   // Allocate hugepages
-  if (allocate_hugepages()) {
-    printk(KERN_ERR "secshm: Failed to allocate hugepages\n");
+  // if (allocate_hugepages()) {
+  //   printk(KERN_ERR "secshm: Failed to allocate hugepages\n");
+  //   return -ENOMEM;
+  // }
+
+  // Allocate hugepages file
+  huge_file = create_hugetlb_file();
+  if (!huge_file) {
+    printk(KERN_ERR "secshm: Failed to allocate hugepages file\n");
     return -ENOMEM;
   }
+
   // Register the misc device
   int ret = misc_register(&secshm_device);
   if (ret) {
@@ -185,7 +273,12 @@ static int __init secshm_init(void) {
 static void __exit secshm_exit(void) {
   misc_deregister(&secshm_device);
   // Free the hugepage memory
-  free_hugepages();
+  // free_hugepages();
+
+  // Close the hugepages file
+  if (huge_file && !IS_ERR(huge_file)) {
+    filp_close(huge_file, NULL);
+  }
   printk(KERN_INFO "secshm: Module unloaded\n");
 }
 
