@@ -18,7 +18,7 @@ static unsigned int hugepage_size; // Size of each hugepage
 
 // Allocate hugepages
 static int allocate_hugepages(void) {
-  hugepage_size = PAGE_SIZE * 512; // 2MB per hugepage
+  hugepage_size = SHM_SIZE; // PAGE_SIZE * 512; // 2MB per hugepage
   num_pages = SHM_SIZE / hugepage_size; // 2MB per hugepage
   huge_pages = kmalloc(num_pages * sizeof(struct page *), GFP_KERNEL);
   if (!huge_pages) {
@@ -26,16 +26,18 @@ static int allocate_hugepages(void) {
     return -ENOMEM;
   }
   printk(KERN_INFO
-         "Allocating %d pages HUGETLB_PAGE_ORDER=%d get_order(SHM_SIZE)=%d\n",
-         num_pages, HUGETLB_PAGE_ORDER,
+         "Allocating %d pages HUGETLB_PAGE_ORDER=%d HPAGE_PMD_ORDER=%d get_order(SHM_SIZE)=%d\n",
+         num_pages, HUGETLB_PAGE_ORDER, HPAGE_PMD_ORDER,
          get_order(SHM_SIZE)); // jarekk: TODO delete
+
   // Allocate each hugepage
   for (unsigned int i = 0; i < num_pages; i++) {
     huge_pages[i] =
-        alloc_pages(GFP_KERNEL | __GFP_ZERO | __GFP_COMP, HPAGE_PMD_ORDER);
-    printk(KERN_INFO "Allocated page %u at %p HPAGE_PMD_ORDER=%d\n", i,
-           huge_pages[i], HPAGE_PMD_ORDER); // jarekk: TODO delete
-    if (!huge_pages[i]) {
+        alloc_pages(GFP_KERNEL | GFP_TRANSHUGE | __GFP_ZERO | __GFP_COMP, get_order(SHM_SIZE));
+    printk(KERN_INFO "Allocated page %u pfn=0x%lx virt=%p\n", i, page_to_pfn(huge_pages[i]),
+      page_address(huge_pages[i])); // jarekk: TODO delete
+
+      if (!huge_pages[i]) {
       printk(KERN_ERR "Failed to allocate hugepage %u\n", i);
       // Free previously allocated pages
       for (unsigned int j = 0; j < i; j++) {
