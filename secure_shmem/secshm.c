@@ -173,13 +173,24 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   }
 
   // mmap backing file into this VMA
-#if 1 
-//LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
-  vm_flags_mod(vma, VM_SHARED | VM_HUGETLB | VM_LOCKED, 0);
-#else
-  vma->vm_flags |= VM_SHARED | VM_HUGETLB;
-#endif
-
+  #if 1 
+  //LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+    vm_flags_mod(vma, VM_SHARED | VM_HUGETLB | VM_LOCKED, 0);
+  #else
+    vma->vm_flags |= VM_SHARED | VM_HUGETLB;
+  #endif
+  // get_file(huge_file);
+  /*  vma->vm_file = huge_file;
+    vma->vm_ops = &secshm_vm_ops;
+    vma->vm_private_data = huge_file;
+    vma->vm_pgoff = offset >> PAGE_SHIFT; // Set the page offset
+    vma->vm_start = vma->vm_start;
+    vma->vm_end = vma->vm_end;
+  */
+    // Set the file for the VMA
+    // jarekk TODO delete
+  vma_set_file(vma, huge_file);
+  
   printk(KERN_ERR "secshm: call_mmap()\n");
   ret = call_mmap(huge_file, vma);
   if (ret)
