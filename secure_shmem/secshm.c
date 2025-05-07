@@ -175,7 +175,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   // mmap backing file into this VMA
 #if 1 
 //LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
-  vm_flags_mod(vma, VM_SHARED | VM_HUGETLB, 0);
+  vm_flags_mod(vma, VM_SHARED | VM_HUGETLB | VM_LOCKED, 0);
 #else
   vma->vm_flags |= VM_SHARED | VM_HUGETLB;
 #endif
