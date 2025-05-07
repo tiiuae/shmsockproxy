@@ -33,7 +33,7 @@ static struct file *huge_file;
 static struct file *create_hugetlb_file(void)
 {
     struct file *file;
-    // char *file_name = "/dev/hugepages/ivshmem"; // Path to the hugetlb file
+    char *file_name = "/dev/hugepages/ivshmem"; // Path to the hugetlb file
     
     // dd if=/dev/zero of=/dev/hugepages/ivshmem bs=2M count=16
     // if (vfs_truncate(file_name, SHM_SIZE)) { // Truncate the file to the specified size
@@ -42,20 +42,11 @@ static struct file *create_hugetlb_file(void)
     // }
     // Open the hugetlb file
 
-    file = hugetlb_file_setup("secshm", SHM_SIZE, VM_NORESERVE, 0666, HUGETLB_ANONHUGE_INODE);
-    if (IS_ERR(file)) {
-        pr_err("failed to create hugetlb file\n");
-        return NULL;
-    }
-    return file;
-
-    #if 0
     file = filp_open(file_name, O_RDWR /*| O_CREAT*/, 0600);
     if (IS_ERR(file)) {
         printk(KERN_ERR "secshm: Failed to open hugetlb file: %ld file=%p\n", PTR_ERR(file), file);
         return NULL;
     }
-    #endif
     // /* Truncate the file to the specified size */
     // sys_ftruncate(file_inode(file)->i_rdev, size);
     
@@ -186,24 +177,17 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   // mmap backing file into this VMA
   #if 1 
   //LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
-    vm_flags_mod(vma, VM_SHARED | VM_HUGETLB | VM_DONTEXPAND | 0*VM_LOCKED, 0);
+    // vm_flags_mod(vma, VM_SHARED | VM_HUGETLB | VM_DONTEXPAND | 0*VM_LOCKED, 0);
   #else
     vma->vm_flags |= VM_SHARED | VM_HUGETLB;
   #endif
-  // get_file(huge_file);
-  /*  vma->vm_file = huge_file;
-    vma->vm_ops = &secshm_vm_ops;
-    vma->vm_private_data = huge_file;
-    vma->vm_pgoff = offset >> PAGE_SHIFT; // Set the page offset
-    vma->vm_start = vma->vm_start;
-    vma->vm_end = vma->vm_end;
-  */
     // Set the file for the VMA
     // jarekk TODO delete
-  vma_set_file(vma, huge_file);
+  // vma_set_file(vma, huge_file);
   
   printk(KERN_ERR "secshm: call_mmap()\n");
-  ret = call_mmap(huge_file, vma);
+  // ret = call_mmap(huge_file, vma);
+  ret = huge_file->f_op->mmap(huge_file, vma);
   if (ret)
       printk(KERN_ERR "secshm: call_mmap failed: %d\n", ret);
   else 
