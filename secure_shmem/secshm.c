@@ -33,7 +33,7 @@ static struct file *huge_file;
 static struct file *create_hugetlb_file(void)
 {
     struct file *file;
-    char *file_name = "/dev/hugepages/ivshmem"; // Path to the hugetlb file
+    char *file_name = "/dev/hugepages/ivshmem1"; // Path to the hugetlb file
     
     // dd if=/dev/zero of=/dev/hugepages/ivshmem bs=2M count=16
     // if (vfs_truncate(file_name, SHM_SIZE)) { // Truncate the file to the specified size
@@ -177,7 +177,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   // mmap backing file into this VMA
   #if 1 
   //LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
-    // vm_flags_mod(vma, VM_SHARED | VM_HUGETLB | VM_DONTEXPAND | 0*VM_LOCKED, 0);
+    vm_flags_mod(vma, VM_SHARED | VM_HUGETLB | VM_DONTEXPAND | VM_LOCKED, 0);
   #else
     vma->vm_flags |= VM_SHARED | VM_HUGETLB;
   #endif
