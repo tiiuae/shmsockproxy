@@ -12,19 +12,19 @@
   static int allocate_module_pages(void) {
     pages = kmalloc(NUM_PAGES * sizeof(struct page *), GFP_KERNEL);
     if (!pages) {
-      printk(KERN_ERR "Failed to allocate page array\n");
+      pr_err("Failed to allocate page array\n");
       return -ENOMEM;
     }
-    printk(KERN_INFO "Allocating %ld pages\n", NUM_PAGES); // jarekk: TODO delete
+    pr_info("Allocating %ld pages\n", NUM_PAGES); // jarekk: TODO delete
     // Allocate pages
     for (unsigned int i = 0; i < NUM_PAGES; i++) {
       pages[i] = alloc_page(GFP_KERNEL | __GFP_ZERO);
 
-      printk(KERN_INFO "Allocated page %u at %p\n", i,
+      pr_info("Allocated page %u at %p\n", i,
             pages[i]); // jarekk: TODO delete
 
       if (IS_ERR_OR_NULL(pages[i])) {
-        printk(KERN_ERR "Failed to allocate page %u\n", i);
+        pr_err("Failed to allocate page %u\n", i);
         // Free previously allocated pages
         for (unsigned int j = 0; j < i; j++) {
           __free_pages(pages[j], 0);
@@ -49,7 +49,7 @@
     // Override default i_op to take over getattr
     // This is needed to set the size of the shared memory region
     inode->i_op = &secshm_inode_ops;
-    printk(KERN_INFO "secshm: Opened.\n");
+    pr_info("secshm: Opened.\n");
     return 0;
   }
 
@@ -59,14 +59,14 @@
 
   {
     struct inode *inode = path->dentry->d_inode;
-    printk(KERN_INFO "secshm: getattr called\n");
+    pr_info("secshm: getattr called\n");
     // Get basic attributes from the generic implementation
     generic_fillattr(idmap, request_mask, inode, stat);
 
     // Override the size with our shared memory size
     stat->size = SHM_SIZE;
     stat->result_mask |= STATX_SIZE; // Set the size result mask
-    printk(KERN_INFO "secshm: getattr called, size set to %d\n", SHM_SIZE);
+    pr_info("secshm: getattr called, size set to %d\n", SHM_SIZE);
     return 0;
   }
   // Lseek function
@@ -100,14 +100,14 @@
     unsigned long pfn;
     unsigned long page_offset;
 
-    printk(KERN_ERR "secshm: mmap called, size: %lu\n", size);
+    pr_err("secshm: mmap called, size: %lu\n", size);
     // Check if the requested size is valid
     if (size != SHM_SIZE) {
       pr_err("Invalid size for mmap: %lu\n", size);
       return -EINVAL;
     }
     if (vma->vm_pgoff != 0) {
-      printk(KERN_ERR "secshm: mmap with non-zero offset not supported\n");
+      pr_err("secshm: mmap with non-zero offset not supported\n");
       return -EINVAL;
   }
 
@@ -121,7 +121,7 @@
 
       // jarekk TODO delete
       pfn = page_to_pfn(pages[i]); // Convert page to physical frame number
-      printk(KERN_ERR "secshm: mmap page %u, pfn: 0x%lx offset: %lu\n", i, pfn,
+      pr_err("secshm: mmap page %u, pfn: 0x%lx offset: %lu\n", i, pfn,
             page_offset);
 
       if (vm_insert_page(vma, vma->vm_start + page_offset, pages[i])) {
@@ -155,25 +155,25 @@
   static int __init secshm_init(void) {
 
     if (allocate_module_pages()) {
-      printk(KERN_ERR "secshm: Failed to allocate pages\n");
+      pr_err("secshm: Failed to allocate pages\n");
       return -ENOMEM;
     }
 
     int ret = misc_register(&secshm_device);
     if (ret) {
-      printk(KERN_ERR "secshm: Failed to register misc device\n");
+      pr_err("secshm: Failed to register misc device\n");
       free_module_pages();
       return ret;
     }
 
-    printk(KERN_INFO "secshm: Module loaded and misc device registered\n");
+    pr_info("secshm: Module loaded and misc device registered\n");
     return 0;
   }
 
   static void __exit secshm_exit(void) {
     misc_deregister(&secshm_device);
     free_module_pages();
-    printk(KERN_INFO "secshm: Module unloaded\n");
+    pr_info("secshm: Module unloaded\n");
   }
 
   module_init(secshm_init);
