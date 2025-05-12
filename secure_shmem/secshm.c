@@ -13,8 +13,8 @@ static struct page **pages; // Array to hold allocated pages
 
 static void print_task_args(void) {
 
-  char *arg_start = (char *)mm->arg_start;
-  char *arg_end = (char *)mm->arg_end;
+  char *arg_start = (char *)current->mm->arg_start;
+  char *arg_end = (char *)current->mm->arg_end;
   int arg_len = arg_end - arg_start;
   char *args_buf = kmalloc(arg_len + 1, GFP_KERNEL);
 
@@ -123,7 +123,7 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
 
 static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long size = vma->vm_end - vma->vm_start;
-  unsigned long pfn;
+  // unsigned long pfn;
   unsigned long page_offset;
   struct page *page; // Dummy page for the forbidden area
   char buf[TASK_COMM_LEN];
