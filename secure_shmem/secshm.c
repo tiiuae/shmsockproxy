@@ -2,6 +2,8 @@
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/sched.h>
+
 #define DEVICE_NAME "ivshmem"
 #define NUM_PAGES (SHM_SIZE / PAGE_SIZE)
 
@@ -21,8 +23,8 @@ static int allocate_module_pages(void) {
   // Allocate pages
   for (unsigned int i = 0; i < (NUM_PAGES + 1); i++) {
     pages[i] = alloc_page(GFP_KERNEL | __GFP_ZERO);
-    pr_info("Allocated page %u at %p\n", i,
-            pages[i]); // jarekk: TODO delete
+    // pr_info("Allocated page %u at %p\n", i,
+    //         pages[i]); // jarekk: TODO delete
 
     if (IS_ERR_OR_NULL(pages[i])) {
       pr_err("Failed to allocate page %u\n", i);
@@ -101,6 +103,11 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long pfn;
   unsigned long page_offset;
   struct page *page; // Dummy page for the forbidden area
+  char buf[TASK_COMM_LEN];
+  pid_t parent_pid = current->parent->pid;;
+
+  get_task_comm(buf, current);
+  pr_info("secshm: mmap called by %s (pid: %d)\n", buf, parent_pid);
 
   pr_err("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
@@ -116,10 +123,12 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   // Map each page to the user-space address
   for (unsigned int i = 0; i < NUM_PAGES; i++) {
     // test of assigning the same page to different offsets
-    if (i < (NUM_PAGES * 4) / 3) {
+    if (i < (NUM_PAGES * 3) / 4) {
       page = pages[i];
+      // pr_info("secshm: mmap using normal page %u\n", i);
     } else {
       page = pages[NUM_PAGES];
+      // pr_info("secshm: **** mmap using dummy page %u\n", i);
     }
     page_offset = i * PAGE_SIZE;
     if (page_offset >= SHM_SIZE) {
