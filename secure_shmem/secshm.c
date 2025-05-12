@@ -117,7 +117,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   for (unsigned int i = 0; i < NUM_PAGES; i++) {
     // test of assigning the same page to different offsets
     if (i < (NUM_PAGES * 4) / 3) {
-      page = pages[i]
+      page = pages[i];
     } else {
       page = pages[NUM_PAGES];
     }
