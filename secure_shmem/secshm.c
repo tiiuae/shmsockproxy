@@ -3,26 +3,24 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #define DEVICE_NAME "ivshmem"
-// jarekk TODO delete "/2"
-#define NUM_PAGES ((SHM_SIZE / PAGE_SIZE) - 1 )
+#define NUM_PAGES (SHM_SIZE / PAGE_SIZE)
 
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 static const struct inode_operations secshm_inode_ops;
 static struct page **pages; // Array to hold allocated pages
 
 static int allocate_module_pages(void) {
-  pages = kmalloc(NUM_PAGES * sizeof(struct page *), GFP_KERNEL);
+
+  pages = kmalloc((NUM_PAGES + 1) * sizeof(struct page *), GFP_KERNEL);
   if (!pages) {
     pr_err("Failed to allocate page array\n");
     return -ENOMEM;
   }
-  pr_info("Allocating %ld pages\n", NUM_PAGES); // jarekk: TODO delete
+
+  pr_info("Allocating %ld pages\n", (NUM_PAGES + 1)); // jarekk: TODO delete
   // Allocate pages
-  for (unsigned int i = 0; i < NUM_PAGES; i++) {
-    // jarekk TODO delete
-    if (!i) pages[i] = alloc_page(GFP_KERNEL | __GFP_ZERO);
-    else pages[i] = pages[0];
-    // pages[i] = alloc_page(GFP_KERNEL | __GFP_ZERO);
+  for (unsigned int i = 0; i < (NUM_PAGES + 1); i++) {
+    pages[i] = alloc_page(GFP_KERNEL | __GFP_ZERO);
     pr_info("Allocated page %u at %p\n", i,
             pages[i]); // jarekk: TODO delete
 
@@ -40,7 +38,7 @@ static int allocate_module_pages(void) {
 }
 
 static void free_module_pages(void) {
-  for (unsigned int i = 0; i < NUM_PAGES; i++) {
+  for (unsigned int i = 0; i < (NUM_PAGES + 1); i++) {
     if (pages[i]) {
       __free_pages(pages[i], 0);
     }
@@ -102,6 +100,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long size = vma->vm_end - vma->vm_start;
   unsigned long pfn;
   unsigned long page_offset;
+  struct page *page; // Dummy page for the forbidden area
 
   pr_err("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
@@ -116,6 +115,8 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   // Map each page to the user-space address
   for (unsigned int i = 0; i < NUM_PAGES; i++) {
+    // test of assigning the same page to different offsets
+    page = (i < NUM_PAGES * 4 / 3) ? pages[i] : pages[NUM_PAGES];
     page_offset = i * PAGE_SIZE;
     if (page_offset >= SHM_SIZE) {
       pr_err("Page offset exceeds SHM_SIZE: %lu\n", page_offset);
@@ -123,11 +124,11 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
     } // Check if the page offset is valid
 
     // jarekk TODO delete
-    pfn = page_to_pfn(pages[i]); // Convert page to physical frame number
+    pfn = page_to_pfn(page); // Convert page to physical frame number
     pr_err("secshm: mmap page %u, pfn: 0x%lx offset: %lu\n", i, pfn,
            page_offset);
 
-    if (vm_insert_page(vma, vma->vm_start + page_offset, pages[i])) {
+    if (vm_insert_page(vma, vma->vm_start + page_offset, page)) {
       pr_err("Failed to vm_insert_page [%d] page at offset %lu\n", i,
              page_offset);
       return -EAGAIN;
