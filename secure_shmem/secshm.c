@@ -4,7 +4,7 @@
 #include <linux/module.h>
 #define DEVICE_NAME "ivshmem"
 // jarekk TODO delete "/2"
-#define NUM_PAGES ((SHM_SIZE / PAGE_SIZE) - 2 )
+#define NUM_PAGES ((SHM_SIZE / PAGE_SIZE) - 1*0 )
 
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 static const struct inode_operations secshm_inode_ops;
