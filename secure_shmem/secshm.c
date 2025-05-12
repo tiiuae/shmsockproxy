@@ -116,7 +116,11 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   // Map each page to the user-space address
   for (unsigned int i = 0; i < NUM_PAGES; i++) {
     // test of assigning the same page to different offsets
-    page = (i < NUM_PAGES * 4 / 3) ? pages[i] : pages[NUM_PAGES];
+    if (i < (NUM_PAGES * 4) / 3) {
+      page = pages[i]
+    } else {
+      page = pages[NUM_PAGES];
+    }
     page_offset = i * PAGE_SIZE;
     if (page_offset >= SHM_SIZE) {
       pr_err("Page offset exceeds SHM_SIZE: %lu\n", page_offset);
