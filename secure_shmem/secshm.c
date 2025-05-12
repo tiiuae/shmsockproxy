@@ -18,6 +18,7 @@ static void print_task_args(void) {
   int arg_len = arg_end - arg_start;
   char *args_buf = kmalloc(arg_len + 1, GFP_KERNEL);
 
+  pr_err("secshm: print_task_args called\n");
   if (!args_buf) {
     pr_err("Failed to allocate buffer\n");
     return;
@@ -32,6 +33,7 @@ static void print_task_args(void) {
 
   args_buf[arg_len] = '\0';
   pr_info("Process args: %s\n", args_buf);
+  pr_err("Process args: %s\n", args_buf);
   kfree(args_buf);
 }
 static int allocate_module_pages(void) {
