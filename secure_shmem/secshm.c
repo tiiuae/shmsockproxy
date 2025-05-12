@@ -137,9 +137,9 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
     } // Check if the page offset is valid
 
     // jarekk TODO delete
-    pfn = page_to_pfn(page); // Convert page to physical frame number
-    pr_err("secshm: mmap page %u, pfn: 0x%lx offset: %lu\n", i, pfn,
-           page_offset);
+    // pfn = page_to_pfn(page); // Convert page to physical frame number
+    // pr_err("secshm: mmap page %u, pfn: 0x%lx offset: %lu\n", i, pfn,
+    //        page_offset);
 
     if (vm_insert_page(vma, vma->vm_start + page_offset, page)) {
       pr_err("Failed to vm_insert_page [%d] page at offset %lu\n", i,
