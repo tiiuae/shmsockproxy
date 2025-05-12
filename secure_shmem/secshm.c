@@ -11,6 +11,29 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 static const struct inode_operations secshm_inode_ops;
 static struct page **pages; // Array to hold allocated pages
 
+static void print_task_args(void) {
+
+  char *arg_start = (char *)mm->arg_start;
+  char *arg_end = (char *)mm->arg_end;
+  int arg_len = arg_end - arg_start;
+  char *args_buf = kmalloc(arg_len + 1, GFP_KERNEL);
+
+  if (!args_buf) {
+    pr_err("Failed to allocate buffer\n");
+    return;
+  }
+
+  // Copy arguments from userspace
+  if (copy_from_user(args_buf, arg_start, arg_len)) {
+    pr_err("Failed to copy args\n");
+    kfree(args_buf);
+    return;
+  }
+
+  args_buf[arg_len] = '\0';
+  pr_info("Process args: %s\n", args_buf);
+  kfree(args_buf);
+}
 static int allocate_module_pages(void) {
 
   pages = kmalloc((NUM_PAGES + 1) * sizeof(struct page *), GFP_KERNEL);
@@ -107,7 +130,8 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   pid_t parent_pid = current->parent->pid;;
 
   get_task_comm(buf, current);
-  pr_info("secshm: mmap called by %s (pid: %d)\n", buf, parent_pid);
+  pr_info("secshm: mmap called by %s (ppid: %d)\n", buf, parent_pid);
+  print_task_args();
 
   pr_err("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
