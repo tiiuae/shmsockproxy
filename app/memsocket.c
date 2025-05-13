@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <execinfo.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
 #include <signal.h>
@@ -22,119 +23,19 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include <getopt.h>
 
 #include "../drivers/char/ivshmem/kvm_ivshmem.h"
+#include "./memsocket.h"
 
 #ifndef SHM_SLOTS
 #define SHM_SLOTS (4)
 #endif
 
-#define SHM_DEVICE_FN "/dev/ivshmem"
-
-#define MAX_EVENTS (1024)
-#define MAX_FDS (100)
-#define SHMEM_POLL_TIMEOUT (3000)
-#define SHMEM_BUFFER_SIZE (512 * 1024)
-#define UNKNOWN_PEER (-1)
-#define CLOSE_FD (1)
-#define IGNORE_ERROR (1)
-#define PAGE_SIZE (4096)
-#define DBG(fmt, ...)                                                          \
-  {                                                                            \
-    char tmp1[512], tmp2[256];                                                 \
-    snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
-    snprintf(tmp1, sizeof(tmp1), "[%d] %s:%d: %s\n", slot, __FUNCTION__,       \
-             __LINE__, tmp2);                                                  \
-    errno = 0;                                                                 \
-    report(tmp1, 0);                                                           \
-  }
-
-#ifndef DEBUG_OFF
-#define DEBUG(fmt, ...)                                                        \
-  {                                                                            \
-  }
-#else
-#define DEBUG DBG
-#endif
-
-#ifndef DEBUG_ON
-#define INFO(fmt, ...)                                                         \
-  {                                                                            \
-  }
-#else
-#define INFO(fmt, ...)                                                         \
-  {                                                                            \
-    char tmp1[512], tmp2[256];                                                 \
-    snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
-    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d] %s\n", slot, __FUNCTION__,      \
-             __LINE__, tmp2);                                                  \
-    errno = 0;                                                                 \
-    report(tmp1, 0);                                                           \
-  }
-#endif
-
-#define ERROR0(msg)                                                            \
-  {                                                                            \
-    char tmp[512];                                                             \
-    snprintf(tmp, sizeof(tmp), "[%d] [%s:%d] %s\n", slot, __FUNCTION__,        \
-             __LINE__, msg);                                                   \
-    report(tmp, 0);                                                            \
-  }
-
-#define ERROR(fmt, ...)                                                        \
-  {                                                                            \
-    char tmp1[512], tmp2[256];                                                 \
-    snprintf(tmp2, sizeof(tmp2), fmt, __VA_ARGS__);                            \
-    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d] %s\n", slot, __FUNCTION__,      \
-             __LINE__, tmp2);                                                  \
-    report(tmp1, 0);                                                           \
-  }
-
-#define FATAL(msg, ...)                                                        \
-  {                                                                            \
-    char tmp1[512], tmp2[256];                                                 \
-                                                                               \
-    if (vm_control) {                                                          \
-      if (!run_as_client) {                                                    \
-        int i;                                                                 \
-        for (i = 0; i < SHM_SLOTS; i++) {                                      \
-          if (client_listen_mask & 1 << i) {                                   \
-            vm_control->data[i].server.vmid = 0;                               \
-          }                                                                    \
-        }                                                                      \
-      } else {                                                                 \
-        vm_control->data[slot].client.vmid = 0;                                \
-      }                                                                        \
-    }                                                                          \
-    snprintf(tmp2, sizeof(tmp2), msg);                                         \
-    snprintf(tmp1, sizeof(tmp1), "[%d] [%s:%d]: %s\n", slot, __FUNCTION__,     \
-             __LINE__, tmp2);                                                  \
-    report(tmp1, 1);                                                           \
-  }
-
-enum {
-  CMD_LOGIN,
-  CMD_LOGOUT,
-  CMD_CONNECT,
-  CMD_DATA,
-  CMD_CLOSE,
-  CMD_DATA_CLOSE
-};
 #define FD_MAP_COUNT (sizeof(fd_map) / sizeof(fd_map[0]))
 struct {
   int my_fd;
   int remote_fd;
 } fd_map[SHM_SLOTS][MAX_FDS];
-
-typedef struct {
-  volatile __attribute__((aligned(64))) unsigned char data[SHMEM_BUFFER_SIZE];
-  volatile int vmid;
-  volatile int cmd;
-  volatile int fd;
-  volatile int len;
-  volatile int status;
-} vm_data;
 
 int epollfd_full[SHM_SLOTS], epollfd_limited[SHM_SLOTS];
 char *socket_path = NULL;
@@ -164,20 +65,20 @@ int local_rr_int_no[SHM_SLOTS], remote_rc_int_no[SHM_SLOTS];
 pthread_t server_threads[SHM_SLOTS];
 long long int client_listen_mask = 0;
 /* End of host related variables */
+
 struct {
-  struct {
-    vm_data __attribute__((aligned(64))) server;
-    vm_data __attribute__((aligned(64))) client;
-  } data[SHM_SLOTS];
+  struct slot data[SHM_SLOTS];
 } *vm_control;
 static int map_peer_fd(int slot, int peer_fd, int close_fd);
 
 static const char warning_other_instance[] = "Exiting if the '-f' flag was "
                                              "not used";
 static const char usage_string[] =
-    "Usage: memsocket [-h | --host <host_ivshmem_socket_path>] [-f | --force]\n       { (-s | --server "
+    "Usage: memsocket [-h | --host <host_ivshmem_socket_path>] [-f | "
+    "--force]\n       { (-s | --server "
     "<sink_socket_path> "
-    "-l | --listen <slot_list>) | (-c | --client <source_socket_path> <slot>) }\n\n"
+    "-l | --listen <slot_list>) | (-c | --client <source_socket_path> <slot>) "
+    "}\n\n"
     "Options:\n"
     "  -s, --server <sink_socket_path>\n"
     "      Connect to an existing socket (e.g., created by Waypipe) and "
@@ -1079,8 +980,8 @@ static void *run(void *arg) {
                       peer_shm_desc->len, MSG_NOSIGNAL);
             if (rv != peer_shm_desc->len) {
               peer_shm_desc->status = -errno;
-              ERROR("Sent %d out of %d bytes on fd#%d peer fd#%d", rv, peer_shm_desc->len,
-                    connected_app_fd, peer_shm_desc->fd);
+              ERROR("Sent %d out of %d bytes on fd#%d peer fd#%d", rv,
+                    peer_shm_desc->len, connected_app_fd, peer_shm_desc->fd);
             }
             DEBUG("%s", "Received data has been sent");
             peer_shm_desc->len = rv;
@@ -1249,14 +1150,12 @@ int main(int argc, char **argv) {
   int opt;
   int run_mode = 0;
   pthread_t threads[SHM_SLOTS], host_thread;
-  static struct option long_opts[] = {
-    {"server",  required_argument, 0, 's'},
-    {"client",  required_argument, 0, 'c'},
-    {"host",    required_argument, 0, 'h'},
-    {"listen",  required_argument, 0, 'l'},
-    {"force",   no_argument,       0, 'f'},
-    {0, 0, 0, 0}
-};
+  static struct option long_opts[] = {{"server", required_argument, 0, 's'},
+                                      {"client", required_argument, 0, 'c'},
+                                      {"host", required_argument, 0, 'h'},
+                                      {"listen", required_argument, 0, 'l'},
+                                      {"force", no_argument, 0, 'f'},
+                                      {0, 0, 0, 0}};
 
   while ((opt = getopt_long(argc, argv, "c:s:h:l:f", long_opts, NULL)) != -1) {
     switch (opt) {
