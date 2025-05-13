@@ -6,18 +6,20 @@
 
 #define DEVICE_NAME "ivshmem"
 #define NUM_PAGES (SHM_SIZE / PAGE_SIZE)
+#define QEMU_VM_NAME_OPT "-name"
 
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 static const struct inode_operations secshm_inode_ops;
 static struct page **pages; // Array to hold allocated pages
 
-static void print_task_args(void) {
-
+static void get_vm_name(char *vm_name, size_t vm_name_len) {
   char *arg_start, *arg_end, *args_buf;
   int arg_len;
   struct mm_struct *mm;
+  size_t i = 0;
 
-  pr_err("secshm: print_task_args called\n");
+  pr_err("secshm: get_vm_name called\n");
+  vm_name[0] = '\0';
 
   mm = get_task_mm(current);
   if (!mm) {
@@ -35,21 +37,42 @@ static void print_task_args(void) {
 
   args_buf = kmalloc(arg_len + 1, GFP_KERNEL);
   if (!args_buf) {
-    pr_err("Failed to allocate buffer\n");
+    pr_err("secshm: Failed to allocate buffer\n");
     goto out;
   }
 
   // Copy arguments from userspace
   if (copy_from_user(args_buf, (const void __user *)arg_start, arg_len)) {
-    pr_err("Failed to copy args\n");
+    pr_err("secshm: Failed to copy args\n");
     kfree(args_buf);
     goto out;
   }
   args_buf[arg_len] = '\0';
+
+  while (i < arg_len) {
+    const char *token = &args_buf[i];
+    size_t len = strlen(token);
+
+    if (len == 0) {
+      i++;
+      continue;
+    }
+    if (strcmp(token, QEMU_VM_NAME_OPT) == 0) {
+      i += len + 1;
+      if (i < arg_len && args_buf[i] != '\0') {
+        strncpy(vm_name, &args_buf[i], vm_name_len); // Next token after "-name"
+        pr_info("secshm: VM name: %s\n", vm_name);
+        goto out;
+      } else {
+        goto out; // "-name" was the last token
+      }
+    }
+    i += len + 1;
+  }
   arg_start = args_buf + strlen(args_buf) + 1;
 
   if (arg_len <= strlen(args_buf) || !strlen(arg_start)) {
-    pr_err("Missing process command line parameter\n");
+    pr_err("secshm: Missing process command line parameter\n");
     kfree(args_buf);
     goto out;
   }
@@ -152,7 +175,6 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
 
 static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long size = vma->vm_end - vma->vm_start;
-  // unsigned long pfn;
   unsigned long page_offset;
   struct page *page; // Dummy page for the forbidden area
   char buf[TASK_COMM_LEN];
@@ -161,7 +183,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   get_task_comm(buf, current);
   pr_info("secshm: mmap called by %s (ppid: %d)\n", buf, parent_pid);
-  print_task_args();
+  get_vm_name(buf, sizeof(buf));
 
   pr_err("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
