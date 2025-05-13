@@ -13,42 +13,44 @@ static const struct inode_operations secshm_inode_ops;
 static struct page **pages; // Array to hold allocated pages
 
 static void get_vm_name(char *vm_name, size_t vm_name_len) {
-  char *arg_start, *arg_end, *args_buf;
+  char *args_buf = NULL;
+  unsigned long arg_start, arg_end;
   int arg_len;
   struct mm_struct *mm;
   size_t i = 0;
 
-  pr_err("secshm: get_vm_name called\n");
+  pr_debug("secshm: get_vm_name called\n");
   vm_name[0] = '\0';
 
   mm = get_task_mm(current);
-  if (!mm) {
-    goto out_mm;
-  }
-  if (!mm->arg_end) {
-    goto out;
-  }
+  if (!mm)
+    return;
 
   spin_lock(&mm->arg_lock);
-  arg_start = (char *)mm->arg_start;
-  arg_end = (char *)mm->arg_end;
-  arg_len = arg_end - arg_start;
+  arg_start = mm->arg_start;
+  arg_end = mm->arg_end;
   spin_unlock(&mm->arg_lock);
 
+  if (arg_end <= arg_start) {
+    mmput(mm);
+    return;
+  }
+
+  arg_len = arg_end - arg_start;
   args_buf = kmalloc(arg_len + 1, GFP_KERNEL);
   if (!args_buf) {
     pr_err("secshm: Failed to allocate buffer\n");
-    goto out;
+    mmput(mm);
+    return;
   }
 
-  // Copy arguments from userspace
   if (copy_from_user(args_buf, (const void __user *)arg_start, arg_len)) {
     pr_err("secshm: Failed to copy args\n");
-    kfree(args_buf);
     goto out;
   }
-  args_buf[arg_len] = '\0';
 
+  args_buf[arg_len] = '\0';
+  pr_debug("secshm: raw cmdline: %s\n", args_buf);
   while (i < arg_len) {
     const char *token = &args_buf[i];
     size_t len = strlen(token);
@@ -57,33 +59,23 @@ static void get_vm_name(char *vm_name, size_t vm_name_len) {
       i++;
       continue;
     }
+
     if (strcmp(token, QEMU_VM_NAME_OPT) == 0) {
       i += len + 1;
       if (i < arg_len && args_buf[i] != '\0') {
-        strncpy(vm_name, &args_buf[i], vm_name_len); // Next token after "-name"
+        strscpy(vm_name, &args_buf[i], vm_name_len);
         pr_info("secshm: VM name: %s\n", vm_name);
-        goto out;
-      } else {
-        goto out; // "-name" was the last token
       }
+      break;
     }
+
     i += len + 1;
   }
-  arg_start = args_buf + strlen(args_buf) + 1;
-
-  if (arg_len <= strlen(args_buf) || !strlen(arg_start)) {
-    pr_err("secshm: Missing process command line parameter\n");
-    kfree(args_buf);
-    goto out;
-  }
-
-  pr_info("Process args: %s args_len: %d\n", arg_start, arg_len);
-  kfree(args_buf);
+  pr_debug("secshm: " QEMU_VM_NAME_OPT " option not found in command line\n");
 
 out:
+  kfree(args_buf);
   mmput(mm);
-out_mm:
-  return;
 }
 
 static int allocate_module_pages(void) {
