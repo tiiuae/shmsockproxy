@@ -13,29 +13,56 @@ static struct page **pages; // Array to hold allocated pages
 
 static void print_task_args(void) {
 
-  char *arg_start = (char *)current->mm->arg_start;
-  char *arg_end = (char *)current->mm->arg_end;
-  int arg_len = arg_end - arg_start;
-  char *args_buf = kmalloc(arg_len + 1, GFP_KERNEL);
+  char *arg_start, *arg_end, *args_buf;
+  int arg_len;
+  struct mm_struct *mm;
 
   pr_err("secshm: print_task_args called\n");
+
+  mm = get_task_mm(current);
+  if (!mm) {
+    goto out_mm;
+  }
+  if (!mm->arg_end) {
+    goto out;
+  }
+
+  spin_lock(&mm->arg_lock);
+  arg_start = (char *)mm->arg_start;
+  arg_end = (char *)mm->arg_end;
+  arg_len = arg_end - arg_start;
+  spin_unlock(&mm->arg_lock);
+
+  args_buf = kmalloc(arg_len + 1, GFP_KERNEL);
   if (!args_buf) {
     pr_err("Failed to allocate buffer\n");
-    return;
+    goto out;
   }
 
   // Copy arguments from userspace
-  if (copy_from_user(args_buf, arg_start, arg_len)) {
+  if (copy_from_user(args_buf, (const void __user *)arg_start, arg_len)) {
     pr_err("Failed to copy args\n");
     kfree(args_buf);
-    return;
+    goto out;
+  }
+  args_buf[arg_len] = '\0';
+  arg_start = args_buf + strlen(args_buf) + 1;
+
+  if (arg_len <= strlen(args_buf) || !strlen(arg_start)) {
+    pr_err("Missing process command line parameter\n");
+    kfree(args_buf);
+    goto out;
   }
 
-  args_buf[arg_len] = '\0';
-  pr_info("Process args: %s\n", args_buf);
-  pr_err("Process args: %s\n", args_buf);
+  pr_info("Process args: %s args_len: %d\n", arg_start, arg_len);
   kfree(args_buf);
+
+out:
+  mmput(mm);
+out_mm:
+  return;
 }
+
 static int allocate_module_pages(void) {
 
   pages = kmalloc((NUM_PAGES + 1) * sizeof(struct page *), GFP_KERNEL);
@@ -129,7 +156,8 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long page_offset;
   struct page *page; // Dummy page for the forbidden area
   char buf[TASK_COMM_LEN];
-  pid_t parent_pid = current->parent->pid;;
+  pid_t parent_pid = current->parent->pid;
+  ;
 
   get_task_comm(buf, current);
   pr_info("secshm: mmap called by %s (ppid: %d)\n", buf, parent_pid);
