@@ -173,10 +173,10 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
   return newpos;
 }
 
-static int map_vm(const char *buf, struct vm_area_struct *vma) {
+static inline int map_vm(const char *buf, struct vm_area_struct *vma) {
   unsigned long page_offset = 0;
-  int starting_page;
   int slot_map;
+  struct page *page;
   int i;
 
   // Check if the VM name is in the client table
@@ -187,45 +187,33 @@ static int map_vm(const char *buf, struct vm_area_struct *vma) {
       break;
     }
   }
-
+  if (i == CLIENT_TABLE_SIZE) {
+    pr_err("secshm: VM name %s not found in client table\n", buf);
+    return -EINVAL;
+  }
   pr_info("secshm: VM name: %s, slot_map: 0x%x\n", buf, slot_map);
-  // Iterate over the slot_map to find the slots that are set
-  // and map the corresponding pages
-  page_offset = 0;
-  // Allocate pages for the slots if the VM has been found
-  if (i != CLIENT_TABLE_SIZE) {
-    while (slot_map) {
-      i = __ffs(slot_map);
-      slot_map &= ~(1 << i);
-      starting_page = i * PAGES_PER_SLOT;
 
-      // Map PAGES_PER_SLOT allocated pages for the slot
-      pr_info("secshm: Mapping pages for slot #%d block %d count=%ld\n", i,
-              starting_page, PAGES_PER_SLOT);
-      for (int j = 0; j < PAGES_PER_SLOT; j++) {
-        if (vm_insert_page(vma, vma->vm_start + page_offset,
-                          pages[starting_page + j])) {
-          pr_err("secshm: Failed to vm_insert_page [%d] page at offset 0x%lx\n",
-                starting_page + j, page_offset);
-          return -EAGAIN;
-        }
-        page_offset += PAGE_SIZE;
-      }
+  for(i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
+
+    // Check if the page is in the slot map
+    // and get the corresponding page
+    int slot_number = page_offset / PAGES_PER_SLOT;
+    if (slot_map & (1 << slot_number))
+      page = pages[i]; 
+    else
+      page = pages[NUM_PAGES];
+
+    if (!(page_offset % PAGES_PER_SLOT)) {
+      if (page != pages[NUM_PAGES])
+        pr_info("secshm: Mapping page 0x%x at offset 0x%lx\n", i, page_offset);
+      else
+        pr_info("secshm: Mapping dummy page 0x%x at offset 0x%lx\n", i,
+                page_offset);
     }
-  }
-  else {
-    pr_err("secshm: VM name not found in client table\n");  
-  }
 
-  // Fill the remaining pages with dummy page
-  pr_info("secshm: Mapping %ld dummy pages (%ld slots)\n",
-          (SHM_SIZE - page_offset) / PAGE_SIZE,
-          (SHM_SIZE - page_offset) / SHM_SLOT_SIZE);
-  pr_info("secshm: Starting offset: 0x%lx\n", page_offset);
-  for (; page_offset < SHM_SIZE; page_offset += PAGE_SIZE) {
-    if (vm_insert_page(vma, vma->vm_start + page_offset, pages[NUM_PAGES])) {
+    if (vm_insert_page(vma, vma->vm_start + page_offset, page)) {
       pr_err("secshm: Failed to vm_insert_page [%d] page at offset %lu\n", i,
-             page_offset);
+              page_offset);
       return -EAGAIN;
     }
   }
@@ -238,11 +226,11 @@ static int map_vm(const char *buf, struct vm_area_struct *vma) {
 
 static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long size = vma->vm_end - vma->vm_start;
-  char buf[TASK_COMM_LEN];
+  char vm_name[TASK_COMM_LEN];
   pid_t parent_pid = current->parent->pid;
 
-  get_task_comm(buf, current);
-  pr_info("secshm: mmap called by %s (ppid: %d)\n", buf, parent_pid);
+  get_task_comm(vm_name, current);
+  pr_info("secshm: mmap called by %s (ppid: %d)\n", vm_name, parent_pid);
 
   pr_err("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
@@ -255,9 +243,9 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
     return -EINVAL;
   }
 
-  get_vm_name(buf, sizeof(buf));
+  get_vm_name(vm_name, sizeof(vm_name));
   // Map the pages based on the VM name
-  return map_vm(buf, vma);
+  return map_vm(vm_name, vma);
 }
 
 static struct file_operations secshm_fops = {
