@@ -15,8 +15,8 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 static const struct inode_operations secshm_inode_ops;
 static struct page **pages; // Array to hold allocated pages
 
-DEFINE_SPINLOCK(my_lock);
-unsigned long flags;
+static DEFINE_SPINLOCK(lock);
+
 
 static inline void get_vm_name(char *vm_name, size_t vm_name_len) {
   char *args_buf = NULL;
@@ -182,7 +182,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   struct page *page;
   int i;
 
-  spin_lock_irqrestore(&my_lock, flags);
+  spin_lock(&lock);
   // Check if the VM name is in the client table
   // and get the corresponding slot_map
   for (i = 0; i < CLIENT_TABLE_SIZE; i++) {
@@ -224,6 +224,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     if (vm_insert_page(vma, vma->vm_start + page_offset, page)) {
       pr_err("secshm: Failed to vm_insert_page [%d] page at offset %lu\n", i,
               page_offset);
+      spin_unlock(&lock);
       return -EAGAIN;
     }
   }
@@ -231,7 +232,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   pr_info("secshm: Ending offset: 0x%lx\n", page_offset);
   vm_flags_mod(vma, VM_SHARED | VM_DONTEXPAND | VM_DONTEXPAND, 0);
   vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
-  spin_unlock_irqrestore(&my_lock, flags);
+  spin_unlock(&lock);
   return 0;
 }
 
