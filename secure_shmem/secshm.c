@@ -173,7 +173,7 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
   return newpos;
 }
 
-static inline int map_vm(const char *buf, struct vm_area_struct *vma) {
+static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   unsigned long page_offset = 0;
   int slot_map;
   struct page *page;
@@ -181,17 +181,18 @@ static inline int map_vm(const char *buf, struct vm_area_struct *vma) {
 
   // Check if the VM name is in the client table
   // and get the corresponding slot_map
+  pr_info
   for (i = 0; i < CLIENT_TABLE_SIZE; i++) {
-    if (strcmp(buf, CLIENT_TABLE[i].name) == 0) {
+    if (strcmp(vm_name, CLIENT_TABLE[i].name) == 0) {
       slot_map = CLIENT_TABLE[i].bitmask;
       break;
     }
   }
   if (i == CLIENT_TABLE_SIZE) {
-    pr_err("secshm: VM name %s not found in client table\n", buf);
+    pr_err("secshm: VM name %s not found in client table\n", vm_name);
     return -EINVAL;
   }
-  pr_info("secshm: VM name: %s, slot_map: 0x%x\n", buf, slot_map);
+  pr_info("secshm: VM name: %s, slot_map: 0x%x\n", vm_name, slot_map);
 
   for(i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
 
@@ -245,6 +246,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
 
   get_vm_name(vm_name, sizeof(vm_name));
   // Map the pages based on the VM name
+  pr_info("secshm: calling map_vm with name: %s\n", vm_name);
   return map_vm(vm_name, vma);
 }
 
