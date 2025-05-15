@@ -181,7 +181,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
 
   // Check if the VM name is in the client table
   // and get the corresponding slot_map
-  pr_info
+  pr_info("secshm: Mapping VM %s\n", vm_name);
   for (i = 0; i < CLIENT_TABLE_SIZE; i++) {
     if (strcmp(vm_name, CLIENT_TABLE[i].name) == 0) {
       slot_map = CLIENT_TABLE[i].bitmask;
