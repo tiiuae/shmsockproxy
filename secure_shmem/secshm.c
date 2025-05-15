@@ -189,7 +189,9 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     }
   }
   if (i == CLIENT_TABLE_SIZE) {
-    pr_err("secshm: VM name %s not found in client table. Performing dummy mapping.\n", vm_name);
+    char task_name[TASK_COMM_LEN];
+    get_task_comm(task_name, current);
+    pr_err("secshm: VM name for task %s pid=%d not found in client table. Performing dummy mapping.\n", vm_name, current->parent->pid);
     slot_map = 0x0;
   }
   pr_info("secshm: VM name: %s, slot_map: 0x%x\n", vm_name, slot_map);
@@ -206,7 +208,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     else
       page = pages[NUM_PAGES];
 
-    if (!(page_offset % SHM_SLOT_SIZE)) {
+    if (!(page_offset % SHM_SLOT_SIZE) && slot_map) {
       if (page != pages[NUM_PAGES])
         pr_info("secshm: Mapping pages 0x%x at offset 0x%lx\n", i, page_offset);
       else
