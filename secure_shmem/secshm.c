@@ -69,7 +69,7 @@ static inline void get_vm_name(char *vm_name, size_t vm_name_len) {
         strscpy(vm_name, &args_buf[i], vm_name_len);
         pr_info("secshm: VM name: %s\n", vm_name);
       }
-      break;
+      goto out;
     }
 
     i += len + 1;
@@ -152,13 +152,13 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
   loff_t newpos;
 
   switch (origin) {
-  case 0: // SEEK_SET
+  case SEEK_SET:
     newpos = offset;
     break;
-  case 1: // SEEK_CUR
+  case SEEK_CUR:
     newpos = filp->f_pos + offset;
     break;
-  case 2: // SEEK_END
+  case SEEK_END:
     newpos = SHM_SIZE - offset;
     break;
   default:
