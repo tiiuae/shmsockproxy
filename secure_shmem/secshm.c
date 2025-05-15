@@ -181,20 +181,20 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
 
   // Check if the VM name is in the client table
   // and get the corresponding slot_map
-  pr_info("secshm: Mapping VM %s\n", vm_name);
   for (i = 0; i < CLIENT_TABLE_SIZE; i++) {
     if (strcmp(vm_name, CLIENT_TABLE[i].name) == 0) {
       slot_map = CLIENT_TABLE[i].bitmask;
+      pr_info("secshm: Mapping VM %s\n", vm_name);
       break;
     }
   }
   if (i == CLIENT_TABLE_SIZE) {
     char task_name[TASK_COMM_LEN];
     get_task_comm(task_name, current);
-    pr_err("secshm: VM name for task %s pid=%d not found in client table. Performing dummy mapping.\n", vm_name, current->parent->pid);
+    pr_err("secshm: VM name for task %s pid=%d not found in client table. Performing dummy mapping.\n", task_name, current->parent->pid);
     slot_map = 0x0;
   }
-  pr_info("secshm: VM name: %s, slot_map: 0x%x\n", vm_name, slot_map);
+  pr_info("secshm: VM name: %s, slot_map: 0x%x SHM_SLOT_SIZE=0x%lx\n", vm_name, slot_map, SHM_SLOT_SIZE);
 
   for(i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
 
