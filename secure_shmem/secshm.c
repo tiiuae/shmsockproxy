@@ -2,6 +2,7 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/sched.h>
+#include <linux/spinlock.h>
 #include "../app/memsocket.h"
 #include "./secshm_config.h"
 
@@ -14,6 +15,8 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 static const struct inode_operations secshm_inode_ops;
 static struct page **pages; // Array to hold allocated pages
 
+DEFINE_SPINLOCK(my_lock);
+unsigned long flags;
 
 static inline void get_vm_name(char *vm_name, size_t vm_name_len) {
   char *args_buf = NULL;
@@ -179,6 +182,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   struct page *page;
   int i;
 
+  spin_lock_irqrestore(&my_lock, flags);
   // Check if the VM name is in the client table
   // and get the corresponding slot_map
   for (i = 0; i < CLIENT_TABLE_SIZE; i++) {
@@ -193,6 +197,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     get_task_comm(task_name, current);
     pr_err("secshm: VM name for task %s pid=%d not found in client table. Performing dummy mapping.\n", task_name, current->parent->pid);
     slot_map = 0x0;
+    vm_name = "dummy";
   }
   pr_info("secshm: VM name: %s, slot_map: 0x%x SHM_SLOT_SIZE=0x%lx\n", vm_name, slot_map, SHM_SLOT_SIZE);
 
@@ -226,6 +231,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   pr_info("secshm: Ending offset: 0x%lx\n", page_offset);
   vm_flags_mod(vma, VM_SHARED | VM_DONTEXPAND | VM_DONTEXPAND, 0);
   vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+  spin_unlock_irqrestore(&my_lock, flags);
   return 0;
 }
 
