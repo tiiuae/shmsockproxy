@@ -189,8 +189,8 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     }
   }
   if (i == CLIENT_TABLE_SIZE) {
-    pr_err("secshm: VM name %s not found in client table\n", vm_name);
-    return -EINVAL;
+    pr_err("secshm: VM name %s not found in client table. Performing dummy mapping\n", vm_name);
+    slot_map = 0x0;
   }
   pr_info("secshm: VM name: %s, slot_map: 0x%x\n", vm_name, slot_map);
 
