@@ -199,6 +199,8 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     // Check if the page is in the slot map
     // and get the corresponding page
     int slot_number = page_offset / PAGES_PER_SLOT;
+    pr_info("slot_number=0x%x page_offset=0x%lx PAGES_PER_SLOT=0x%lx\n",
+            slot_number, page_offset, PAGES_PER_SLOT);
     if (slot_map & (1 << slot_number))
       page = pages[i]; 
     else
@@ -206,9 +208,9 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
 
     if (!(page_offset % PAGES_PER_SLOT)) {
       if (page != pages[NUM_PAGES])
-        pr_info("secshm: Mapping page 0x%x at offset 0x%lx\n", i, page_offset);
+        pr_info("secshm: Mapping pages 0x%x at offset 0x%lx\n", i, page_offset);
       else
-        pr_info("secshm: Mapping dummy page 0x%x at offset 0x%lx\n", i,
+        pr_info("secshm: Mapping dummy pages 0x%x at offset 0x%lx\n", i,
                 page_offset);
     }
 
