@@ -195,7 +195,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   if (i == CLIENT_TABLE_SIZE) {
     char task_name[TASK_COMM_LEN];
     get_task_comm(task_name, current);
-    pr_err("secshm: VM name for task %s pid=%d not found in client table. Performing dummy mapping.\n", task_name, current->parent->pid);
+    pr_err("secshm: VM name for task %s pid=%d ppid=%d not found in client table. Performing dummy mapping.\n", task_name, current->pid, current->parent->pid);
     slot_map = 0x0;
     vm_name = "dummy";
   }
@@ -215,10 +215,10 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
 
     if (!(page_offset % SHM_SLOT_SIZE) && slot_map) {
       if (page != pages[NUM_PAGES])
-        pr_info("secshm: Mapping pages 0x%x at offset 0x%lx\n", i, page_offset);
+        pr_info("secshm: Mapping pages 0x%x at offset 0x%lx slot_number=%d\n", i, page_offset, slot_number);
       else
-        pr_info("secshm: Mapping dummy pages 0x%x at offset 0x%lx\n", i,
-                page_offset);
+        pr_info("secshm: Mapping dummy pages 0x%x at offset 0x%lx slot_number=%d\n", i,
+                page_offset, slot_number);
     }
 
     if (vm_insert_page(vma, vma->vm_start + page_offset, page)) {
@@ -242,7 +242,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   pid_t parent_pid = current->parent->pid;
 
   get_task_comm(vm_name, current);
-  pr_info("secshm: mmap called by %s (ppid: %d)\n", vm_name, parent_pid);
+  pr_info("secshm: mmap called by %s (pid: %d ppid: %d)\n", vm_name, current->pid, parent_pid);
 
   pr_err("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
