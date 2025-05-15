@@ -189,7 +189,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     }
   }
   if (i == CLIENT_TABLE_SIZE) {
-    pr_err("secshm: VM name %s not found in client table. Performing dummy mapping\n", vm_name);
+    pr_err("secshm: VM name %s not found in client table. Performing dummy mapping.\n", vm_name);
     slot_map = 0x0;
   }
   pr_info("secshm: VM name: %s, slot_map: 0x%x\n", vm_name, slot_map);
@@ -198,15 +198,15 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
 
     // Check if the page is in the slot map
     // and get the corresponding page
-    int slot_number = page_offset / PAGE_SIZE / PAGES_PER_SLOT;
-    pr_info("slot_number=0x%x page_offset=0x%lx PAGES_PER_SLOT=0x%lx\n",
-            slot_number, page_offset, PAGES_PER_SLOT);
+    int slot_number = page_offset / SHM_SLOT_SIZE;
+    // pr_info("slot_number=0x%x page_offset=0x%lx PAGES_PER_SLOT=0x%lx\n",
+    //         slot_number, page_offset, PAGES_PER_SLOT);
     if (slot_map & (1 << slot_number))
       page = pages[i]; 
     else
       page = pages[NUM_PAGES];
 
-    if (!((page_offset / PAGE_SIZE) % PAGES_PER_SLOT)) {
+    if (!(page_offset % SHM_SLOT_SIZE)) {
       if (page != pages[NUM_PAGES])
         pr_info("secshm: Mapping pages 0x%x at offset 0x%lx\n", i, page_offset);
       else
