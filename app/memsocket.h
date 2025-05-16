@@ -90,16 +90,16 @@ struct slot {
   {                                                                            \
     char tmp1[512], tmp2[256];                                                 \
                                                                                \
-    if (vm_control) {                                                          \
+    if (shm) {                                                          \
       if (!run_as_client) {                                                    \
         int i;                                                                 \
         for (i = 0; i < SHM_SLOTS; i++) {                                      \
           if (client_listen_mask & 1 << i) {                                   \
-            vm_control->data[i].server.vmid = 0;                               \
+            shm[i].server.vmid = 0;                               \
           }                                                                    \
         }                                                                      \
       } else {                                                                 \
-        vm_control->data[slot].client.vmid = 0;                                \
+        shm[slot].client.vmid = 0;                                \
       }                                                                        \
     }                                                                          \
     snprintf(tmp2, sizeof(tmp2), msg);                                         \
