@@ -39,7 +39,7 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
   do {                                                                         \
-    printk(KERN_INFO "KVM_IVSHMEM: " fmt "\n", ##__VA_ARGS__);                 \
+    pr_info("kvm_ivshmem: " fmt "\n", ##__VA_ARGS__);                 \
   } while (0)
 #else
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
@@ -144,7 +144,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
                       (unsigned long int)filp->private_data, cmd, arg);
   if ((unsigned long int)filp->private_data >= SHM_SLOTS &&
       cmd != SHMEM_IOCSETINSTANCENO && cmd != SHMEM_IOCIVPOSN) {
-    printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid slot no %ld > SHM_SLOTS=%d",
+    pr_err("kvm_ivshmem: ioctl: invalid slot no %ld > SHM_SLOTS=%d",
            (unsigned long int)filp->private_data, SHM_SLOTS);
     return -EINVAL;
   }
@@ -160,8 +160,8 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     unsigned int vec;
 
     if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
-      printk(KERN_ERR
-             "KVM_IVSHMEM: SHMEM_IOCDORBELL: %ld invalid argument 0x%lx",
+      pr_err(
+             "kvm_ivshmem: SHMEM_IOCDORBELL: %ld invalid argument 0x%lx",
              (unsigned long int)filp->private_data, arg);
       rv = -EINVAL;
       break;
@@ -194,7 +194,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       peer_resource_count[(unsigned long int)filp->private_data] = arg & 0xff;
     else {
       rv = -EINVAL;
-      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCSET: invalid arg %ld", arg);
+      pr_err("kvm_ivshmem: SHMEM_IOCSET: invalid arg %ld", arg);
     }
     spin_unlock_irqrestore(&rawhide_irq_lock, flags);
     break;
@@ -202,17 +202,17 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
   case SHMEM_IOCSETINSTANCENO:
     spin_lock_irqsave(&rawhide_irq_lock, flags);
     if (arg >= SHM_SLOTS) {
-      printk(KERN_ERR "KVM_IVSHMEM: ioctl: invalid slot no %ld", arg);
+      pr_err("kvm_ivshmem: ioctl: invalid slot no %ld", arg);
       rv = -EINVAL;
       goto unlock;
     }
     if (slots_enabled[arg]) {
-      printk(KERN_ERR "KVM_IVSHMEM: ioctl: slot #%ld already opened", arg);
-      rv = -EBUSY; /* was: 0. return -EBUSY cased app SIGSEG crash */
+      pr_err("kvm_ivshmem: ioctl: slot #%ld already opened", arg);
+      rv = -EBUSY; /* was: 0. return -EBUSY caused app SIGSEG crash */
       goto unlock;
     }
     filp->private_data = (void *)arg;
-    printk(KERN_INFO "KVM_IVSHMEM: SHMEM_IOCSETINSTANCENO: set slot no %ld",
+    pr_info("kvm_ivshmem: SHMEM_IOCSETINSTANCENO: set slot no to %ld",
            arg);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);
@@ -228,7 +228,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     unsigned int tmp;
 
     if (copy_from_user(&tmp, (void __user *)arg, sizeof(tmp))) {
-      printk(KERN_ERR "KVM_IVSHMEM: SHMEM_IOCWLOCAL: %ld invalid argument",
+      pr_err("kvm_ivshmem: SHMEM_IOCWLOCAL: %ld invalid argument",
              (unsigned long int)filp->private_data);
     }
     KVM_IVSHMEM_DPRINTK(
@@ -289,7 +289,7 @@ static unsigned kvm_ivshmem_poll(struct file *filp,
 
 #ifdef DEBUG
   if (!mask) {
-    printk(KERN_ERR "KVM_IVSHMEM: %ld poll: timeout: query for events 0x%x",
+    pr_err("kvm_ivshmem: %ld poll: timeout: query for events 0x%x",
            (unsigned long int)filp->private_data, req_events);
   }
 #endif
@@ -305,7 +305,7 @@ static ssize_t kvm_ivshmem_read(struct file *filp, char *buffer, size_t len,
   offset = *poffset;
 
   if (!kvm_ivshmem_dev.base_addr) {
-    printk(KERN_ERR "KVM_IVSHMEM: cannot read from ioaddr (NULL)");
+    pr_err("kvm_ivshmem: cannot read from ioaddr (NULL)");
     return 0;
   }
 
@@ -360,7 +360,7 @@ static ssize_t kvm_ivshmem_write(struct file *filp, const char *buffer,
   KVM_IVSHMEM_DPRINTK("%ld KVM_IVSHMEM: trying to write",
                       (unsigned long int)filp->private_data);
   if (!kvm_ivshmem_dev.base_addr) {
-    printk(KERN_ERR "KVM_IVSHMEM: %ld cannot write to ioaddr (NULL)",
+    pr_err("kvm_ivshmem: %ld cannot write to ioaddr (NULL)",
            (unsigned long int)filp->private_data);
     return 0;
   }
@@ -428,7 +428,7 @@ static irqreturn_t kvm_ivshmem_interrupt(int irq, void *dev_instance) {
     }
   }
 
-  printk(KERN_ERR "KVM_IVSHMEM: irq %d not handled", irq);
+  pr_err("kvm_ivshmem: irq %d not handled", irq);
   return IRQ_NONE;
 }
 
@@ -437,7 +437,7 @@ static int request_msix_vectors(struct kvm_ivshmem_device *ivs_info,
   int i, n, err;
   const char *name = "ivshmem";
 
-  KVM_IVSHMEM_DPRINTK("KVM_IVSHMEM: devname is %s", name);
+  KVM_IVSHMEM_DPRINTK("kvm_ivshmem: devname is %s", name);
   ivs_info->nvectors = nvectors;
 
   ivs_info->msix_entries =
@@ -450,7 +450,7 @@ static int request_msix_vectors(struct kvm_ivshmem_device *ivs_info,
 
   n = pci_alloc_irq_vectors(ivs_info->dev, nvectors, nvectors, PCI_IRQ_MSIX);
   if (n < 0) {
-    printk(KERN_ERR "KVM_IVSHMEM: pci_alloc_irq_vectors i=%d: error %d", i, n);
+    pr_err("kvm_ivshmem: pci_alloc_irq_vectors i=%d: error %d", i, n);
     return n;
   }
 
@@ -464,12 +464,12 @@ static int request_msix_vectors(struct kvm_ivshmem_device *ivs_info,
                       ivs_info->msix_names[i], ivs_info);
 
     if (err) {
-      printk(KERN_ERR "KVM_IVSHMEM: couldn't allocate irq for msi-x entry %d "
+      pr_err("kvm_ivshmem: couldn't allocate irq for msi-x entry %d "
                       "with vector %d",
              i, n);
       return -ENOSPC;
     } else {
-      printk(KERN_INFO "KVM_IVSHMEM: allocated irq #%d", n);
+      pr_info("kvm_ivshmem: allocated irq #%d", n);
     }
     // vector 1 is used for data sending
     if (i & LOCAL_RESOURCE_READY_INT_VEC) {
@@ -496,17 +496,17 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
 
   result = pci_enable_device(pdev);
   if (result) {
-    printk(KERN_ERR "KVM_IVSHMEM: Cannot probe KVM_IVSHMEM device %s: error %d",
+    pr_err("kvm_ivshmem: Cannot probe KVM_IVSHMEM device %s: error %d",
            pci_name(pdev), result);
     return result;
   }
 
   result = pci_request_regions(pdev, "kvm_ivshmem");
   if (result < 0) {
-    printk(KERN_ERR "KVM_IVSHMEM: cannot request regions");
+    pr_err("kvm_ivshmem: cannot request regions");
     goto pci_disable;
   } else
-    printk(KERN_ERR "KVM_IVSHMEM: pci_request_regions(): result is %d", result);
+    KVM_IVSHMEM_DPRINTK("pci_request_regions(): result is %d", result);
 
   kvm_ivshmem_dev.ioaddr = pci_resource_start(pdev, 2);
   kvm_ivshmem_dev.ioaddr_size = pci_resource_len(pdev, 2);
@@ -514,21 +514,21 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   if (flataddr) {
     kvm_ivshmem_dev.base_addr =
         memremap(flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
-    printk(KERN_ERR "KVM_IVSHMEM: using flat memory 0x%llx mapped to %p",
+    pr_info("kvm_ivshmem: using flat memory 0x%llx mapped to 0x%p",
            flataddr, kvm_ivshmem_dev.base_addr);
   } else {
     kvm_ivshmem_dev.base_addr = pci_iomap(pdev, 2, 0);
-    printk(KERN_INFO "KVM_IVSHMEM: using PCI iomap base = 0x%p",
+    pr_info("kvm_ivshmem: using PCI iomap base = 0x%p",
            kvm_ivshmem_dev.base_addr);
   }
 
   if (!kvm_ivshmem_dev.base_addr) {
-    printk(KERN_ERR "KVM_IVSHMEM: cannot map region size %d",
+    pr_err("kvm_ivshmem: cannot map region size %d",
            kvm_ivshmem_dev.ioaddr_size);
     goto pci_release;
   }
 
-  printk(KERN_INFO "KVM_IVSHMEM: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr "
+  pr_info("kvm_ivshmem: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr "
                    "= %p flataddr = 0x%llx",
          kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size,
          kvm_ivshmem_dev.base_addr, flataddr);
@@ -543,17 +543,17 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   kvm_ivshmem_dev.dev = pdev;
 
   if (!kvm_ivshmem_dev.regs) {
-    printk(KERN_ERR "KVM_IVSHMEM: cannot ioremap registers of size %d",
+    pr_err("kvm_ivshmem: cannot ioremap registers of size %d",
            kvm_ivshmem_dev.reg_size);
     goto reg_release;
   }
 
   if (request_msix_vectors(&kvm_ivshmem_dev, VECTORS_COUNT) != 0) {
-    printk(KERN_ERR
-           "KVM_IVSHMEM: Check ivshmem and qemu configured interrupts number");
+    pr_err(
+           "kvm_ivshmem: Check ivshmem and qemu configured interrupts number");
     goto reg_release;
   } else {
-    printk(KERN_INFO "KVM_IVSHMEM: MSI-X enabled");
+    pr_info("kvm_ivshmem: MSI-X enabled");
   }
 
   /* set all masks to on */
@@ -576,7 +576,7 @@ pci_disable:
 static void kvm_ivshmem_remove_device(struct pci_dev *pdev) {
   int i, n;
 
-  printk(KERN_INFO "KVM_IVSHMEM: Unregister kvm_ivshmem device.");
+  pr_info("kvm_ivshmem: Unregister kvm_ivshmem device.");
   for (i = 0; i < VECTORS_COUNT; i++) {
     n = pci_irq_vector(pdev, i);
     KVM_IVSHMEM_DPRINTK("Freeing irq# %d", n);
@@ -602,7 +602,7 @@ static int __init kvm_ivshmem_init_module(void) {
   /* Register device node ops. */
   err = misc_register(&kvm_ivshmem_misc_dev);
   if (err < 0) {
-    printk(KERN_ERR "KVM_IVSHMEM: Unable to register kvm_ivshmem_misc device");
+    pr_err("kvm_ivshmem: Unable to register kvm_ivshmem_misc device");
     return err;
   }
   KVM_IVSHMEM_DPRINTK("Registered the /dev/%s device ",
@@ -628,8 +628,7 @@ error:
 }
 
 static int kvm_ivshmem_open(struct inode *inode, struct file *filp) {
-  printk(KERN_INFO "KVM_IVSHMEM: Opening kvm_ivshmem device. Using memory @ %p",
-         kvm_ivshmem_dev.base_addr);
+  pr_info("kvm_ivshmem: Opening kvm_ivshmem device");
   filp->private_data = (void *)(unsigned long)-1;
   return 0;
 }
@@ -653,12 +652,9 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
   len = PAGE_ALIGN((start & ~PAGE_MASK) + kvm_ivshmem_dev.ioaddr_size);
   start &= PAGE_MASK;
 
-  printk(KERN_INFO
-         "KVM_IVSHMEM: mmap: vma->vm_start=0x%lx vma->vm_end=0x%lx off=0x%lx",
+  KVM_IVSHMEM_DPRINTK("mmap: vma->vm_start=0x%lx vma->vm_end=0x%lx off=0x%lx",
          vma->vm_start, vma->vm_end, off);
-  printk(
-      KERN_INFO
-      "KVM_IVSHMEM: mmap: vma->vm_end - vma->vm_start + off=0x%lx > len=0x%lx",
+  KVM_IVSHMEM_DPRINTK("mmap: vma->vm_end - vma->vm_start + off=0x%lx > len=0x%lx",
       (vma->vm_end - vma->vm_start + off), len);
 
   if ((vma->vm_end - vma->vm_start + off) > len)
