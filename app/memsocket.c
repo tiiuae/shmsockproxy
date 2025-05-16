@@ -787,6 +787,13 @@ static void *run(void *arg) {
   my_shm_desc = my_shm_data[slot];
   shm_buffer_fd.fd = shmem_fd[slot];
   epollfd = epollfd_full[slot];
+  errno = 0;
+  ERROR("shm=0x%p my_shm_desc=0x%p peer_shm_desc=0x%p", (void*)my_shm_desc,
+        (void*)peer_shm_desc, (void*)shm);
+  ERROR("Offsets: my_shm_desc=0x%llx peer_shm_desc=0x%llx", 
+    (long long)((void*)my_shm_desc - (void*)shm),
+        (long long)((void*)peer_shm_desc - (void*)shm));
+  
 
   /* On host sockets are used for handling interrupt */
   if (run_on_host) {
