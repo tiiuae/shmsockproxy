@@ -88,19 +88,19 @@ static int allocate_module_pages(void) {
 
   pages = kmalloc((NUM_PAGES + 1) * sizeof(struct page *), GFP_KERNEL);
   if (!pages) {
-    pr_err("Failed to allocate page array\n");
+    pr_err("secshm: Failed to allocate page array\n");
     return -ENOMEM;
   }
 
-  pr_info("Allocating %ld pages\n", (NUM_PAGES + 1)); // jarekk: TODO delete
+  pr_info("secshm: Allocating %ld pages\n", (NUM_PAGES + 1)); // jarekk: TODO delete
   // Allocate pages
   for (unsigned int i = 0; i < (NUM_PAGES + 1); i++) {
     pages[i] = alloc_page(GFP_KERNEL | __GFP_ZERO);
-    // pr_info("Allocated page %u at %p\n", i,
+    // pr_info("secshm: Allocated page %u at %p\n", i,
     //         pages[i]); // jarekk: TODO delete
 
     if (IS_ERR_OR_NULL(pages[i])) {
-      pr_err("Failed to allocate page %u\n", i);
+      pr_err("secshm: Failed to allocate page %u\n", i);
       // Free previously allocated pages
       for (unsigned int j = 0; j < i; j++) {
         __free_pages(pages[j], 0);
@@ -109,12 +109,6 @@ static int allocate_module_pages(void) {
       return -ENOMEM;
     }
   }
-  // jarekk: TODO: test, delete
-  void *virt = page_address(pages[NUM_PAGES]);
-  pr_info("Allocated dummy page %lu at %p\n", NUM_PAGES, virt);
-  // Fill the dummy page with pattern
-  // jarekk: TODO: test, delete
-  memcpy(virt, "***Dummy page ***", sizeof("***Dummy page ***"));
   return 0;
 }
 
@@ -248,7 +242,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   pr_err("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
   if (size != SHM_SIZE) {
-    pr_err("Invalid size for mmap: %lu\n", size);
+    pr_err("secshm: Invalid size for mmap: %lu\n", size);
     return -EINVAL;
   }
   if (vma->vm_pgoff != 0) {
