@@ -39,11 +39,12 @@ DEFINE_SPINLOCK(rawhide_irq_lock);
 #ifdef DEBUG
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
   do {                                                                         \
-    pr_info("kvm_ivshmem: " fmt "\n", ##__VA_ARGS__);                 \
+    pr_info("kvm_ivshmem: " fmt "\n", ##__VA_ARGS__);                          \
   } while (0)
 #else
 #define KVM_IVSHMEM_DPRINTK(fmt, ...)                                          \
-  {}
+  {                                                                            \
+  }
 #endif
 
 enum {
@@ -160,8 +161,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
     unsigned int vec;
 
     if (copy_from_user(&ioctl_data, (void __user *)arg, sizeof(ioctl_data))) {
-      pr_err(
-             "kvm_ivshmem: SHMEM_IOCDORBELL: %ld invalid argument 0x%lx",
+      pr_err("kvm_ivshmem: SHMEM_IOCDORBELL: %ld invalid argument 0x%lx",
              (unsigned long int)filp->private_data, arg);
       rv = -EINVAL;
       break;
@@ -212,8 +212,7 @@ static long kvm_ivshmem_ioctl(struct file *filp, unsigned int cmd,
       goto unlock;
     }
     filp->private_data = (void *)arg;
-    pr_info("kvm_ivshmem: SHMEM_IOCSETINSTANCENO: set slot no to %ld",
-           arg);
+    pr_info("kvm_ivshmem: SHMEM_IOCSETINSTANCENO: set slot no to %ld", arg);
 
     init_waitqueue_head(&local_data_ready_wait_queue[arg]);
     init_waitqueue_head(&peer_data_ready_wait_queue[arg]);
@@ -465,7 +464,7 @@ static int request_msix_vectors(struct kvm_ivshmem_device *ivs_info,
 
     if (err) {
       pr_err("kvm_ivshmem: couldn't allocate irq for msi-x entry %d "
-                      "with vector %d",
+             "with vector %d",
              i, n);
       return -ENOSPC;
     } else {
@@ -514,12 +513,11 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   if (flataddr) {
     kvm_ivshmem_dev.base_addr =
         memremap(flataddr, kvm_ivshmem_dev.ioaddr_size, MEMREMAP_WB);
-    pr_info("kvm_ivshmem: using flat memory 0x%llx mapped to 0x%p",
-           flataddr, kvm_ivshmem_dev.base_addr);
+    pr_info("kvm_ivshmem: using flat memory 0x%llx", flataddr);
   } else {
     kvm_ivshmem_dev.base_addr = pci_iomap(pdev, 2, 0);
     pr_info("kvm_ivshmem: using PCI iomap base = 0x%p",
-           kvm_ivshmem_dev.base_addr);
+            kvm_ivshmem_dev.base_addr);
   }
 
   if (!kvm_ivshmem_dev.base_addr) {
@@ -529,12 +527,9 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   }
 
   pr_info("kvm_ivshmem: ioaddr = 0x%llx ioaddr_size = 0x%x base_addr "
-                   "= %p flataddr = 0x%llx",
-         kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size,
-         kvm_ivshmem_dev.base_addr, flataddr);
-
-  /* Clear the the shared memory*/
-  memset_io(kvm_ivshmem_dev.base_addr, kvm_ivshmem_dev.ioaddr_size, 0);
+          "= %p flataddr = 0x%llx",
+          kvm_ivshmem_dev.ioaddr, kvm_ivshmem_dev.ioaddr_size,
+          kvm_ivshmem_dev.base_addr, flataddr);
 
   kvm_ivshmem_dev.regaddr = pci_resource_start(pdev, 0);
   kvm_ivshmem_dev.reg_size = pci_resource_len(pdev, 0);
@@ -549,8 +544,7 @@ static int kvm_ivshmem_probe_device(struct pci_dev *pdev,
   }
 
   if (request_msix_vectors(&kvm_ivshmem_dev, VECTORS_COUNT) != 0) {
-    pr_err(
-           "kvm_ivshmem: Check ivshmem and qemu configured interrupts number");
+    pr_err("kvm_ivshmem: Check ivshmem and qemu configured interrupts number");
     goto reg_release;
   } else {
     pr_info("kvm_ivshmem: MSI-X enabled");
@@ -653,8 +647,9 @@ static int kvm_ivshmem_mmap(struct file *filp, struct vm_area_struct *vma) {
   start &= PAGE_MASK;
 
   KVM_IVSHMEM_DPRINTK("mmap: vma->vm_start=0x%lx vma->vm_end=0x%lx off=0x%lx",
-         vma->vm_start, vma->vm_end, off);
-  KVM_IVSHMEM_DPRINTK("mmap: vma->vm_end - vma->vm_start + off=0x%lx > len=0x%lx",
+                      vma->vm_start, vma->vm_end, off);
+  KVM_IVSHMEM_DPRINTK(
+      "mmap: vma->vm_end - vma->vm_start + off=0x%lx > len=0x%lx",
       (vma->vm_end - vma->vm_start + off), len);
 
   if ((vma->vm_end - vma->vm_start + off) > len)

@@ -112,7 +112,8 @@ static int allocate_module_pages(void) {
   // jarekk: TODO: test, delete
   void *virt = page_address(pages[NUM_PAGES]);
   pr_info("Allocated dummy page %lu at %p\n", NUM_PAGES, virt);
-  // Fill the dummy page with zeros
+  // Fill the dummy page with pattern
+  // jarekk: TODO: test, delete
   memcpy(virt, "***Dummy page ***", sizeof("***Dummy page ***"));
   return 0;
 }
