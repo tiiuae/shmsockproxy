@@ -177,7 +177,7 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
 
 static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   unsigned long page_offset = 0;
-  int slot_map;
+  long long int slot_map;
   struct page *page;
   int i, client_index;
 
@@ -255,7 +255,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   pr_info("secshm: mmap called by %s (pid: %d ppid: %d)\n", vm_name,
           current->pid, parent_pid);
 
-  pr_err("secshm: mmap called, size: %lu\n", size);
+  pr_info("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
   if (size != SHM_SIZE) {
     pr_err("secshm: Invalid size for mmap: %lu\n", size);
