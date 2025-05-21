@@ -115,7 +115,7 @@ static int allocate_module_pages(void) {
 }
 
 static void free_module_pages(void) {
-  for (unsigned int i = 0; i < TOTAL_PAGES i++) {
+  for (unsigned int i = 0; i < TOTAL_PAGES; i++) {
     if (pages[i]) {
       __free_pages(pages[i], 0);
     }
