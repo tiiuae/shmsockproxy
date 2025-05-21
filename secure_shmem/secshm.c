@@ -1,13 +1,14 @@
+#include "../app/memsocket.h"
+#include "./secshm_config.h"
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
-#include "../app/memsocket.h"
-#include "./secshm_config.h"
 
 #define DEVICE_NAME "ivshmem"
 #define NUM_PAGES (SHM_SIZE / PAGE_SIZE)
+#define TOTAL_PAGES (NUM_PAGES + CLIENT_TABLE_SIZE + 1)
 #define PAGES_PER_SLOT (SHM_SLOT_SIZE / PAGE_SIZE)
 #define QEMU_VM_NAME_OPT "-name"
 
@@ -16,7 +17,6 @@ static const struct inode_operations secshm_inode_ops;
 static struct page **pages; // Array to hold allocated pages
 
 static DEFINE_SPINLOCK(lock);
-
 
 static inline void get_vm_name(char *vm_name, size_t vm_name_len) {
   char *args_buf = NULL;
@@ -86,18 +86,20 @@ out:
 
 static int allocate_module_pages(void) {
 
-  pages = kmalloc((NUM_PAGES + 1) * sizeof(struct page *), GFP_KERNEL);
+  /* Allocate TOTAL_PAGES pages:
+    - NUM_PAGES for the main shared memory block
+    - CLIENT_TABLE_SIZE for dummy page for each known VM
+    - one dummy page for unknown clients
+  */
+  pages = kmalloc(TOTAL_PAGES * sizeof(struct page *), GFP_KERNEL);
   if (!pages) {
     pr_err("secshm: Failed to allocate page array\n");
     return -ENOMEM;
   }
 
-  pr_info("secshm: Allocating %ld pages\n", (NUM_PAGES + 1)); // jarekk: TODO delete
   // Allocate pages
-  for (unsigned int i = 0; i < (NUM_PAGES + 1); i++) {
+  for (unsigned int i = 0; i < TOTAL_PAGES; i++) {
     pages[i] = alloc_page(GFP_KERNEL | __GFP_ZERO);
-    // pr_info("secshm: Allocated page %u at %p\n", i,
-    //         pages[i]); // jarekk: TODO delete
 
     if (IS_ERR_OR_NULL(pages[i])) {
       pr_err("secshm: Failed to allocate page %u\n", i);
@@ -113,7 +115,7 @@ static int allocate_module_pages(void) {
 }
 
 static void free_module_pages(void) {
-  for (unsigned int i = 0; i < (NUM_PAGES + 1); i++) {
+  for (unsigned int i = 0; i < TOTAL_PAGES i++) {
     if (pages[i]) {
       __free_pages(pages[i], 0);
     }
@@ -175,7 +177,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   unsigned long page_offset = 0;
   int slot_map;
   struct page *page;
-  int i;
+  int i, client_index = CLIENT_TABLE_SIZE + 1;
 
   spin_lock(&lock);
   // Check if the VM name is in the client table
@@ -183,6 +185,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   for (i = 0; i < CLIENT_TABLE_SIZE; i++) {
     if (strcmp(vm_name, CLIENT_TABLE[i].name) == 0) {
       slot_map = CLIENT_TABLE[i].bitmask;
+      client_index = i;
       pr_info("secshm: Mapping VM %s\n", vm_name);
       break;
     }
@@ -190,13 +193,16 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   if (i == CLIENT_TABLE_SIZE) {
     char task_name[TASK_COMM_LEN];
     get_task_comm(task_name, current);
-    pr_err("secshm: VM name for task %s pid=%d ppid=%d not found in client table. Performing dummy mapping.\n", task_name, current->pid, current->parent->pid);
+    pr_err("secshm: VM name for task %s pid=%d ppid=%d not found in client "
+           "table. Performing dummy mapping.\n",
+           task_name, current->pid, current->parent->pid);
     slot_map = 0x0;
     vm_name = "dummy";
   }
-  pr_info("secshm: VM name: %s, slot_map: 0x%x SHM_SLOT_SIZE=0x%lx\n", vm_name, slot_map, SHM_SLOT_SIZE);
+  pr_info("secshm: VM name: %s, slot_map: 0x%x SHM_SLOT_SIZE=0x%lx\n", vm_name,
+          slot_map, SHM_SLOT_SIZE);
 
-  for(i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
+  for (i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
 
     // Check if the page is in the slot map
     // and get the corresponding page
@@ -204,21 +210,23 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     // pr_info("slot_number=0x%x page_offset=0x%lx PAGES_PER_SLOT=0x%lx\n",
     //         slot_number, page_offset, PAGES_PER_SLOT);
     if (slot_map & (1 << slot_number))
-      page = pages[i]; 
+      page = pages[i];
     else
-      page = pages[NUM_PAGES];
+      page = pages[NUM_PAGES + client_index];
 
     if (!(page_offset % SHM_SLOT_SIZE) && slot_map) {
-      if (page != pages[NUM_PAGES])
-        pr_info("secshm: Mapping pages 0x%x at offset 0x%lx slot_number=%d\n", i, page_offset, slot_number);
+      if (page != pages[NUM_PAGES + client_index])
+        pr_info("secshm: Mapping pages 0x%x at offset 0x%lx slot_number=%d\n",
+                i, page_offset, slot_number);
       else
-        pr_info("secshm: Mapping dummy pages 0x%x at offset 0x%lx slot_number=%d\n", i,
-                page_offset, slot_number);
+        pr_info(
+            "secshm: Mapping dummy pages 0x%x at offset 0x%lx slot_number=%d\n",
+            i, page_offset, slot_number);
     }
 
     if (vm_insert_page(vma, vma->vm_start + page_offset, page)) {
       pr_err("secshm: Failed to vm_insert_page [%d] page at offset %lu\n", i,
-              page_offset);
+             page_offset);
       spin_unlock(&lock);
       return -EAGAIN;
     }
@@ -237,7 +245,8 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   pid_t parent_pid = current->parent->pid;
 
   get_task_comm(vm_name, current);
-  pr_info("secshm: mmap called by %s (pid: %d ppid: %d)\n", vm_name, current->pid, parent_pid);
+  pr_info("secshm: mmap called by %s (pid: %d ppid: %d)\n", vm_name,
+          current->pid, parent_pid);
 
   pr_err("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
