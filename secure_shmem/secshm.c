@@ -213,16 +213,16 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     // pr_info("slot_number=0x%x page_offset=0x%lx PAGES_PER_SLOT=0x%lx\n",
     //         slot_number, page_offset, PAGES_PER_SLOT);
     if (slot_map & (1 << slot_number))
-      page = pages[i];
+      page = pages[i]; // Normal page
     else {
-      if (client_index < CLIENT_TABLE_SIZE)
+      if (client_index < CLIENT_TABLE_SIZE) // Dummy page for known client
         page = pages[CLIENTS_DUMMY_PAGE + client_index];
-      else
+      else // Dummy page for unknown client
         page = pages[UNKNOWN_CLIENT_DUMMY_PAGE];
     }
 
     if (!(page_offset % SHM_SLOT_SIZE) && slot_map) {
-      if (page != pages[CLIENTS_DUMMY_PAGE + client_index])
+      if (page == pages[i])
         pr_info("secshm: Mapping pages 0x%x at offset 0x%lx slot_number=%d\n",
                 i, page_offset, slot_number);
       else
