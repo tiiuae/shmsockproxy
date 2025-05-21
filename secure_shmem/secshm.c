@@ -14,7 +14,7 @@
 #define PAGES_PER_SLOT (SHM_SLOT_SIZE / PAGE_SIZE)
 #define QEMU_VM_NAME_OPT "-name"
 
-//#define DEBUG_ON
+#define DEBUG_ON
 #ifndef DEBUG_ON
 #undef pr_info
 #define pr_info(fmt, args...)                                                \
