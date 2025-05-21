@@ -1,10 +1,10 @@
-#include "../app/memsocket.h"
-#include "./secshm_config.h"
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
+#include "../app/memsocket.h"
+#include "./secshm_config.h"
 
 #define DEVICE_NAME "ivshmem"
 #define NUM_PAGES (SHM_SIZE / PAGE_SIZE)
@@ -13,6 +13,18 @@
 #define UNKNOWN_CLIENT_DUMMY_PAGE (NUM_PAGES + CLIENT_TABLE_SIZE)
 #define PAGES_PER_SLOT (SHM_SLOT_SIZE / PAGE_SIZE)
 #define QEMU_VM_NAME_OPT "-name"
+
+//#define DEBUG_ON
+#ifndef DEBUG_ON
+#undef pr_info
+#define pr_info(fmt, args...)                                                \
+  do {                                                                        \
+  } while (0)
+#undef pr_debug
+#define pr_debug(fmt, args...)                                                \
+  do {                                                                        \
+  } while (0)
+#endif
 
 static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin);
 static const struct inode_operations secshm_inode_ops;
@@ -249,11 +261,10 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
 static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long size = vma->vm_end - vma->vm_start;
   char vm_name[TASK_COMM_LEN];
-  pid_t parent_pid = current->parent->pid;
 
   get_task_comm(vm_name, current);
   pr_info("secshm: mmap called by %s (pid: %d ppid: %d)\n", vm_name,
-          current->pid, parent_pid);
+          current->pid, current->parent->pid);
 
   pr_info("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
