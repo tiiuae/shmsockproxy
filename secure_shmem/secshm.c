@@ -224,6 +224,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     int slot_number = page_offset / SHM_SLOT_SIZE;
     // pr_info("slot_number=0x%x page_offset=0x%lx PAGES_PER_SLOT=0x%lx\n",
     //         slot_number, page_offset, PAGES_PER_SLOT);
+    pr_info("secshm: 1 << slot_number = 0x%x\n", 1 << slot_number);
     if (slot_map & ((long long)1 << slot_number))
       page = pages[i]; // Normal page
     else {
