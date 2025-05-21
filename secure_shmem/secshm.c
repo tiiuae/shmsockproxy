@@ -9,6 +9,8 @@
 #define DEVICE_NAME "ivshmem"
 #define NUM_PAGES (SHM_SIZE / PAGE_SIZE)
 #define TOTAL_PAGES (NUM_PAGES + CLIENT_TABLE_SIZE + 1)
+#define CLIENTS_DUMMY_PAGE (NUM_PAGES)
+#define UNKNOWN_CLIENT_DUMMY_PAGE (NUM_PAGES + CLIENT_TABLE_SIZE)
 #define PAGES_PER_SLOT (SHM_SLOT_SIZE / PAGE_SIZE)
 #define QEMU_VM_NAME_OPT "-name"
 
@@ -177,7 +179,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   unsigned long page_offset = 0;
   int slot_map;
   struct page *page;
-  int i, client_index = CLIENT_TABLE_SIZE + 1;
+  int i, client_index;
 
   spin_lock(&lock);
   // Check if the VM name is in the client table
@@ -197,6 +199,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
            "table. Performing dummy mapping.\n",
            task_name, current->pid, current->parent->pid);
     slot_map = 0x0;
+    client_index = UNKNOWN_CLIENT_DUMMY_PAGE;
     vm_name = "dummy";
   }
   pr_info("secshm: VM name: %s, slot_map: 0x%x SHM_SLOT_SIZE=0x%lx\n", vm_name,
@@ -211,11 +214,15 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     //         slot_number, page_offset, PAGES_PER_SLOT);
     if (slot_map & (1 << slot_number))
       page = pages[i];
-    else
-      page = pages[NUM_PAGES + client_index];
+    else {
+      if (client_index < CLIENT_TABLE_SIZE)
+        page = pages[CLIENTS_DUMMY_PAGE + client_index];
+      else
+        page = pages[UNKNOWN_CLIENT_DUMMY_PAGE];
+    }
 
     if (!(page_offset % SHM_SLOT_SIZE) && slot_map) {
-      if (page != pages[NUM_PAGES + client_index])
+      if (page != pages[CLIENTS_DUMMY_PAGE + client_index])
         pr_info("secshm: Mapping pages 0x%x at offset 0x%lx slot_number=%d\n",
                 i, page_offset, slot_number);
       else
