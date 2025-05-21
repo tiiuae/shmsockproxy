@@ -214,7 +214,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     client_index = UNKNOWN_CLIENT_DUMMY_PAGE;
     vm_name = "dummy";
   }
-  pr_info("secshm: VM name: %s, slot_map: 0x%x SHM_SLOT_SIZE=0x%lx\n", vm_name,
+  pr_info("secshm: VM name: %s, slot_map: 0x%llx SHM_SLOT_SIZE=0x%lx\n", vm_name,
           slot_map, SHM_SLOT_SIZE);
 
   for (i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
@@ -224,7 +224,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     int slot_number = page_offset / SHM_SLOT_SIZE;
     // pr_info("slot_number=0x%x page_offset=0x%lx PAGES_PER_SLOT=0x%lx\n",
     //         slot_number, page_offset, PAGES_PER_SLOT);
-    if (slot_map & ((long long)1 << slot_number))
+    if (slot_map & ((unsigned long long)1 << slot_number))
       page = pages[i]; // Normal page
     else {
       if (client_index < CLIENT_TABLE_SIZE) // Dummy page for known client
@@ -234,7 +234,7 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     }
 
     if (!(page_offset % SHM_SLOT_SIZE) && slot_map) {
-      pr_info("secshm: 1 << slot_number = 0x%x slot_number=%d\n", 1 << slot_number, slot_number);
+      pr_info("secshm: 1 << slot_number = 0x%x slot_number=%d\n", (unsigned)1 << slot_number, slot_number);
       if (page == pages[i])
         pr_info("secshm: Mapping pages 0x%x at offset 0x%lx slot_number=%d\n",
                 i, page_offset, slot_number);
