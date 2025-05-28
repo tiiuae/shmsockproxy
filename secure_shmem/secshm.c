@@ -96,7 +96,7 @@ static inline void get_vm_name(char *vm_name, size_t vm_name_len) {
 
     i += len + 1;
   }
-  pr_debug("secshm: " QEMU_VM_NAME_OPT " option not found in command line\n");
+  pr_debug("secshm: "QEMU_VM_NAME_OPT" option not found in command line\n");
 
 out:
   kfree(args_buf);
