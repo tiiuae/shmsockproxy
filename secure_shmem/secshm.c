@@ -2,7 +2,10 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/sched.h>
+#include <linux/sched/task.h>
+#include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/uaccess.h>
 #include "../app/memsocket.h"
 #include "./secshm_config.h"
 
@@ -17,12 +20,12 @@
 #define DEBUG_ON
 #ifndef DEBUG_ON
 #undef pr_info
-#define pr_info(fmt, args...)                                                \
-  do {                                                                        \
+#define pr_info(fmt, args...)                                                  \
+  do {                                                                         \
   } while (0)
 #undef pr_debug
-#define pr_debug(fmt, args...)                                                \
-  do {                                                                        \
+#define pr_debug(fmt, args...)                                                 \
+  do {                                                                         \
   } while (0)
 #endif
 
@@ -32,46 +35,48 @@ static struct page **pages; // Array to hold allocated pages
 
 static DEFINE_SPINLOCK(lock);
 
+#define QEMU_VM_NAME_OPT "-name"
+
 static inline void get_vm_name(char *vm_name, size_t vm_name_len) {
   char *args_buf = NULL;
   unsigned long arg_start, arg_end;
   int arg_len;
-  struct mm_struct *mm;
+  struct mm_struct *mm = current->mm;
   size_t i = 0;
 
   pr_debug("secshm: get_vm_name called\n");
   vm_name[0] = '\0';
 
-  mm = get_task_mm(current);
   if (!mm)
     return;
 
-  spin_lock(&mm->arg_lock);
+  down_read(&mm->mmap_lock);
   arg_start = mm->arg_start;
   arg_end = mm->arg_end;
-  spin_unlock(&mm->arg_lock);
+  up_read(&mm->mmap_lock);
 
-  if (arg_end <= arg_start) {
-    mmput(mm);
+  if (arg_end <= arg_start)
     return;
-  }
 
   arg_len = arg_end - arg_start;
+  if (arg_len > PAGE_SIZE) // cap size to avoid large allocations
+    arg_len = PAGE_SIZE;
+
   args_buf = kmalloc(arg_len + 1, GFP_KERNEL);
-  if (!args_buf) {
+  if (!args_buf) {}
     pr_err("secshm: Failed to allocate buffer\n");
-    mmput(mm);
     return;
   }
 
-  if (copy_from_user(args_buf, (const void __user *)arg_start, arg_len)) {
-    pr_err("secshm: Failed to copy args\n");
+  int copied = access_process_vm(current, arg_start, args_buf, arg_len, 0);
+  if (copied <= 0) {
+    pr_err("secshm: Failed to read cmdline via access_process_vm\n");
     goto out;
   }
 
-  args_buf[arg_len] = '\0';
-  pr_debug("secshm: raw cmdline: %s\n", args_buf);
-  while (i < arg_len) {
+  args_buf[copied] = '\0';
+
+  while (i < copied) {
     const char *token = &args_buf[i];
     size_t len = strlen(token);
 
@@ -82,7 +87,7 @@ static inline void get_vm_name(char *vm_name, size_t vm_name_len) {
 
     if (strcmp(token, QEMU_VM_NAME_OPT) == 0) {
       i += len + 1;
-      if (i < arg_len && args_buf[i] != '\0') {
+      if (i < copied && args_buf[i] != '\0') {
         strscpy(vm_name, &args_buf[i], vm_name_len);
         pr_info("secshm: VM name: %s\n", vm_name);
       }
@@ -95,7 +100,6 @@ static inline void get_vm_name(char *vm_name, size_t vm_name_len) {
 
 out:
   kfree(args_buf);
-  mmput(mm);
 }
 
 static int allocate_module_pages(void) {
@@ -214,8 +218,8 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     client_index = UNKNOWN_CLIENT_DUMMY_PAGE;
     vm_name = "dummy";
   }
-  pr_info("secshm: VM name: %s, slot_map: 0x%llx SHM_SLOT_SIZE=0x%lx\n", vm_name,
-          slot_map, SHM_SLOT_SIZE);
+  pr_info("secshm: VM name: %s, slot_map: 0x%llx SHM_SLOT_SIZE=0x%lx\n",
+          vm_name, slot_map, SHM_SLOT_SIZE);
 
   for (i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
 
