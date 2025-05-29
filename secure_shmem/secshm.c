@@ -219,6 +219,44 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
   filp->f_pos = newpos;
   return newpos;
 }
+static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
+                               size_t count, loff_t *ppos) {
+  struct vm_client *priv = filp->private_data;
+  char task_name[TASK_COMM_LEN];
+
+  if (!priv) {
+    pr_err("secshm: Write called without private data\n");
+    return -EINVAL;
+  }
+  if (!priv->allow_mmap) {
+    pr_err("secshm: Write called without mmap permission\n");
+    return -EPERM; // Write operation not allowed
+  }
+  if (priv->vm_name[0] != '\0') {
+    pr_info("secshm: Write called by vm_name already set (%s)\n",
+            priv->vm_name);
+    return -EPERM; // Write operation not allowed
+  }
+  get_task_comm(task_name, current);
+  /*
+   * jarekk: TODO: Check task name
+   */
+  pr_info("secshm: Write called by %s (pid: %d ppid: %d)\n", task_name,
+          current->pid, current->parent->pid);
+
+  if (count > sizeof(priv->vm_name)) {
+    pr_err("secshm: Write size exceeds vm name size\n");
+    return -EINVAL; // Invalid write size
+  }
+  if (copy_from_user(priv->vm_name, buf, count)) {
+    pr_err("secshm: Failed to copy vm name from user space\n");
+    return -EFAULT; // Failed to copy data
+  }
+  priv->vm_name[count - 1] = '\0'; // Ensure null-termination
+  pr_info("secshm: Write operation successful, vm_name set to %s\n",
+          priv->vm_name);
+  return 0; // Write operation successful
+}
 
 static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   unsigned long page_offset = 0;
@@ -319,6 +357,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
 static struct file_operations secshm_fops = {
     .owner = THIS_MODULE,
     .open = secshm_open,
+    .write = secshm_write,
     .release = secshm_release,
     .llseek = secshm_lseek,
     .mmap = secshm_mmap,
