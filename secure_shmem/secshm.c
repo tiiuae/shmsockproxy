@@ -156,7 +156,7 @@ static int secshm_open(struct inode *inode, struct file *filp) {
   get_task_comm(task_name, current);
   pr_info("secshm: Opening device for task %s pid=%d ppid=%d\n", task_name,
           current->pid, current->parent->pid);
-  priv->allow_mmap = false;  // Allow mmap operation
+  priv->allow_mmap = true;  // Allow mmap operation
   filp->private_data = priv; // Attach to file instance
 
   // Override default i_op to take over getattr
@@ -244,8 +244,8 @@ static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
   pr_info("secshm: Write called by %s (pid: %d ppid: %d)\n", task_name,
           current->pid, current->parent->pid);
 
-  if (count > sizeof(priv->vm_name)) {
-    pr_err("secshm: Write size exceeds vm name size\n");
+  if ((count > sizeof(priv->vm_name)) || (count <= 0)) {
+    pr_err("secshm: Invalid vm name size (%lu)\n", count);
     return -EINVAL; // Invalid write size
   }
   if (copy_from_user(priv->vm_name, buf, count)) {
