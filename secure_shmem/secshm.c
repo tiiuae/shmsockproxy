@@ -1,10 +1,10 @@
+#include "../app/memsocket.h"
+#include "./secshm_config.h"
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
-#include "../app/memsocket.h"
-#include "./secshm_config.h"
 
 #define DEVICE_NAME "ivshmem"
 #define NUM_PAGES (SHM_SIZE / PAGE_SIZE)
@@ -17,12 +17,12 @@
 #define DEBUG_ON
 #ifndef DEBUG_ON
 #undef pr_info
-#define pr_info(fmt, args...)                                                \
-  do {                                                                        \
+#define pr_info(fmt, args...)                                                  \
+  do {                                                                         \
   } while (0)
 #undef pr_debug
-#define pr_debug(fmt, args...)                                                \
-  do {                                                                        \
+#define pr_debug(fmt, args...)                                                 \
+  do {                                                                         \
   } while (0)
 #endif
 
@@ -31,6 +31,11 @@ static const struct inode_operations secshm_inode_ops;
 static struct page **pages; // Array to hold allocated pages
 
 static DEFINE_SPINLOCK(lock);
+
+struct vm_client {
+  bool allow_mmap;             // Allow mmap operation
+  char vm_name[TASK_COMM_LEN]; // Name of the VM
+};
 
 static inline void get_vm_name(char *vm_name, size_t vm_name_len) {
   char *args_buf = NULL;
@@ -138,10 +143,38 @@ static void free_module_pages(void) {
 }
 
 static int secshm_open(struct inode *inode, struct file *filp) {
+
+  struct vm_client *priv;
+  char task_name[TASK_COMM_LEN];
+
+  priv = kzalloc(sizeof(*priv), GFP_KERNEL); // Allocate zero-initialized memory
+  if (!priv)
+    return -ENOMEM;
+
+  memset(priv->vm_name, 0, sizeof(priv->vm_name)); // Clear VM name
+
+  get_task_comm(task_name, current);
+  pr_info("secshm: Opening device for task %s pid=%d ppid=%d\n", task_name,
+          current->pid, current->parent->pid);
+  priv->allow_mmap = false;  // Allow mmap operation
+  filp->private_data = priv; // Attach to file instance
+
   // Override default i_op to take over getattr
   // This is needed to set the size of the shared memory region
   inode->i_op = &secshm_inode_ops;
   pr_info("secshm: Opened.\n");
+  return 0;
+}
+
+static int secshm_release(struct inode *inode, struct file *filp) {
+
+  struct vm_client *priv = filp->private_data;
+
+  if (priv) {
+    kfree(priv);               // Free the private data
+    filp->private_data = NULL; // Clear private data pointer
+  }
+  pr_info("secshm: Released.\n");
   return 0;
 }
 
@@ -214,8 +247,8 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
     client_index = UNKNOWN_CLIENT_DUMMY_PAGE;
     vm_name = "dummy";
   }
-  pr_info("secshm: VM name: %s, slot_map: 0x%llx SHM_SLOT_SIZE=0x%lx\n", vm_name,
-          slot_map, SHM_SLOT_SIZE);
+  pr_info("secshm: VM name: %s, slot_map: 0x%llx SHM_SLOT_SIZE=0x%lx\n",
+          vm_name, slot_map, SHM_SLOT_SIZE);
 
   for (i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
 
@@ -286,6 +319,7 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
 static struct file_operations secshm_fops = {
     .owner = THIS_MODULE,
     .open = secshm_open,
+    .release = secshm_release,
     .llseek = secshm_lseek,
     .mmap = secshm_mmap,
 };
