@@ -250,7 +250,7 @@ int peer_index_op(int op, int vmid, int slot) {
   return -1;
 }
 
-int doorbell(int slot, struct ioctl_data *ioctl_data, int buffer_size) {
+int doorbell(int slot, struct ioctl_data *ioctl_data) {
   int vm_id, index, res;
 
   // Sync cache
@@ -721,7 +721,7 @@ static void thread_init(int slot) {
     ioctl_data.status = my_shm_data[slot]->status;
 #endif
     INFO("ioctl_data.int_no=0x%x (vmid.int_no)", ioctl_data.int_no);
-    res = doorbell(slot, &ioctl_data, 0);
+    res = doorbell(slot, &ioctl_data);
 
     DBG("Sent login vmid: 0x%x ioctl result=%d to server_vm_id=0x%x", *my_vmid,
         res, peer_shm_data[slot]->vmid);
@@ -758,7 +758,7 @@ static void send_logout(int slot, vm_data *my_shm_desc) {
   my_shm_desc->status = 0;
   ioctl_data.int_no = local_rr_int_no[slot];
 
-  doorbell(slot, &ioctl_data, 0);
+  doorbell(slot, &ioctl_data);
   return;
 }
 
@@ -793,9 +793,9 @@ static void *run(void *arg) {
   shm_buffer_fd.fd = shmem_fd[slot];
   epollfd = epollfd_full[slot];
   errno = 0;
-  ERROR("shm=0x%p my_shm_desc=0x%p peer_shm_desc=0x%p", (void*)my_shm_desc,
+  DEBUG("shm=0x%p my_shm_desc=0x%p peer_shm_desc=0x%p", (void*)my_shm_desc,
         (void*)peer_shm_desc, (void*)shm);
-  ERROR("Offsets: my_shm_desc=0x%llx peer_shm_desc=0x%llx", 
+  DEBUG("Offsets: my_shm_desc=0x%llx peer_shm_desc=0x%llx", 
     (long long)((void*)my_shm_desc - (void*)shm),
         (long long)((void*)peer_shm_desc - (void*)shm));
   
@@ -928,7 +928,7 @@ static void *run(void *arg) {
            from the peer */
         epollfd = epollfd_limited[slot];
         /* Signal the peer that the data is ready */
-        doorbell(slot, &ioctl_data, 0);
+        doorbell(slot, &ioctl_data);
         DEBUG("Doorbell to add the new client on fd %d", connected_app_fd);
         event_handled = 1;
       }
@@ -1040,7 +1040,7 @@ static void *run(void *arg) {
           } else if (rv != sizeof(kick))
             ERROR("Invalid read data length %d", rv);
         }
-        doorbell(slot, &ioctl_data, 0);
+        doorbell(slot, &ioctl_data);
         event_handled = 1;
       } /* End of "data arrived from the peer via shared memory" */
 
@@ -1099,7 +1099,7 @@ static void *run(void *arg) {
           DEBUG("Exec ioctl DATA/DATA_CLOSE cmd=%d fd=%d len=%d",
                 my_shm_desc->cmd, my_shm_desc->fd, my_shm_desc->len);
           epollfd = epollfd_limited[slot];
-          doorbell(slot, &ioctl_data, my_shm_desc->len);
+          doorbell(slot, &ioctl_data);
           break;
         }
       } /* end of incoming data processing EPOLLIN*/
@@ -1131,7 +1131,7 @@ static void *run(void *arg) {
           /* Output buffer is busy. Accept only the events
              that don't use it */
           epollfd = epollfd_limited[slot];
-          doorbell(slot, &ioctl_data, 0);
+          doorbell(slot, &ioctl_data);
         } else { /* unlock output buffer */
           ERROR("Attempt to close invalid fd %d", current_event->data.fd);
           if (!run_on_host)
