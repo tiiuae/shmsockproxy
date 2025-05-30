@@ -319,17 +319,16 @@ static inline int map_vm(struct vm_area_struct *vma) {
   client_index = find_vm_by_pid(current->pid);
   if (client_index >= 0) {
     slot_map = client_table[client_index].bitmask;
-    pr_info("secshm: Mapping VM %s by pid %d\n",
-            client_table[client_index].name, current->pid);
+    pr_info("secshm: Mapping: VM name: %s pid: %d slot_map: 0x%llx "
+            "SHM_SLOT_SIZE=0x%lx\n",
+            client_table[client_index].name, current->pid, slot_map,
+            SHM_SLOT_SIZE);
   } else {
     slot_map = 0x0; // No mapping found
     client_index = CLIENT_TABLE_SIZE;
-    pr_info("secshm: No mapping found for VM %s by pid %d, using dummy page\n",
-            client_table[client_index].name, current->pid);
+    pr_info("secshm: No VM name found for task pid %d, using dummy mapping`\n",
+            current->pid);
   }
-
-  pr_info("secshm: VM name: %s, slot_map: 0x%llx SHM_SLOT_SIZE=0x%lx\n",
-          client_table[client_index].name, slot_map, SHM_SLOT_SIZE);
 
   for (i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
 
