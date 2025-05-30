@@ -170,7 +170,8 @@ static int secshm_open(struct inode *inode, struct file *filp) {
           current->pid, current->parent->pid);
   priv->allow_mmap = true;   // Allow mmap operation
   filp->private_data = priv; // Attach to file instance
-
+  // jarekk: TODO: remove this
+  pr_info("secshm: private_data set to 0x%p\n", filp->private_data);
   // Override default i_op to take over getattr
   // This is needed to set the size of the shared memory region
   inode->i_op = &secshm_inode_ops;
@@ -241,6 +242,7 @@ static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
     pr_err("secshm: Write called without private data\n");
     return -EINVAL;
   }
+  pr_info("secshm: write: private_data is 0x%p\n", filp->private_data);
   if (!priv->allow_mmap) {
     pr_err("secshm: Write called without mmap permission\n");
     return -EPERM; // Write operation not allowed
