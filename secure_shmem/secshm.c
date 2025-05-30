@@ -1,10 +1,11 @@
-#include "../app/memsocket.h"
-#include "./secshm_config.h"
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
+
+#include "../app/memsocket.h"
+#include "./secshm_config.h"
 
 #define DEVICE_NAME "ivshmem"
 #define NUM_PAGES (SHM_SIZE / PAGE_SIZE)
@@ -149,7 +150,6 @@ static void free_module_pages(void) {
 
 static int secshm_open(struct inode *inode, struct file *filp) {
 
-  struct vm_client *priv;
   char task_name[TASK_COMM_LEN];
 
   get_task_comm(task_name, current);
@@ -162,16 +162,9 @@ static int secshm_open(struct inode *inode, struct file *filp) {
   }
 #endif
 
-  priv = kzalloc(sizeof(*priv), GFP_KERNEL); // Allocate zero-initialized memory
-  if (!priv)
-    return -ENOMEM;
-
   pr_info("secshm: Opening device for task %s pid=%d ppid=%d\n", task_name,
           current->pid, current->parent->pid);
-  priv->allow_mmap = true;   // Allow mmap operation
-  filp->private_data = priv; // Attach to file instance
-  // jarekk: TODO: remove this
-  pr_info("secshm: private_data set to 0x%p\n", filp->private_data);
+
   // Override default i_op to take over getattr
   // This is needed to set the size of the shared memory region
   inode->i_op = &secshm_inode_ops;
@@ -181,12 +174,6 @@ static int secshm_open(struct inode *inode, struct file *filp) {
 
 static int secshm_release(struct inode *inode, struct file *filp) {
 
-  struct vm_client *priv = filp->private_data;
-
-  if (priv) {
-    kfree(priv);               // Free the private data
-    filp->private_data = NULL; // Clear private data pointer
-  }
   pr_info("secshm: Released.\n");
   return 0;
 }
@@ -232,25 +219,50 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
   filp->f_pos = newpos;
   return newpos;
 }
+
+static inline int find_vm_by_name(const char *vm_name) {
+  for (int i = 0; i < CLIENT_TABLE_SIZE; i++) {
+    if (strcmp(client_table[i].name, vm_name) == 0) {
+      return i; // Found the VM in the client table
+    }
+  }
+  return -1; // VM not found
+}
+
+static inline int find_vm_by_pid(pid_t pid) {
+  for (int i = 0; i < CLIENT_TABLE_SIZE; i++) {
+    if (client_table[i].pid == pid) {
+      return i; // Found the VM by pid
+    }
+  }
+  return -1; // VM not found
+}
+
+static inline int verify_vm_pid(const char *vm_name, pid_t pid) {
+  for (int i = 0; i < CLIENT_TABLE_SIZE; i++) {
+    if (client_table[i].pid == pid) {
+      if (strcmp(client_table[i].name, vm_name) != 0) {
+        pr_err("secshm: VM name mismatch for pid %d: expected %s, found %s\n",
+               pid, vm_name, client_table[i].name);
+        return -ENOENT; // VM name mismatch
+      }
+    }
+  }
+  return 0; // VM not found
+}
+
 static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
                                    size_t count, loff_t *ppos) {
-  struct vm_client *priv = filp->private_data;
   char task_name[TASK_COMM_LEN];
-  char vm_name[sizeof(priv->vm_name)];
-
-  if (!priv) {
-    pr_err("secshm: Write called without private data\n");
-    return -EINVAL;
-  }
-  pr_info("secshm: write: private_data is 0x%p\n", filp->private_data);
-  if (!priv->allow_mmap) {
-    pr_err("secshm: Write called without mmap permission\n");
-    return -EPERM; // Write operation not allowed
-  }
+  char vm_name[TASK_COMM_LEN];
+  int idx_by_name;
 
   // Validate the task name
   // This is to ensure that only QEMU tasks can write to the shared memory
   get_task_comm(task_name, current);
+  pr_info("secshm: Write called by %s (pid: %d ppid: %d)\n", task_name,
+          current->pid, current->parent->pid);
+
 #ifdef TASKS_VALIDATE
   if (strstr(task_name, QEMU_TASK_STR) == NULL) {
     // If the task name does not contain "qemu-system", reject the write
@@ -262,7 +274,7 @@ static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
 #endif
 
   // Check if the buffer is valid
-  if ((count > sizeof(priv->vm_name)) || (count <= 0)) {
+  if (count > TASK_COMM_LEN || count <= 0) {
     pr_err("secshm: Invalid vm name size (%lu)\n", count);
     return -EINVAL; // Invalid write size
   }
@@ -272,62 +284,52 @@ static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
     return -EFAULT; // Failed to copy data
   }
 
-  // Check if the vm_name is already set
-  // If it is set, further writes are not allowed
-  // This is to prevent multiple writes after mmap has been called
-  if (priv->vm_name[0] != '\0' &&
-      strncmp(priv->vm_name, vm_name, strlen(priv->vm_name)) != 0) {
-    // If the vm_name is already set and does not match the current vm name,
-    // reject the write operation
-    priv->allow_mmap = false; // Disable further writes
-    pr_info("secshm: Write called by vm_name already set (%s) mmap operation "
-            "pid=%d ppid=%d not allowed anymore\n",
-            priv->vm_name, current->pid, current->parent->pid);
+  // Ensure the vm_name is null-terminated
+  if (vm_name[count - 1] != '\0') {
+    pr_err("secshm: vm_name is not null-terminated\n");
     return -EPERM; // Write operation not allowed
   }
 
-  // Set the vm name
-  pr_info("secshm: Write called by %s (pid: %d ppid: %d)\n", task_name,
-          current->pid, current->parent->pid);
-  strncpy(priv->vm_name, vm_name, sizeof(priv->vm_name)); // Set the vm_name
-  priv->vm_name[count - 1] = '\0'; // Ensure null-termination
-  pr_info("secshm: Write operation successful, vm_name set to %s\n",
-          priv->vm_name);
+  idx_by_name = find_vm_by_name(vm_name);
+  if (idx_by_name < 0) {
+    pr_err("secshm: VM name %s not found in client table\n", vm_name);
+    return -ENOENT; // VM name not found
+  }
+  if (verify_vm_pid(vm_name, current->pid)) {
+    pr_err("secshm: VM name %s does not match current task pid %d\n", vm_name,
+           current->pid);
+    return -ENOENT; // VM name mismatch
+  }
+
+  client_table[idx_by_name].pid = current->pid; // Update the pid
+  pr_info("secshm: Write operation successful, vm_name set to %s for pid=%d\n",
+          vm_name, current->pid);
 
   return 0; // Set vm name operation successful
 }
 
-static inline int map_vm(struct vm_client *priv, struct vm_area_struct *vma) {
+static inline int map_vm(struct vm_area_struct *vma) {
   unsigned long page_offset = 0;
   long long int slot_map;
   struct page *page;
   int i, client_index;
 
   spin_lock(&lock);
-  // Check if the VM name is in the client table
-  // and get the corresponding slot_map
-  if (priv->allow_mmap == true) {
-    for (i = 0; i < CLIENT_TABLE_SIZE; i++) {
-      if (strcmp(priv->vm_name, CLIENT_TABLE[i].name) == 0) {
-        slot_map = CLIENT_TABLE[i].bitmask;
-        client_index = i;
-        pr_info("secshm: Mapping VM %s\n", priv->vm_name);
-        break;
-      }
-    }
+  // Find the VM record by pid
+  client_index = find_vm_by_pid(current->pid);
+  if (client_index >= 0) {
+    slot_map = client_table[client_index].bitmask;
+    pr_info("secshm: Mapping VM %s by pid %d\n",
+            client_table[client_index].name, current->pid);
+  } else {
+    slot_map = 0x0; // No mapping found
+    client_index = CLIENT_TABLE_SIZE;
+    pr_info("secshm: No mapping found for VM %s by pid %d, using dummy page\n",
+            client_table[client_index].name, current->pid);
   }
-  if (!priv->allow_mmap || i == CLIENT_TABLE_SIZE) {
-    char task_name[TASK_COMM_LEN];
-    get_task_comm(task_name, current);
-    pr_err("secshm: VM name for task %s pid=%d ppid=%d not found in client "
-           "table. Performing dummy mapping.\n",
-           task_name, current->pid, current->parent->pid);
-    slot_map = 0x0;
-    client_index = UNKNOWN_CLIENT_DUMMY_PAGE;
-    priv->allow_mmap = false; // Disable further mmap operations
-  }
+
   pr_info("secshm: VM name: %s, slot_map: 0x%llx SHM_SLOT_SIZE=0x%lx\n",
-          priv->vm_name, slot_map, SHM_SLOT_SIZE);
+          client_table[client_index].name, slot_map, SHM_SLOT_SIZE);
 
   for (i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
 
@@ -370,13 +372,8 @@ static inline int map_vm(struct vm_client *priv, struct vm_area_struct *vma) {
 
 static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long size = vma->vm_end - vma->vm_start;
-  struct vm_client *priv = filp->private_data;
   char task_name[TASK_COMM_LEN];
 
-  if (!priv) {
-    pr_err("secshm: Write called without private data\n");
-    return -EINVAL;
-  }
   get_task_comm(task_name, current);
   pr_info("secshm: mmap called by %s size: %lu (pid: %d ppid: %d)\n", task_name,
           size, current->pid, current->parent->pid);
@@ -386,7 +383,6 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
     // This is to ensure that only QEMU tasks can mmap the shared memory
     pr_err("secshm: mmap called by non-QEMU task %s pid=%d ppid=%d\n",
            task_name, current->pid, current->parent->pid);
-    priv->allow_mmap = false; // Disable further mmap operations
   }
 #endif
 
@@ -400,10 +396,9 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
     return -EINVAL;
   }
 
-  // get_vm_name(vm_name, sizeof(vm_name));
   // Map the pages based on the VM name
   pr_info("secshm: calling map_vm with name: %s\n", task_name);
-  return map_vm(priv, vma);
+  return map_vm(vma);
 }
 
 static struct file_operations secshm_fops = {
