@@ -235,6 +235,7 @@ static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
                                    size_t count, loff_t *ppos) {
   struct vm_client *priv = filp->private_data;
   char task_name[TASK_COMM_LEN];
+  char vm_name[sizeof(priv->vm_name)];
 
   if (!priv) {
     pr_err("secshm: Write called without private data\n");
@@ -245,6 +246,8 @@ static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
     return -EPERM; // Write operation not allowed
   }
 
+  // Validate the task name
+  // This is to ensure that only QEMU tasks can write to the shared memory
   get_task_comm(task_name, current);
 #ifdef TASKS_VALIDATE
   if (strstr(task_name, QEMU_TASK_STR) == NULL) {
@@ -256,31 +259,40 @@ static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
   }
 #endif
 
+  // Check if the buffer is valid
+  if ((count > sizeof(priv->vm_name)) || (count <= 0)) {
+    pr_err("secshm: Invalid vm name size (%lu)\n", count);
+    return -EINVAL; // Invalid write size
+  }
+  // Copy the vm_name from user space to kernel space
+  if (copy_from_user(vm_name, buf, count)) {
+    pr_err("secshm: Failed to copy vm name from user space\n");
+    return -EFAULT; // Failed to copy data
+  }
+
   // Check if the vm_name is already set
   // If it is set, further writes are not allowed
   // This is to prevent multiple writes after mmap has been called
-  if (priv->vm_name[0] != '\0') {
+  if (priv->vm_name[0] != '\0' &&
+      strncmp(priv->vm_name, vm_name, strlen(priv->vm_name)) != 0) {
+    // If the vm_name is already set and does not match the current vm name,
+    // reject the write operation
     priv->allow_mmap = false; // Disable further writes
     pr_info("secshm: Write called by vm_name already set (%s) mmap operation "
             "pid=%d ppid=%d not allowed anymore\n",
             priv->vm_name, current->pid, current->parent->pid);
     return -EPERM; // Write operation not allowed
   }
+
+  // Set the vm name
   pr_info("secshm: Write called by %s (pid: %d ppid: %d)\n", task_name,
           current->pid, current->parent->pid);
-
-  if ((count > sizeof(priv->vm_name)) || (count <= 0)) {
-    pr_err("secshm: Invalid vm name size (%lu)\n", count);
-    return -EINVAL; // Invalid write size
-  }
-  if (copy_from_user(priv->vm_name, buf, count)) {
-    pr_err("secshm: Failed to copy vm name from user space\n");
-    return -EFAULT; // Failed to copy data
-  }
+  strncpy(priv->vm_name, vm_name, sizeof(priv->vm_name)); // Set the vm_name
   priv->vm_name[count - 1] = '\0'; // Ensure null-termination
   pr_info("secshm: Write operation successful, vm_name set to %s\n",
           priv->vm_name);
-  return 0; // Write operation successful
+
+  return 0; // Set vm name operation successful
 }
 
 static inline int map_vm(struct vm_client *priv, struct vm_area_struct *vma) {
