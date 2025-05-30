@@ -262,8 +262,8 @@ static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
   if (priv->vm_name[0] != '\0') {
     priv->allow_mmap = false; // Disable further writes
     pr_info("secshm: Write called by vm_name already set (%s) mmap operation "
-            "not allowed anymore\n",
-            priv->vm_name);
+            "pid=%d ppid=%d not allowed anymore\n",
+            priv->vm_name, current->pid, current->parent->pid);
     return -EPERM; // Write operation not allowed
   }
   pr_info("secshm: Write called by %s (pid: %d ppid: %d)\n", task_name,
