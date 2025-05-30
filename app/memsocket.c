@@ -254,8 +254,8 @@ int doorbell(int slot, struct ioctl_data *ioctl_data) {
   int vm_id, index, res;
 
   // Sync cache
-  if (msync(&my_shm_data[slot], sizeof(*my_shm_data), MS_SYNC) < 0) {
-    ERROR("%s sizeof(*my_shm_data)=%d", "msync failed", sizeof(*my_shm_data));
+  if (msync(&my_shm_data[slot], sizeof(**my_shm_data), MS_SYNC) < 0) {
+    ERROR("%s sizeof(*my_shm_data)=%d", "msync failed", sizeof(**my_shm_data));
     return -1;
   }
   if (!run_on_host) {
