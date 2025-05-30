@@ -41,6 +41,7 @@ struct vm_client {
   char vm_name[TASK_COMM_LEN]; // Name of the VM
 };
 
+#if 0
 static inline void get_vm_name(char *vm_name, size_t vm_name_len) {
   char *args_buf = NULL;
   unsigned long arg_start, arg_end;
@@ -106,7 +107,7 @@ out:
   kfree(args_buf);
   mmput(mm);
 }
-
+#endif
 static int allocate_module_pages(void) {
 
   /* Allocate TOTAL_PAGES pages:
@@ -152,13 +153,14 @@ static int secshm_open(struct inode *inode, struct file *filp) {
   char task_name[TASK_COMM_LEN];
 
   get_task_comm(task_name, current);
-  #ifdef TASKS_VALIDATE
+#ifdef TASKS_VALIDATE
   if (strncmp(task_name, IVSHMEM_SERVER_STR, strlen(IVSHMEM_SERVER_STR)) != 0) {
-    pr_err("secshm: Task %s is not a valid ivshmem server task, rejecting open\n",
-           task_name);
+    pr_err(
+        "secshm: Task %s is not a valid ivshmem server task, rejecting open\n",
+        task_name);
     return -EPERM; // Reject non-QEMU tasks
   }
-  #endif
+#endif
 
   priv = kzalloc(sizeof(*priv), GFP_KERNEL); // Allocate zero-initialized memory
   if (!priv)
@@ -281,7 +283,7 @@ static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
   return 0; // Write operation successful
 }
 
-static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
+static inline int map_vm(struct vm_client *priv, struct vm_area_struct *vma) {
   unsigned long page_offset = 0;
   long long int slot_map;
   struct page *page;
@@ -290,15 +292,17 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
   spin_lock(&lock);
   // Check if the VM name is in the client table
   // and get the corresponding slot_map
-  for (i = 0; i < CLIENT_TABLE_SIZE; i++) {
-    if (strcmp(vm_name, CLIENT_TABLE[i].name) == 0) {
-      slot_map = CLIENT_TABLE[i].bitmask;
-      client_index = i;
-      pr_info("secshm: Mapping VM %s\n", vm_name);
-      break;
+  if (priv->allow_mmap == true) {
+    for (i = 0; i < CLIENT_TABLE_SIZE; i++) {
+      if (strcmp(priv->vm_name, CLIENT_TABLE[i].name) == 0) {
+        slot_map = CLIENT_TABLE[i].bitmask;
+        client_index = i;
+        pr_info("secshm: Mapping VM %s\n", priv->vm_name);
+        break;
+      }
     }
   }
-  if (i == CLIENT_TABLE_SIZE) {
+  if (!priv->allow_mmap || i == CLIENT_TABLE_SIZE) {
     char task_name[TASK_COMM_LEN];
     get_task_comm(task_name, current);
     pr_err("secshm: VM name for task %s pid=%d ppid=%d not found in client "
@@ -306,10 +310,10 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
            task_name, current->pid, current->parent->pid);
     slot_map = 0x0;
     client_index = UNKNOWN_CLIENT_DUMMY_PAGE;
-    vm_name = "dummy";
+    priv->allow_mmap = false; // Disable further mmap operations
   }
   pr_info("secshm: VM name: %s, slot_map: 0x%llx SHM_SLOT_SIZE=0x%lx\n",
-          vm_name, slot_map, SHM_SLOT_SIZE);
+          priv->vm_name, slot_map, SHM_SLOT_SIZE);
 
   for (i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
 
@@ -352,13 +356,26 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
 
 static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long size = vma->vm_end - vma->vm_start;
-  char vm_name[TASK_COMM_LEN];
+  struct vm_client *priv = filp->private_data;
+  char task_name[TASK_COMM_LEN];
 
-  get_task_comm(vm_name, current);
-  pr_info("secshm: mmap called by %s (pid: %d ppid: %d)\n", vm_name,
-          current->pid, current->parent->pid);
+  if (!priv) {
+    pr_err("secshm: Write called without private data\n");
+    return -EINVAL;
+  }
+  get_task_comm(task_name, current);
+  pr_info("secshm: mmap called by %s size: %lu (pid: %d ppid: %d)\n", task_name,
+          size, current->pid, current->parent->pid);
+#ifdef TASKS_VALIDATE
+  if (strstr(task_name, QEMU_TASK_STR) == NULL) {
+    // If the task name does not contain "qemu-system", reject the mmap
+    // This is to ensure that only QEMU tasks can mmap the shared memory
+    pr_err("secshm: mmap called by non-QEMU task %s pid=%d ppid=%d\n",
+           task_name, current->pid, current->parent->pid);
+    priv->allow_mmap = false; // Disable further mmap operations
+  }
+#endif
 
-  pr_info("secshm: mmap called, size: %lu\n", size);
   // Check if the requested size is valid
   if (size != SHM_SIZE) {
     pr_err("secshm: Invalid size for mmap: %lu\n", size);
@@ -369,10 +386,10 @@ static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
     return -EINVAL;
   }
 
-  get_vm_name(vm_name, sizeof(vm_name));
+  // get_vm_name(vm_name, sizeof(vm_name));
   // Map the pages based on the VM name
-  pr_info("secshm: calling map_vm with name: %s\n", vm_name);
-  return map_vm(vm_name, vma);
+  pr_info("secshm: calling map_vm with name: %s\n", task_name);
+  return map_vm(priv, vma);
 }
 
 static struct file_operations secshm_fops = {
