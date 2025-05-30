@@ -317,6 +317,7 @@ static inline int map_vm(struct vm_area_struct *vma) {
   spin_lock(&lock);
   // Find the VM record by pid
   client_index = find_vm_by_pid(current->pid);
+  // Client found, get the slot map
   if (client_index >= 0) {
     slot_map = client_table[client_index].bitmask;
     pr_info("secshm: Mapping: VM name: %s pid: %d slot_map: 0x%llx "
@@ -324,9 +325,10 @@ static inline int map_vm(struct vm_area_struct *vma) {
             client_table[client_index].name, current->pid, slot_map,
             SHM_SLOT_SIZE);
   } else {
-    slot_map = 0x0; // No mapping found
+    slot_map = 0x0; // No mapping found, use dummy pages
+    // Use a dummy mapping for unknown clients
     client_index = CLIENT_TABLE_SIZE;
-    pr_info("secshm: No VM name found for task pid %d, using dummy mapping`\n",
+    pr_info("secshm: No VM name found for task pid %d, using dummy mapping\n",
             current->pid);
   }
 
