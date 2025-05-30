@@ -66,6 +66,7 @@ vm_data *my_shm_data[SHM_SLOTS], *peer_shm_data[SHM_SLOTS];
 int run_as_client = -1;
 int force_vmid = 0;
 int local_rr_int_no[SHM_SLOTS], remote_rc_int_no[SHM_SLOTS];
+long int shmem_size;
 pthread_t server_threads[SHM_SLOTS];
 long long int client_listen_mask = 0;
 /* End of host related variables */
@@ -254,8 +255,8 @@ int doorbell(int slot, struct ioctl_data *ioctl_data) {
   int vm_id, index, res;
 
   // Sync cache
-  if (msync(shm, sizeof(**my_shm_data), MS_SYNC) < 0) {
-    ERROR("%s sizeof(*my_shm_data)=%d", "msync failed", sizeof(**my_shm_data));
+  if (msync(shm, shmem_size, MS_SYNC) < 0) {
+    ERROR("%s sizeof(*my_shm_data)=%ld", "msync failed", sizeof(**my_shm_data));
     return -1;
   }
   if (!run_on_host) {
@@ -528,7 +529,6 @@ static void shmem_init(int slot) {
 
   int res = -1;
   struct epoll_event ev;
-  long int shmem_size;
   int tmp;
 
   /* Open shared memory */
