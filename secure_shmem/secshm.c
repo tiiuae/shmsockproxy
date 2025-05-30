@@ -12,7 +12,11 @@
 #define CLIENTS_DUMMY_PAGE (NUM_PAGES)
 #define UNKNOWN_CLIENT_DUMMY_PAGE (NUM_PAGES + CLIENT_TABLE_SIZE)
 #define PAGES_PER_SLOT (SHM_SLOT_SIZE / PAGE_SIZE)
+#define IVSHMEM_SERVER_STR "ivshmem-server"
+#define QEMU_TASK_STR "qemu-system"
 #define QEMU_VM_NAME_OPT "-name"
+
+#define TASKS_VALIDATE
 
 #define DEBUG_ON
 #ifndef DEBUG_ON
@@ -147,16 +151,22 @@ static int secshm_open(struct inode *inode, struct file *filp) {
   struct vm_client *priv;
   char task_name[TASK_COMM_LEN];
 
+  get_task_comm(task_name, current);
+  #ifdef TASKS_VALIDATE
+  if (strncmp(task_name, IVSHMEM_SERVER_STR, strlen(IVSHMEM_SERVER_STR)) != 0) {
+    pr_err("secshm: Task %s is not a valid ivshmem server task, rejecting open\n",
+           task_name);
+    return -EPERM; // Reject non-QEMU tasks
+  }
+  #endif
+
   priv = kzalloc(sizeof(*priv), GFP_KERNEL); // Allocate zero-initialized memory
   if (!priv)
     return -ENOMEM;
 
-  memset(priv->vm_name, 0, sizeof(priv->vm_name)); // Clear VM name
-
-  get_task_comm(task_name, current);
   pr_info("secshm: Opening device for task %s pid=%d ppid=%d\n", task_name,
           current->pid, current->parent->pid);
-  priv->allow_mmap = true;  // Allow mmap operation
+  priv->allow_mmap = true;   // Allow mmap operation
   filp->private_data = priv; // Attach to file instance
 
   // Override default i_op to take over getattr
@@ -220,7 +230,7 @@ static loff_t secshm_lseek(struct file *filp, loff_t offset, int origin) {
   return newpos;
 }
 static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
-                               size_t count, loff_t *ppos) {
+                                   size_t count, loff_t *ppos) {
   struct vm_client *priv = filp->private_data;
   char task_name[TASK_COMM_LEN];
 
@@ -232,15 +242,28 @@ static inline ssize_t secshm_write(struct file *filp, const char __user *buf,
     pr_err("secshm: Write called without mmap permission\n");
     return -EPERM; // Write operation not allowed
   }
+
+  get_task_comm(task_name, current);
+#ifdef TASKS_VALIDATE
+  if (strstr(task_name, QEMU_TASK_STR) == NULL) {
+    // If the task name does not contain "qemu-system", reject the write
+    // This is to ensure that only QEMU tasks can write to the shared memory
+    pr_err("secshm: Write called by non-QEMU task %s pid=%d ppid=%d\n",
+           task_name, current->pid, current->parent->pid);
+    return -EPERM; // Reject non-QEMU tasks
+  }
+#endif
+
+  // Check if the vm_name is already set
+  // If it is set, further writes are not allowed
+  // This is to prevent multiple writes after mmap has been called
   if (priv->vm_name[0] != '\0') {
-    pr_info("secshm: Write called by vm_name already set (%s)\n",
+    priv->allow_mmap = false; // Disable further writes
+    pr_info("secshm: Write called by vm_name already set (%s) mmap operation "
+            "not allowed anymore\n",
             priv->vm_name);
     return -EPERM; // Write operation not allowed
   }
-  get_task_comm(task_name, current);
-  /*
-   * jarekk: TODO: Check task name
-   */
   pr_info("secshm: Write called by %s (pid: %d ppid: %d)\n", task_name,
           current->pid, current->parent->pid);
 
@@ -290,11 +313,9 @@ static inline int map_vm(const char *vm_name, struct vm_area_struct *vma) {
 
   for (i = 0; page_offset < SHM_SIZE; page_offset += PAGE_SIZE, i++) {
 
+    int slot_number = page_offset / SHM_SLOT_SIZE;
     // Check if the page is in the slot map
     // and get the corresponding page
-    int slot_number = page_offset / SHM_SLOT_SIZE;
-    // pr_info("slot_number=0x%x page_offset=0x%lx PAGES_PER_SLOT=0x%lx\n",
-    //         slot_number, page_offset, PAGES_PER_SLOT);
     if (slot_map & (1ULL << slot_number))
       page = pages[i]; // Normal page
     else {
