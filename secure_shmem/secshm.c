@@ -374,12 +374,10 @@ static inline int map_vm(struct vm_area_struct *vma) {
 static int secshm_mmap(struct file *filp, struct vm_area_struct *vma) {
   unsigned long size = vma->vm_end - vma->vm_start;
   char task_name[TASK_COMM_LEN];
-  static int count = 0;
-  count++;
 
   get_task_comm(task_name, current);
-  pr_info("secshm: mmap called by %s size: %lu (pid: %d ppid: %d) count=%d\n", task_name,
-          size, current->pid, current->parent->pid, count);
+  pr_info("secshm: mmap called by %s size: %lu (pid: %d ppid: %d)\n", task_name,
+          size, current->pid, current->parent->pid);
 #ifdef TASKS_VALIDATE
   if (strstr(task_name, QEMU_TASK_STR) == NULL) {
     // If the task name does not contain "qemu-system", reject the mmap
