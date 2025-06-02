@@ -252,6 +252,12 @@ int peer_index_op(int op, int vmid, int slot) {
 
 int doorbell(int slot, struct ioctl_data *ioctl_data) {
   int vm_id, index, res;
+//#define SHM_SIZE (32*1024*1024)
+  // Sync cache
+  if (msync(shm /*&my_shm_data[slot]->data[0]*/, SHM_SIZE/*sizeof(**my_shm_data)*/, MS_SYNC) < 0) {
+    ERROR("shm=%p size=%d", shm, SHM_SIZE);
+    return -1;
+  }
 
   if (!run_on_host) {
     return ioctl(shmem_fd[slot], SHMEM_IOCDORBELL, ioctl_data);
