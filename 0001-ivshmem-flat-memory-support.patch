@@ -1,6 +1,6 @@
-From e4719166e01f494245a76e675e8d25442acb1124 Mon Sep 17 00:00:00 2001
+From 06a64db114c91c9519e49bdcade20e6d83313c60 Mon Sep 17 00:00:00 2001
 From: Jaroslaw Kurowski <jaroslaw.kurowski@tii.ae>
-Date: Mon, 2 Jun 2025 15:03:40 +0400
+Date: Mon, 2 Jun 2025 16:25:07 +0400
 Subject: ivshmem flat memory support
 
 ---
@@ -65,7 +65,7 @@ index c7bc8a2..d76939e 100644
                       pc_q35_compat_defaults, pc_q35_compat_defaults_len);
  }
 diff --git a/hw/misc/ivshmem.c b/hw/misc/ivshmem.c
-index de49d1b..92c8bda 100644
+index de49d1b..8b96b75 100644
 --- a/hw/misc/ivshmem.c
 +++ b/hw/misc/ivshmem.c
 @@ -36,6 +36,7 @@
@@ -131,7 +131,7 @@ index de49d1b..92c8bda 100644
 +
 +        /* Let the memory driver know my VM name */
 +        write(fd, qemu_name, strlen(qemu_name)+1);
-+        ptr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_HUGETLB|MAP_LOCKED,
++        ptr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_LOCKED,
 +                fd, 0);
 +        s->flat_dev = sysbus_create_simple(TYPE_IVSHMEM_FLAT, -1, 0);
 +

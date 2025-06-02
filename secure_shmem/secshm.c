@@ -19,7 +19,7 @@
 
 #define TASKS_VALIDATE
 
-#define DEBUG_ON
+//#define DEBUG_ON
 #ifndef DEBUG_ON
 #undef pr_info
 #define pr_info(fmt, args...)                                                  \

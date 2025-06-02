@@ -516,7 +516,7 @@ static void process_msg_shmem(IVShmemState *s, int fd, Error **errp)
 
         /* Let the memory driver know my VM name */
         write(fd, qemu_name, strlen(qemu_name)+1);
-        ptr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_HUGETLB|MAP_LOCKED,
+        ptr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_LOCKED,
                 fd, 0);
         s->flat_dev = sysbus_create_simple(TYPE_IVSHMEM_FLAT, -1, 0);
 
