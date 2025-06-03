@@ -495,6 +495,7 @@ static void process_msg_shmem(IVShmemState *s, int fd, Error **errp)
     size_t size;
     void *ptr;
     SysBusDevice *sbd;
+    extern const char *qemu_name;
 
     if (s->ivshmem_bar2) {
         error_setg(errp, "server sent unexpected shared memory message");
@@ -513,7 +514,9 @@ static void process_msg_shmem(IVShmemState *s, int fd, Error **errp)
 
     if (s->flataddr) {
 
-        ptr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_HUGETLB|MAP_LOCKED,
+        /* Let the memory driver know my VM name */
+        write(fd, qemu_name, strlen(qemu_name)+1);
+        ptr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_LOCKED,
                 fd, 0);
         s->flat_dev = sysbus_create_simple(TYPE_IVSHMEM_FLAT, -1, 0);
 

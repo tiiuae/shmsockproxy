@@ -1,6 +1,8 @@
 /* Copyright 2022-2023 TII (SSRC) and the Ghaf contributors
    SPDX-License-Identifier: Apache-2.0
 */
+#ifndef _KVM_IVSHMEM_H
+#define _KVM_IVSHMEM_H
 
 #define PEER_RESOURCE_CONSUMED_INT_VEC (0)
 #define LOCAL_RESOURCE_READY_INT_VEC (1)
@@ -24,3 +26,4 @@ struct ioctl_data {
   int len;
   int status;
 };
+#endif
